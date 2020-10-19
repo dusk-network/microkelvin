@@ -1,5 +1,5 @@
-use core::marker::PhantomData;
-use core::ops::Deref;
+use std::marker::PhantomData;
+use std::ops::Deref;
 
 use canonical::Store;
 
@@ -8,38 +8,45 @@ use crate::compound::{Child, Compound};
 
 type Offset = usize;
 
-pub enum Level<'a, C, S> {
+pub enum Level<'a, C, S>
+where
+    C: Clone,
+{
     #[allow(unused)]
     Borrowed(&'a C),
     #[allow(unused)]
     Owned(C, PhantomData<S>),
 }
 
-pub struct PartialBranch<'a, C, S>(Levels<'a, C, S>);
+pub struct PartialBranch<'a, C, S>(Levels<'a, C, S>)
+where
+    C: Clone;
 
-pub struct Levels<'a, C, S>(Vec<(Offset, Level<'a, C, S>)>);
+pub struct Levels<'a, C, S>(Vec<(Offset, Level<'a, C, S>)>)
+where
+    C: Clone;
 
 impl<'a, C, S> Levels<'a, C, S>
 where
     C: Compound<S>,
     S: Store,
 {
-    #[allow(unused)]
     pub fn new(first: Level<'a, C, S>) -> Self {
         Levels(vec![(0, first)])
     }
 
-    #[allow(unused)]
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
     pub fn top(&self) -> &(Offset, Level<'a, C, S>) {
         self.0.last().expect("always > 0 len")
     }
 
-    #[allow(unused)]
     pub fn top_mut(&mut self) -> &mut (Offset, Level<'a, C, S>) {
         self.0.last_mut().expect("always > 0 len")
     }
 
-    #[allow(unused)]
     pub fn pop(&mut self) -> bool {
         if self.0.len() > 1 {
             self.0.pop();
@@ -49,6 +56,10 @@ where
         }
     }
 
+    pub fn push(&mut self, node: C) {
+        self.0.push((0, Level::Owned(node, PhantomData)))
+    }
+
     pub fn leaf(&self) -> Option<&C::Leaf> {
         let (ofs, level) = self.top();
         match level {
@@ -56,7 +67,10 @@ where
                 Child::Leaf(l) => Some(l),
                 _ => None,
             },
-            _ => None,
+            Level::Owned(c, _) => match c.child(*ofs) {
+                Child::Leaf(l) => Some(l),
+                _ => None,
+            },
         }
     }
 }
@@ -71,35 +85,56 @@ where
         PartialBranch(levels)
     }
 
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
     fn leaf(&self) -> Option<&C::Leaf> {
         self.0.leaf()
     }
 
-    fn walk<W: FnMut(Walk<C, S>) -> Step<C, S>>(
-        &mut self,
-        mut walker: W,
-    ) -> Result<Option<()>, S::Error> {
+    fn walk<W>(&mut self, mut walker: W) -> Result<Option<()>, S::Error>
+    where
+        W: FnMut(Walk<C, S>) -> Step<C, S>,
+    {
+        let mut push = None;
         loop {
-            match match self.0.top_mut() {
-                (ofs, Level::Borrowed(c)) => match c.child(*ofs) {
-                    Child::Leaf(l) => walker(Walk::Leaf(l)),
-                    Child::Node(c) => walker(Walk::Node(c)),
-                    Child::EndOfNode => {
-                        if !self.0.pop() {
-                            return Ok(None);
-                        } else {
-                            Step::Next
-                        }
+            println!("loops");
+
+            if let Some(push) = push.take() {
+                self.0.push(push)
+            }
+
+            let (ofs, node) = match self.0.top_mut() {
+                (ofs, Level::Borrowed(c)) => (ofs, *c),
+                (ofs, Level::Owned(c, _)) => (ofs, &*c),
+            };
+
+            match match node.child(*ofs) {
+                Child::Leaf(l) => walker(Walk::Leaf(l)),
+                Child::Node(c) => walker(Walk::Node(c)),
+                Child::EndOfNode => {
+                    if !self.0.pop() {
+                        // last level
+                        return Ok(None);
+                    } else {
+                        Step::Next
                     }
-                },
-                _ => todo!(),
-            } {
-                Step::Found(_) => return Ok(Some(())),
-                Step::Next => {
-                    let (ref mut ofs, _) = self.0.top_mut();
-                    *ofs += 1
                 }
-                _ => panic!(),
+            } {
+                Step::Found(_) => {
+                    println!("found!");
+                    return Ok(Some(()));
+                }
+                Step::Next => {
+                    println!("neext");
+                    let (ref mut ofs, _) = self.0.top_mut();
+                    *ofs += 1;
+                }
+                Step::Into(n) => {
+                    println!("push");
+                    push = Some((*n.val()?).clone());
+                }
             }
         }
     }
@@ -129,6 +164,10 @@ where
     C: Compound<S>,
     S: Store,
 {
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
     pub fn walk<W: FnMut(Walk<C, S>) -> Step<C, S>>(
         root: &'a C,
         walker: W,
@@ -141,7 +180,9 @@ where
     }
 }
 
-pub struct Branch<'a, C, S>(PartialBranch<'a, C, S>);
+pub struct Branch<'a, C, S>(PartialBranch<'a, C, S>)
+where
+    C: Clone;
 
 impl<'a, C, S> Deref for Branch<'a, C, S>
 where

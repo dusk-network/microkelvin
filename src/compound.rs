@@ -1,4 +1,4 @@
-use core::borrow::Borrow;
+use std::borrow::Borrow;
 
 use canonical::{Canon, Store};
 

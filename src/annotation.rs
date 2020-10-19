@@ -1,6 +1,6 @@
-use core::borrow::Borrow;
-use core::marker::PhantomData;
-use core::ops::{Deref, DerefMut};
+use std::borrow::Borrow;
+use std::marker::PhantomData;
+use std::ops::{Deref, DerefMut};
 
 use canonical::{Canon, Repr, Store, ValMut};
 use canonical_derive::Canon;
