@@ -1,3 +1,5 @@
+use core::borrow::Borrow;
+use core::marker::PhantomData;
 use core::ops::{Deref, DerefMut};
 
 use canonical::{Canon, Repr, Store, ValMut};
@@ -5,25 +7,29 @@ use canonical_derive::Canon;
 
 use crate::compound::Compound;
 
-pub trait Annotation<L>: Clone {
+pub trait Annotation<L>
+where
+    Self: Sized,
+{
     fn identity() -> Self;
     fn from_leaf(leaf: &L) -> Self;
-    fn op(a: &Self, b: &Self) -> Self;
+    fn op(self, b: &Self) -> Self;
 }
 
-pub struct AnnMut<'a, C, A>
+pub struct AnnMut<'a, C, S>
 where
-    C: Compound<Annotation = A>,
-    A: Annotation<C::Leaf>,
+    C: Compound<S>,
+    S: Store,
 {
-    annotation: &'a mut A,
+    annotation: &'a mut C::Annotation,
     compound: ValMut<'a, C>,
+    _marker: PhantomData<S>,
 }
 
-impl<'a, C, A> Deref for AnnMut<'a, C, A>
+impl<'a, C, S> Deref for AnnMut<'a, C, S>
 where
-    C: Compound<Annotation = A>,
-    A: Annotation<C::Leaf>,
+    C: Compound<S>,
+    S: Store,
 {
     type Target = C;
 
@@ -32,20 +38,20 @@ where
     }
 }
 
-impl<'a, C, A> DerefMut for AnnMut<'a, C, A>
+impl<'a, C, S> DerefMut for AnnMut<'a, C, S>
 where
-    C: Compound<Annotation = A>,
-    A: Annotation<C::Leaf>,
+    C: Compound<S>,
+    S: Store,
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.compound
     }
 }
 
-impl<'a, C, A> Drop for AnnMut<'a, C, A>
+impl<'a, C, S> Drop for AnnMut<'a, C, S>
 where
-    C: Compound<Annotation = A>,
-    A: Annotation<C::Leaf>,
+    C: Compound<S>,
+    S: Store,
 {
     fn drop(&mut self) {
         *self.annotation = self.compound.annotation()
@@ -53,33 +59,41 @@ where
 }
 
 #[derive(Clone, Canon, Debug)]
-pub struct Annotated<C, A, S: Store>(Repr<C, S>, A);
-
-impl<C, A, S> Annotated<C, A, S>
+pub struct Annotated<C, S>(Repr<C, S>, C::Annotation)
 where
-    C: Canon<S> + Compound<Annotation = A>,
-    A: Annotation<C::Leaf>,
+    C: Compound<S>,
+    S: Store;
+
+impl<C, S> Annotated<C, S>
+where
+    C: Compound<S>,
+    C: Canon<S>,
     S: Store,
 {
     pub fn new(compound: C) -> Result<Self, S::Error> {
-        let a: A = compound.annotation();
+        let a = compound.annotation();
         Ok(Annotated(Repr::<C, S>::new(compound)?, a))
     }
 
-    pub fn annotation(&self) -> &A {
+    pub fn annotation(&self) -> &C::Annotation {
         &self.1
     }
 
-    pub fn val_mut(&mut self) -> Result<AnnMut<C, A>, S::Error> {
+    pub fn val_mut(&mut self) -> Result<AnnMut<C, S>, S::Error> {
         Ok(AnnMut {
             annotation: &mut self.1,
             compound: self.0.val_mut()?,
+            _marker: PhantomData,
         })
     }
 }
 
-impl<T, A, S: Store> Deref for Annotated<T, A, S> {
-    type Target = Repr<T, S>;
+impl<C, S> Deref for Annotated<C, S>
+where
+    C: Compound<S>,
+    S: Store,
+{
+    type Target = Repr<C, S>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -106,35 +120,40 @@ impl<L> Annotation<L> for Cardinality {
         Cardinality(1)
     }
 
-    fn op(a: &Self, b: &Self) -> Self {
-        Cardinality(a.0 + b.0)
+    fn op(mut self, b: &Self) -> Self {
+        self.0 += b.0;
+        self
     }
 }
 
 #[derive(Canon, PartialEq, Debug, Clone, Copy)]
-pub enum Max {
+pub enum Max<K> {
     NegativeInfinity,
-    Maximum(u64),
+    Maximum(K),
 }
 
-impl Annotation<u64> for Max {
+impl<K, L> Annotation<L> for Max<K>
+where
+    K: Ord + Clone,
+    L: Borrow<K>,
+{
     fn identity() -> Self {
         Max::NegativeInfinity
     }
 
-    fn from_leaf(leaf: &u64) -> Self {
-        Max::Maximum(*leaf)
+    fn from_leaf(leaf: &L) -> Self {
+        Max::Maximum(leaf.borrow().clone())
     }
 
-    fn op(a: &Self, b: &Self) -> Self {
-        match (a, b) {
-            (a, Max::NegativeInfinity) => *a,
-            (Max::NegativeInfinity, b) => *b,
-            (Max::Maximum(a), Max::Maximum(b)) => {
+    fn op(self, b: &Self) -> Self {
+        match (self, b) {
+            (a @ Max::Maximum(_), Max::NegativeInfinity) => a,
+            (Max::NegativeInfinity, b) => b.clone(),
+            (Max::Maximum(ref a), Max::Maximum(b)) => {
                 if a > b {
-                    Max::Maximum(*a)
+                    Max::Maximum(a.clone())
                 } else {
-                    Max::Maximum(*b)
+                    Max::Maximum(b.clone())
                 }
             }
         }
@@ -145,34 +164,33 @@ impl Annotation<u64> for Max {
 mod tests {
     use super::*;
 
-    use crate::compound::Traverse;
+    use canonical::Store;
     use canonical_host::MemStore;
+
+    use crate::compound::{Child, Nth};
+
+    #[derive(Clone, Canon)]
+    struct Recepticle<T>(Vec<T>);
+
+    impl<T, S> Compound<S> for Recepticle<T>
+    where
+        T: Canon<S>,
+        S: Store,
+    {
+        type Leaf = T;
+        type Annotation = Cardinality;
+
+        fn child(&self, ofs: usize) -> Child<Self, S> {
+            match self.0.get(ofs) {
+                Some(l) => Child::Leaf(l),
+                None => Child::EndOfNode,
+            }
+        }
+    }
 
     #[test]
     fn annotated() -> Result<(), <MemStore as Store>::Error> {
-        #[derive(Clone, Canon)]
-        struct Recepticle<T>(Vec<T>);
-
-        impl<T> Compound for Recepticle<T> {
-            type Leaf = T;
-            type Annotation = Cardinality;
-
-            fn annotation(&self) -> Self::Annotation {
-                self.0.iter().fold(Annotation::<T>::identity(), |a, t| {
-                    Annotation::<T>::op(&a, &Cardinality::from_leaf(t))
-                })
-            }
-
-            fn traverse<M: Annotation<<Self as Compound>::Leaf>>(
-                &self,
-                method: &mut M,
-            ) -> Traverse {
-                todo!()
-            }
-        }
-
-        let mut hello =
-            Annotated::<_, Cardinality, MemStore>::new(Recepticle(vec![]))?;
+        let mut hello = Annotated::<_, MemStore>::new(Recepticle(vec![]))?;
 
         assert_eq!(hello.annotation(), &Cardinality(0));
 
@@ -183,6 +201,23 @@ mod tests {
         hello.val_mut()?.0.push(0u64);
 
         assert_eq!(hello.annotation(), &Cardinality(2));
+
+        Ok(())
+    }
+
+    #[test]
+    fn nth() -> Result<(), <MemStore as Store>::Error> {
+        let mut hello = Annotated::<_, MemStore>::new(Recepticle(vec![]))?;
+
+        let n: u64 = 16;
+
+        for i in 0..n {
+            hello.val_mut()?.0.push(i);
+        }
+
+        for i in 0..n {
+            assert_eq!(*Nth::<MemStore>::nth(&*hello.val()?, i)?.unwrap(), i)
+        }
 
         Ok(())
     }
