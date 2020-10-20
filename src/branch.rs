@@ -1,3 +1,9 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+//
+// Copyright (c) DUSK NETWORK. All rights reserved.
+
 use std::marker::PhantomData;
 use std::ops::Deref;
 
@@ -99,8 +105,6 @@ where
     {
         let mut push = None;
         loop {
-            println!("loops");
-
             if let Some(push) = push.take() {
                 self.0.push(push)
             }
@@ -123,17 +127,14 @@ where
                 }
             } {
                 Step::Found(_) => {
-                    println!("found!");
                     return Ok(Some(()));
                 }
                 Step::Next => {
-                    println!("neext");
                     let (ref mut ofs, _) = self.0.top_mut();
                     *ofs += 1;
                 }
                 Step::Into(n) => {
-                    println!("push");
-                    push = Some((*n.val()?).clone());
+                    push = Some(n.val()?.clone());
                 }
             }
         }
