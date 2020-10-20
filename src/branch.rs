@@ -99,8 +99,6 @@ where
     {
         let mut push = None;
         loop {
-            println!("loops");
-
             if let Some(push) = push.take() {
                 self.0.push(push)
             }
@@ -123,17 +121,14 @@ where
                 }
             } {
                 Step::Found(_) => {
-                    println!("found!");
                     return Ok(Some(()));
                 }
                 Step::Next => {
-                    println!("neext");
                     let (ref mut ofs, _) = self.0.top_mut();
                     *ofs += 1;
                 }
                 Step::Into(n) => {
-                    println!("push");
-                    push = Some((*n.val()?).clone());
+                    push = Some(n.val()?.clone());
                 }
             }
         }

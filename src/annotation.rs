@@ -1,4 +1,4 @@
-use std::borrow::Borrow;
+use std::borrow::{Borrow, Cow};
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 
@@ -16,7 +16,38 @@ where
     fn op(self, b: &Self) -> Self;
 }
 
-pub struct AnnMut<'a, C, S>
+pub struct AnnRef<'a, C, S>
+where
+    C: Compound<S>,
+    S: Store,
+{
+    annotation: &'a C::Annotation,
+    compound: Cow<'a, C>,
+    _marker: PhantomData<S>,
+}
+
+impl<'a, C, S> AnnRef<'a, C, S>
+where
+    C: Compound<S>,
+    S: Store,
+{
+    pub fn annotation(&self) -> &C::Annotation {
+        self.annotation
+    }
+}
+
+impl<'a, C, S> Deref for AnnRef<'a, C, S>
+where
+    C: Compound<S>,
+    S: Store,
+{
+    type Target = C;
+    fn deref(&self) -> &Self::Target {
+        &*self.compound
+    }
+}
+
+pub struct AnnRefMut<'a, C, S>
 where
     C: Compound<S>,
     S: Store,
@@ -26,7 +57,7 @@ where
     _marker: PhantomData<S>,
 }
 
-impl<'a, C, S> Deref for AnnMut<'a, C, S>
+impl<'a, C, S> Deref for AnnRefMut<'a, C, S>
 where
     C: Compound<S>,
     S: Store,
@@ -38,7 +69,7 @@ where
     }
 }
 
-impl<'a, C, S> DerefMut for AnnMut<'a, C, S>
+impl<'a, C, S> DerefMut for AnnRefMut<'a, C, S>
 where
     C: Compound<S>,
     S: Store,
@@ -48,7 +79,7 @@ where
     }
 }
 
-impl<'a, C, S> Drop for AnnMut<'a, C, S>
+impl<'a, C, S> Drop for AnnRefMut<'a, C, S>
 where
     C: Compound<S>,
     S: Store,
@@ -70,33 +101,29 @@ where
     C: Canon<S>,
     S: Store,
 {
-    pub fn new(compound: C) -> Result<Self, S::Error> {
+    pub fn new(compound: C) -> Self {
         let a = compound.annotation();
-        Ok(Annotated(Repr::<C, S>::new(compound)?, a))
+        Annotated(Repr::<C, S>::new(compound), a)
     }
 
     pub fn annotation(&self) -> &C::Annotation {
         &self.1
     }
 
-    pub fn val_mut(&mut self) -> Result<AnnMut<C, S>, S::Error> {
-        Ok(AnnMut {
+    pub fn val(&self) -> Result<AnnRef<C, S>, S::Error> {
+        Ok(AnnRef {
+            annotation: &self.1,
+            compound: self.0.val()?,
+            _marker: PhantomData,
+        })
+    }
+
+    pub fn val_mut(&mut self) -> Result<AnnRefMut<C, S>, S::Error> {
+        Ok(AnnRefMut {
             annotation: &mut self.1,
             compound: self.0.val_mut()?,
             _marker: PhantomData,
         })
-    }
-}
-
-impl<C, S> Deref for Annotated<C, S>
-where
-    C: Compound<S>,
-    S: Store,
-{
-    type Target = Repr<C, S>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
     }
 }
 
@@ -167,12 +194,34 @@ mod tests {
     use canonical::Store;
     use canonical_host::MemStore;
 
-    use crate::compound::{Child, Nth};
+    use crate::compound::{Child, ChildMut, Nth};
 
     #[derive(Clone, Canon)]
-    struct Recepticle<T>(Vec<T>);
+    struct Recepticle<T, S>(Vec<T>, PhantomData<S>);
 
-    impl<T, S> Compound<S> for Recepticle<T>
+    impl<T, S> Recepticle<T, S>
+    where
+        T: Canon<S>,
+        S: Store,
+    {
+        fn new() -> Self {
+            Recepticle(vec![], PhantomData)
+        }
+
+        fn push(&mut self, t: T) {
+            self.0.push(t)
+        }
+
+        fn get(&self, i: usize) -> Option<&T> {
+            self.0.get(i)
+        }
+
+        fn get_mut(&mut self, i: usize) -> Option<&mut T> {
+            self.0.get_mut(i)
+        }
+    }
+
+    impl<T, S> Compound<S> for Recepticle<T, S>
     where
         T: Canon<S>,
         S: Store,
@@ -181,24 +230,31 @@ mod tests {
         type Annotation = Cardinality;
 
         fn child(&self, ofs: usize) -> Child<Self, S> {
-            match self.0.get(ofs) {
+            match self.get(ofs) {
                 Some(l) => Child::Leaf(l),
                 None => Child::EndOfNode,
+            }
+        }
+
+        fn child_mut(&mut self, ofs: usize) -> ChildMut<Self, S> {
+            match self.get_mut(ofs) {
+                Some(l) => ChildMut::Leaf(l),
+                None => ChildMut::EndOfNode,
             }
         }
     }
 
     #[test]
     fn annotated() -> Result<(), <MemStore as Store>::Error> {
-        let mut hello = Annotated::<_, MemStore>::new(Recepticle(vec![]))?;
+        let mut hello = Annotated::<_, MemStore>::new(Recepticle::new());
 
         assert_eq!(hello.annotation(), &Cardinality(0));
 
-        hello.val_mut()?.0.push(0u64);
+        hello.val_mut()?.push(0u64);
 
         assert_eq!(hello.annotation(), &Cardinality(1));
 
-        hello.val_mut()?.0.push(0u64);
+        hello.val_mut()?.push(0u64);
 
         assert_eq!(hello.annotation(), &Cardinality(2));
 
@@ -207,16 +263,37 @@ mod tests {
 
     #[test]
     fn nth() -> Result<(), <MemStore as Store>::Error> {
-        let mut hello = Annotated::<_, MemStore>::new(Recepticle(vec![]))?;
+        let mut hello = Annotated::<_, MemStore>::new(Recepticle::new());
 
         let n: u64 = 16;
 
         for i in 0..n {
-            hello.val_mut()?.0.push(i);
+            hello.val_mut()?.push(i);
         }
 
         for i in 0..n {
             assert_eq!(*Nth::<MemStore>::nth(&*hello.val()?, i)?.unwrap(), i)
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn nth_mut() -> Result<(), <MemStore as Store>::Error> {
+        let mut hello: Recepticle<_, MemStore> = Recepticle::new();
+
+        let n: u64 = 16;
+
+        for i in 0..n {
+            hello.push(i);
+        }
+
+        for i in 0..n {
+            *hello.nth_mut(i)?.expect("Some") += 1;
+        }
+
+        for i in 0..n {
+            assert_eq!(*hello.nth(i)?.unwrap(), i + 1)
         }
 
         Ok(())
