@@ -4,14 +4,16 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use std::marker::PhantomData;
-use std::mem;
-use std::ops::{Deref, DerefMut};
+use core::marker::PhantomData;
+use core::mem;
+use core::ops::{Deref, DerefMut};
 
 use canonical::Store;
 
 use crate::annotation::Annotated;
 use crate::compound::{Child, ChildMut, Compound};
+
+use const_arrayvec::ArrayVec;
 
 pub enum WalkMut<'a, C, S>
 where
@@ -105,23 +107,25 @@ where
     }
 }
 
-pub struct PartialBranchMut<'a, C, S>(LevelsMut<'a, C, S>)
+pub struct PartialBranchMut<'a, C, S, const N: usize>(LevelsMut<'a, C, S, N>)
 where
     C: Compound<S>,
     S: Store;
 
-pub struct LevelsMut<'a, C, S>(Vec<LevelMut<'a, C, S>>)
+pub struct LevelsMut<'a, C, S, const N: usize>(ArrayVec<LevelMut<'a, C, S>, N>)
 where
     C: Compound<S>,
     S: Store;
 
-impl<'a, C, S> LevelsMut<'a, C, S>
+impl<'a, C, S, const N: usize> LevelsMut<'a, C, S, N>
 where
     C: Compound<S>,
     S: Store,
 {
     pub fn new(first: LevelMut<'a, C, S>) -> Self {
-        LevelsMut(vec![first])
+        let mut levels: ArrayVec<LevelMut<'a, C, S>, N> = ArrayVec::new();
+        levels.push(first);
+        LevelsMut(levels)
     }
 
     pub fn depth(&self) -> usize {
@@ -182,7 +186,7 @@ where
     }
 }
 
-impl<'a, C, S> PartialBranchMut<'a, C, S>
+impl<'a, C, S, const N: usize> PartialBranchMut<'a, C, S, N>
 where
     C: Compound<S>,
     S: Store,
@@ -260,7 +264,7 @@ where
     }
 }
 
-impl<'a, C, S> Drop for PartialBranchMut<'a, C, S>
+impl<'a, C, S, const N: usize> Drop for PartialBranchMut<'a, C, S, N>
 where
     C: Compound<S>,
     S: Store,
@@ -271,7 +275,7 @@ where
     }
 }
 
-impl<'a, C, S> BranchMut<'a, C, S>
+impl<'a, C, S, const N: usize> BranchMut<'a, C, S, N>
 where
     C: Compound<S>,
     S: Store,
@@ -296,12 +300,12 @@ where
     }
 }
 
-pub struct BranchMut<'a, C, S>(PartialBranchMut<'a, C, S>)
+pub struct BranchMut<'a, C, S, const N: usize>(PartialBranchMut<'a, C, S, N>)
 where
     C: Compound<S>,
     S: Store;
 
-impl<'a, C, S> Deref for BranchMut<'a, C, S>
+impl<'a, C, S, const N: usize> Deref for BranchMut<'a, C, S, N>
 where
     C: Compound<S>,
     S: Store,
@@ -313,7 +317,7 @@ where
     }
 }
 
-impl<'a, C, S> DerefMut for BranchMut<'a, C, S>
+impl<'a, C, S, const N: usize> DerefMut for BranchMut<'a, C, S, N>
 where
     C: Compound<S>,
     S: Store,

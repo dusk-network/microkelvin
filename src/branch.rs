@@ -4,13 +4,15 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use std::marker::PhantomData;
-use std::ops::Deref;
+use core::marker::PhantomData;
+use core::ops::Deref;
 
 use canonical::Store;
 
 use crate::annotation::Annotated;
 use crate::compound::{Child, Compound};
+
+use const_arrayvec::ArrayVec;
 
 pub struct Level<'a, C, S>
 where
@@ -74,21 +76,23 @@ where
     Owned(C, PhantomData<S>),
 }
 
-pub struct PartialBranch<'a, C, S>(Levels<'a, C, S>)
+pub struct PartialBranch<'a, C, S, const N: usize>(Levels<'a, C, S, N>)
 where
     C: Clone;
 
-pub struct Levels<'a, C, S>(Vec<Level<'a, C, S>>)
+pub struct Levels<'a, C, S, const N: usize>(ArrayVec<Level<'a, C, S>, N>)
 where
     C: Clone;
 
-impl<'a, C, S> Levels<'a, C, S>
+impl<'a, C, S, const N: usize> Levels<'a, C, S, N>
 where
     C: Compound<S>,
     S: Store,
 {
     pub fn new(node: &'a C) -> Self {
-        Levels(vec![Level::new_borrowed(node)])
+        let mut levels: ArrayVec<Level<'a, C, S>, N> = ArrayVec::new();
+        levels.push(Level::new_borrowed(node));
+        Levels(levels)
     }
 
     pub fn depth(&self) -> usize {
@@ -131,7 +135,7 @@ where
     }
 }
 
-impl<'a, C, S> PartialBranch<'a, C, S>
+impl<'a, C, S, const N: usize> PartialBranch<'a, C, S, N>
 where
     C: Compound<S>,
     S: Store,
@@ -206,7 +210,7 @@ where
     Into(&'a Annotated<C, S>),
 }
 
-impl<'a, C, S> Branch<'a, C, S>
+impl<'a, C, S, const N: usize> Branch<'a, C, S, N>
 where
     C: Compound<S>,
     S: Store,
@@ -231,11 +235,11 @@ where
     }
 }
 
-pub struct Branch<'a, C, S>(PartialBranch<'a, C, S>)
+pub struct Branch<'a, C, S, const N: usize>(PartialBranch<'a, C, S, N>)
 where
     C: Clone;
 
-impl<'a, C, S> Deref for Branch<'a, C, S>
+impl<'a, C, S, const N: usize> Deref for Branch<'a, C, S, N>
 where
     C: Compound<S>,
     S: Store,
