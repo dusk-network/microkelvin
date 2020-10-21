@@ -281,7 +281,7 @@ where
     }
 
     pub fn levels(&self) -> &[LevelMut<C, S>] {
-        &(self.0).0.0[..]
+        &((self.0).0).0[..]
     }
 
     pub fn walk<W: FnMut(WalkMut<C, S>) -> StepMut<C, S>>(

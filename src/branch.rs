@@ -216,7 +216,7 @@ where
     }
 
     pub fn levels(&self) -> &[Level<C, S>] {
-        &(self.0).0.0[..]
+        &((self.0).0).0[..]
     }
 
     pub fn walk<W: FnMut(Walk<C, S>) -> Step<C, S>>(
