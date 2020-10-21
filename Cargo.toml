@@ -1,10 +1,16 @@
 [package]
 name = "microkelvin"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Kristoffer Ström <kristoffer@dusk.network>"]
 edition = "2018"
+keywords = ["datastructures"]
+description = "A library for tree traversal over annotated datastructures"
+license = "MPL-2.0"
+readme = "README.md"
 
 [dependencies]
 canonical = { version = "0.3", features = ["host"] }
 canonical_derive = "0.3"
+
+[dev-dependencies]
 canonical_host = "0.3"
