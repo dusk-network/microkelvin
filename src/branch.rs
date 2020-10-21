@@ -41,7 +41,7 @@ where
         Levels(vec![(0, first)])
     }
 
-    pub fn len(&self) -> usize {
+    pub fn depth(&self) -> usize {
         self.0.len()
     }
 
@@ -91,8 +91,8 @@ where
         PartialBranch(levels)
     }
 
-    pub fn len(&self) -> usize {
-        self.0.len()
+    pub fn depth(&self) -> usize {
+        self.0.depth()
     }
 
     fn leaf(&self) -> Option<&C::Leaf> {
@@ -165,8 +165,8 @@ where
     C: Compound<S>,
     S: Store,
 {
-    pub fn len(&self) -> usize {
-        self.0.len()
+    pub fn depth(&self) -> usize {
+        self.0.depth()
     }
 
     pub fn walk<W: FnMut(Walk<C, S>) -> Step<C, S>>(
