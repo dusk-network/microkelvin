@@ -91,7 +91,7 @@ where
         LevelsMut(vec![(0, first)])
     }
 
-    pub fn len(&self) -> usize {
+    pub fn depth(&self) -> usize {
         self.0.len()
     }
 
@@ -165,8 +165,8 @@ where
         PartialBranchMut(levels)
     }
 
-    pub fn len(&self) -> usize {
-        self.0.len()
+    pub fn depth(&self) -> usize {
+        self.0.depth()
     }
 
     fn leaf(&self) -> Option<&C::Leaf> {
@@ -241,7 +241,7 @@ where
 {
     fn drop(&mut self) {
         // unwind when dropping
-        while let Some(_) = self.pop() {}
+        while self.pop().is_some() {}
     }
 }
 
@@ -250,8 +250,8 @@ where
     C: Compound<S>,
     S: Store,
 {
-    pub fn len(&self) -> usize {
-        self.0.len()
+    pub fn depth(&self) -> usize {
+        self.0.depth()
     }
 
     pub fn walk<W: FnMut(WalkMut<C, S>) -> StepMut<C, S>>(
