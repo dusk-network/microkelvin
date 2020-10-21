@@ -13,8 +13,6 @@ use canonical::Store;
 use crate::annotation::Annotated;
 use crate::compound::{Child, ChildMut, Compound};
 
-type Offset = usize;
-
 pub enum WalkMut<'a, C, S>
 where
     C: Compound<S>,
@@ -34,14 +32,62 @@ where
     Into(&'a mut Annotated<C, S>),
 }
 
-pub enum LevelMut<'a, C, S>
+enum LevelInnerMut<'a, C, S>
 where
-    C: Clone,
+    C: Compound<S>,
+    S: Store,
 {
-    #[allow(unused)]
     Borrowed(&'a mut C),
-    #[allow(unused)]
     Owned(C, PhantomData<S>),
+}
+
+pub struct LevelMut<'a, C, S>
+where
+    C: Compound<S>,
+    S: Store,
+{
+    offset: usize,
+    inner: LevelInnerMut<'a, C, S>,
+}
+
+impl<'a, C, S> LevelMut<'a, C, S>
+where
+    C: Compound<S>,
+    S: Store,
+{
+    pub fn offset(&self) -> usize {
+        self.offset
+    }
+
+    fn new_owned(node: C) -> Self {
+        LevelMut {
+            offset: 0,
+            inner: LevelInnerMut::Owned(node, PhantomData),
+        }
+    }
+
+    fn new_borrowed(node: &'a mut C) -> Self {
+        LevelMut {
+            offset: 0,
+            inner: LevelInnerMut::Borrowed(node),
+        }
+    }
+
+    fn level_child_mut(&mut self) -> ChildMut<C, S> {
+        let ofs = self.offset();
+        match self.inner {
+            LevelInnerMut::Borrowed(ref mut n) => n.child_mut(ofs),
+            LevelInnerMut::Owned(ref mut n, _) => n.child_mut(ofs),
+        }
+    }
+
+    fn inner(&self) -> &LevelInnerMut<'a, C, S> {
+        &self.inner
+    }
+
+    fn offset_mut(&mut self) -> &mut usize {
+        &mut self.offset
+    }
 }
 
 impl<'a, C, S> Deref for LevelMut<'a, C, S>
@@ -52,22 +98,9 @@ where
     type Target = C;
 
     fn deref(&self) -> &Self::Target {
-        match self {
-            LevelMut::Borrowed(b) => b,
-            LevelMut::Owned(c, _) => &c,
-        }
-    }
-}
-
-impl<'a, C, S> DerefMut for LevelMut<'a, C, S>
-where
-    C: Compound<S>,
-    S: Store,
-{
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        match self {
-            LevelMut::Borrowed(b) => b,
-            LevelMut::Owned(ref mut c, _) => c,
+        match self.inner() {
+            LevelInnerMut::Borrowed(b) => b,
+            LevelInnerMut::Owned(c, _) => &c,
         }
     }
 }
@@ -77,7 +110,7 @@ where
     C: Compound<S>,
     S: Store;
 
-pub struct LevelsMut<'a, C, S>(Vec<(Offset, LevelMut<'a, C, S>)>)
+pub struct LevelsMut<'a, C, S>(Vec<LevelMut<'a, C, S>>)
 where
     C: Compound<S>,
     S: Store;
@@ -88,30 +121,30 @@ where
     S: Store,
 {
     pub fn new(first: LevelMut<'a, C, S>) -> Self {
-        LevelsMut(vec![(0, first)])
+        LevelsMut(vec![first])
     }
 
     pub fn depth(&self) -> usize {
         self.0.len()
     }
 
-    pub fn top(&self) -> &(Offset, LevelMut<'a, C, S>) {
+    pub fn top(&self) -> &LevelMut<'a, C, S> {
         self.0.last().expect("always > 0 len")
     }
 
-    pub fn top_mut(&mut self) -> &mut (Offset, LevelMut<'a, C, S>) {
+    pub fn top_mut(&mut self) -> &mut LevelMut<'a, C, S> {
         self.0.last_mut().expect("always > 0 len")
     }
 
     fn advance(&mut self) {
-        self.top_mut().0 += 1
+        *self.top_mut().offset_mut() += 1
     }
 
     pub fn pop(&mut self) -> Option<()> {
         if self.0.len() > 1 {
-            let (_, popped_node) = self.0.pop().expect("length > 1");
-            let (ofs, top_node) = self.top_mut();
-            if let ChildMut::Node(top_child) = top_node.child_mut(*ofs) {
+            let popped_node = self.0.pop().expect("length > 1");
+            let top_node = self.top_mut();
+            if let ChildMut::Node(top_child) = top_node.level_child_mut() {
                 *top_child = Annotated::new(popped_node.clone())
             } else {
                 unreachable!("Invalid parent structure")
@@ -123,17 +156,17 @@ where
     }
 
     pub fn push(&mut self, node: C) {
-        self.0.push((0, LevelMut::Owned(node, PhantomData)))
+        self.0.push(LevelMut::new_owned(node))
     }
 
     pub fn leaf(&self) -> Option<&C::Leaf> {
-        let (ofs, level) = self.top();
-        match level {
-            LevelMut::Borrowed(c) => match c.child(*ofs) {
+        let top_level = self.top();
+        match top_level.inner() {
+            LevelInnerMut::Borrowed(c) => match c.child(top_level.offset()) {
                 Child::Leaf(l) => Some(l),
                 _ => None,
             },
-            LevelMut::Owned(c, _) => match c.child(*ofs) {
+            LevelInnerMut::Owned(c, _) => match c.child(top_level.offset()) {
                 Child::Leaf(l) => Some(l),
                 _ => None,
             },
@@ -141,16 +174,10 @@ where
     }
 
     fn leaf_mut(&mut self) -> Option<&mut C::Leaf> {
-        let (ofs, level) = self.top_mut();
-        match level {
-            LevelMut::Borrowed(c) => match c.child_mut(*ofs) {
-                ChildMut::Leaf(l) => Some(l),
-                _ => None,
-            },
-            LevelMut::Owned(c, _) => match c.child_mut(*ofs) {
-                ChildMut::Leaf(l) => Some(l),
-                _ => None,
-            },
+        let top_level = self.top_mut();
+        match top_level.level_child_mut() {
+            ChildMut::Leaf(l) => Some(l),
+            _ => None,
         }
     }
 }
@@ -161,7 +188,7 @@ where
     S: Store,
 {
     fn new(root: &'a mut C) -> Self {
-        let levels = LevelsMut::new(LevelMut::Borrowed(root));
+        let levels = LevelsMut::new(LevelMut::new_borrowed(root));
         PartialBranchMut(levels)
     }
 
@@ -210,9 +237,8 @@ where
                 State::Advance => self.advance(),
             }
 
-            let (ofs, node) = self.0.top_mut();
-
-            match match node.child_mut(*ofs) {
+            let top_node = self.0.top_mut();
+            match match top_node.level_child_mut() {
                 ChildMut::Leaf(l) => walker(WalkMut::Leaf(l)),
                 ChildMut::Node(c) => walker(WalkMut::Node(c)),
                 ChildMut::EndOfNode => {
@@ -252,6 +278,10 @@ where
 {
     pub fn depth(&self) -> usize {
         self.0.depth()
+    }
+
+    pub fn levels(&self) -> &[LevelMut<C, S>] {
+        &((self.0).0).0[..]
     }
 
     pub fn walk<W: FnMut(WalkMut<C, S>) -> StepMut<C, S>>(

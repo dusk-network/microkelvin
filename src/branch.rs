@@ -12,15 +12,65 @@ use canonical::Store;
 use crate::annotation::Annotated;
 use crate::compound::{Child, Compound};
 
-type Offset = usize;
-
-pub enum Level<'a, C, S>
+pub struct Level<'a, C, S>
 where
     C: Clone,
 {
-    #[allow(unused)]
+    offset: usize,
+    inner: LevelInner<'a, C, S>,
+}
+
+impl<'a, C, S> Deref for Level<'a, C, S>
+where
+    C: Clone,
+{
+    type Target = C;
+
+    fn deref(&self) -> &Self::Target {
+        match self.inner {
+            LevelInner::Borrowed(c) => c,
+            LevelInner::Owned(ref c, _) => c,
+        }
+    }
+}
+
+impl<'a, C, S> Level<'a, C, S>
+where
+    C: Clone,
+{
+    fn new_owned(node: C) -> Self {
+        Level {
+            offset: 0,
+            inner: LevelInner::Owned(node, PhantomData),
+        }
+    }
+
+    fn new_borrowed(node: &'a C) -> Self {
+        Level {
+            offset: 0,
+            inner: LevelInner::Borrowed(node),
+        }
+    }
+
+    pub fn offset(&self) -> usize {
+        self.offset
+    }
+
+    fn offset_mut(&mut self) -> &mut usize {
+        &mut self.offset
+    }
+
+    fn inner(&self) -> &LevelInner<'a, C, S> {
+        &self.inner
+    }
+}
+
+#[derive(Clone)]
+enum LevelInner<'a, C, S>
+where
+    C: Clone,
+{
     Borrowed(&'a C),
-    #[allow(unused)]
     Owned(C, PhantomData<S>),
 }
 
@@ -28,7 +78,7 @@ pub struct PartialBranch<'a, C, S>(Levels<'a, C, S>)
 where
     C: Clone;
 
-pub struct Levels<'a, C, S>(Vec<(Offset, Level<'a, C, S>)>)
+pub struct Levels<'a, C, S>(Vec<Level<'a, C, S>>)
 where
     C: Clone;
 
@@ -37,19 +87,19 @@ where
     C: Compound<S>,
     S: Store,
 {
-    pub fn new(first: Level<'a, C, S>) -> Self {
-        Levels(vec![(0, first)])
+    pub fn new(node: &'a C) -> Self {
+        Levels(vec![Level::new_borrowed(node)])
     }
 
     pub fn depth(&self) -> usize {
         self.0.len()
     }
 
-    pub fn top(&self) -> &(Offset, Level<'a, C, S>) {
+    pub fn top(&self) -> &Level<'a, C, S> {
         self.0.last().expect("always > 0 len")
     }
 
-    pub fn top_mut(&mut self) -> &mut (Offset, Level<'a, C, S>) {
+    pub fn top_mut(&mut self) -> &mut Level<'a, C, S> {
         self.0.last_mut().expect("always > 0 len")
     }
 
@@ -63,17 +113,17 @@ where
     }
 
     pub fn push(&mut self, node: C) {
-        self.0.push((0, Level::Owned(node, PhantomData)))
+        self.0.push(Level::new_owned(node))
     }
 
     pub fn leaf(&self) -> Option<&C::Leaf> {
-        let (ofs, level) = self.top();
-        match level {
-            Level::Borrowed(c) => match c.child(*ofs) {
+        let level = self.top();
+        match level.inner() {
+            LevelInner::Borrowed(c) => match c.child(level.offset()) {
                 Child::Leaf(l) => Some(l),
                 _ => None,
             },
-            Level::Owned(c, _) => match c.child(*ofs) {
+            LevelInner::Owned(c, _) => match c.child(level.offset()) {
                 Child::Leaf(l) => Some(l),
                 _ => None,
             },
@@ -87,7 +137,7 @@ where
     S: Store,
 {
     fn new(root: &'a C) -> Self {
-        let levels = Levels::new(Level::Borrowed(root));
+        let levels = Levels::new(root);
         PartialBranch(levels)
     }
 
@@ -109,12 +159,9 @@ where
                 self.0.push(push)
             }
 
-            let (ofs, node) = match self.0.top_mut() {
-                (ofs, Level::Borrowed(c)) => (ofs, *c),
-                (ofs, Level::Owned(c, _)) => (ofs, &*c),
-            };
+            let top_level = self.0.top_mut();
 
-            match match node.child(*ofs) {
+            match match top_level.child(top_level.offset()) {
                 Child::Leaf(l) => walker(Walk::Leaf(l)),
                 Child::Node(c) => walker(Walk::Node(c)),
                 Child::EndOfNode => {
@@ -130,8 +177,7 @@ where
                     return Ok(Some(()));
                 }
                 Step::Next => {
-                    let (ref mut ofs, _) = self.0.top_mut();
-                    *ofs += 1;
+                    *self.0.top_mut().offset_mut() += 1;
                 }
                 Step::Into(n) => {
                     push = Some(n.val()?.clone());
@@ -167,6 +213,10 @@ where
 {
     pub fn depth(&self) -> usize {
         self.0.depth()
+    }
+
+    pub fn levels(&self) -> &[Level<C, S>] {
+        &((self.0).0).0[..]
     }
 
     pub fn walk<W: FnMut(Walk<C, S>) -> Step<C, S>>(
