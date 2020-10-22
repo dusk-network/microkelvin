@@ -4,23 +4,58 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use canonical::Cow;
 use core::borrow::Borrow;
 use core::marker::PhantomData;
 use core::ops::{Deref, DerefMut};
 
-use canonical::{Canon, Repr, Store, ValMut};
+use canonical::{Canon, Cow, Repr, Store, ValMut};
 use canonical_derive::Canon;
 
-use crate::compound::Compound;
+use crate::compound::{Child, Compound};
 
-pub trait Annotation<L>
+pub trait Annotation<C, S>
 where
-    Self: Sized,
+    C: Compound<S>,
+    S: Store,
 {
+    fn identity() -> Self;
+    fn from_leaf(leaf: &C::Leaf) -> Self;
+    fn from_node(node: &C) -> Self;
+}
+
+pub trait Associative<L> {
     fn identity() -> Self;
     fn from_leaf(leaf: &L) -> Self;
     fn op(self, b: &Self) -> Self;
+}
+
+impl<A, C, S> Annotation<C, S> for A
+where
+    A: Associative<C::Leaf>,
+    C: Compound<S, Annotation = A>,
+    S: Store,
+{
+    fn identity() -> Self {
+        A::identity()
+    }
+
+    fn from_leaf(leaf: &C::Leaf) -> Self {
+        A::from_leaf(leaf)
+    }
+
+    fn from_node(node: &C) -> Self {
+        let mut annotation = Self::identity();
+        for i in 0.. {
+            match node.child(i) {
+                Child::Leaf(l) => {
+                    annotation = annotation.op(&Self::from_leaf(l))
+                }
+                Child::Node(n) => annotation = annotation.op(n.annotation()),
+                Child::EndOfNode => return annotation,
+            };
+        }
+        unreachable!()
+    }
 }
 
 pub struct AnnRef<'a, C, S>
@@ -92,7 +127,7 @@ where
     S: Store,
 {
     fn drop(&mut self) {
-        *self.annotation = self.compound.annotation()
+        *self.annotation = C::Annotation::from_node(&*self.compound)
     }
 }
 
@@ -109,7 +144,7 @@ where
     S: Store,
 {
     pub fn new(compound: C) -> Self {
-        let a = compound.annotation();
+        let a = C::Annotation::from_node(&compound);
         Annotated(Repr::<C, S>::new(compound), a)
     }
 
@@ -145,12 +180,12 @@ impl Cardinality {
     }
 }
 
-impl<L> Annotation<L> for Cardinality {
+impl<L> Associative<L> for Cardinality {
     fn identity() -> Self {
         Cardinality(0)
     }
 
-    fn from_leaf(_: &L) -> Self {
+    fn from_leaf(_leaf: &L) -> Self {
         Cardinality(1)
     }
 
@@ -166,7 +201,7 @@ pub enum Max<K> {
     Maximum(K),
 }
 
-impl<K, L> Annotation<L> for Max<K>
+impl<K, L> Associative<L> for Max<K>
 where
     K: Ord + Clone,
     L: Borrow<K>,

@@ -11,5 +11,7 @@ readme = "README.md"
 [dependencies]
 canonical = { version = "0.4", features = ["host"] }
 canonical_derive = "0.4"
+const-arrayvec = "0.2"
+
+[dev-dependencies]
 canonical_host = "0.4"
-const-arrayvec = "0.2.1"

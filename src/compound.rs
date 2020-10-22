@@ -39,22 +39,10 @@ where
     S: Store,
 {
     type Leaf;
-    type Annotation: Canon<S> + Annotation<Self::Leaf> + Clone + Sized;
+    type Annotation: Canon<S> + Annotation<Self, S> + Clone + Sized;
 
     fn child(&self, ofs: usize) -> Child<Self, S>;
     fn child_mut(&mut self, ofs: usize) -> ChildMut<Self, S>;
-
-    fn annotation(&self) -> Self::Annotation {
-        let mut ann = Self::Annotation::identity();
-        for i in 0.. {
-            match self.child(i) {
-                Child::Leaf(l) => ann = ann.op(&Self::Annotation::from_leaf(l)),
-                Child::Node(c) => ann = ann.op(c.annotation()),
-                Child::EndOfNode => return ann,
-            }
-        }
-        unreachable!()
-    }
 }
 
 pub trait Nth<'a, S, const N: usize>
