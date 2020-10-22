@@ -4,6 +4,9 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+#![no_std]
+#![feature(min_const_generics)]
+
 mod annotation;
 mod branch;
 mod branch_mut;
