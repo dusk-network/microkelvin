@@ -92,6 +92,7 @@ where
 pub struct AnnRefMut<'a, C, S>
 where
     C: Compound<S>,
+    C::Annotation: Annotation<C, S>,
     S: Store,
 {
     annotation: &'a mut C::Annotation,
@@ -102,6 +103,7 @@ where
 impl<'a, C, S> Deref for AnnRefMut<'a, C, S>
 where
     C: Compound<S>,
+    C::Annotation: Annotation<C, S>,
     S: Store,
 {
     type Target = C;
@@ -114,6 +116,7 @@ where
 impl<'a, C, S> DerefMut for AnnRefMut<'a, C, S>
 where
     C: Compound<S>,
+    C::Annotation: Annotation<C, S>,
     S: Store,
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
@@ -124,6 +127,7 @@ where
 impl<'a, C, S> Drop for AnnRefMut<'a, C, S>
 where
     C: Compound<S>,
+    C::Annotation: Annotation<C, S>,
     S: Store,
 {
     fn drop(&mut self) {
@@ -140,7 +144,7 @@ where
 impl<C, S> Annotated<C, S>
 where
     C: Compound<S>,
-    C: Canon<S>,
+    C::Annotation: Annotation<C, S>,
     S: Store,
 {
     pub fn new(compound: C) -> Self {
@@ -248,6 +252,7 @@ mod tests {
             CanonArrayVec(ArrayVec::new())
         }
     }
+
     impl<S: Store, T: Canon<S>, const N: usize> Canon<S> for CanonArrayVec<T, N> {
         fn write(&self, sink: &mut impl Sink<S>) -> Result<(), S::Error> {
             let len = self.0.len() as u64;
@@ -331,7 +336,7 @@ mod tests {
     #[test]
     fn annotated() -> Result<(), <MemStore as Store>::Error> {
         let mut hello: Annotated<Recepticle<u64, MemStore, 4>, MemStore> =
-            Annotated::<_, MemStore>::new(Recepticle::new());
+            Annotated::new(Recepticle::new());
 
         assert_eq!(hello.annotation(), &Cardinality(0));
 
@@ -352,14 +357,14 @@ mod tests {
         let n = N as u64;
 
         let mut hello: Annotated<Recepticle<u64, MemStore, N>, MemStore> =
-            Annotated::<_, MemStore>::new(Recepticle::new());
+            Annotated::new(Recepticle::new());
 
         for i in 0..n {
             hello.val_mut()?.push(i);
         }
 
         for i in 0..n {
-            assert_eq!(*Nth::<MemStore, N>::nth(&*hello.val()?, i)?.unwrap(), i)
+            assert_eq!(*hello.val()?.nth::<N>(i)?.unwrap(), i)
         }
 
         Ok(())
@@ -377,24 +382,11 @@ mod tests {
         }
 
         for i in 0..n {
-            let mut nth: crate::branch_mut::BranchMut<
-                '_,
-                Recepticle<u64, MemStore, N>,
-                MemStore,
-                N,
-            > = hello.nth_mut(i)?.expect("Some");
-            *nth += 1;
+            *hello.nth_mut::<N>(i)?.expect("Some") += 1;
         }
 
         for i in 0..n {
-            let nth: crate::branch::Branch<
-                '_,
-                Recepticle<u64, MemStore, N>,
-                MemStore,
-                N,
-            > = hello.nth(i)?.unwrap();
-
-            assert_eq!(*nth, i + 1)
+            assert_eq!(*hello.nth::<N>(i)?.unwrap(), i + 1)
         }
 
         Ok(())

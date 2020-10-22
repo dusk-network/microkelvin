@@ -39,34 +39,36 @@ where
     S: Store,
 {
     type Leaf;
-    type Annotation: Canon<S> + Annotation<Self, S> + Clone + Sized;
+    type Annotation: Canon<S> + Clone + Sized;
 
     fn child(&self, ofs: usize) -> Child<Self, S>;
     fn child_mut(&mut self, ofs: usize) -> ChildMut<Self, S>;
 }
 
-pub trait Nth<'a, S, const N: usize>
+pub trait Nth<'a, S>
 where
     Self: Compound<S> + Sized,
+    Self::Annotation: Annotation<Self, S>,
     S: Store,
 {
-    fn nth(
+    fn nth<const N: usize>(
         &'a self,
         n: u64,
     ) -> Result<Option<Branch<'a, Self, S, N>>, S::Error>;
-    fn nth_mut(
+
+    fn nth_mut<const N: usize>(
         &'a mut self,
         n: u64,
     ) -> Result<Option<BranchMut<'a, Self, S, N>>, S::Error>;
 }
 
-impl<'a, C, S, const N: usize> Nth<'a, S, N> for C
+impl<'a, C, S> Nth<'a, S> for C
 where
     C: Compound<S>,
-    C::Annotation: Borrow<Cardinality>,
+    C::Annotation: Annotation<C, S> + Borrow<Cardinality>,
     S: Store,
 {
-    fn nth(
+    fn nth<const N: usize>(
         &'a self,
         mut index: u64,
     ) -> Result<Option<Branch<'a, Self, S, N>>, S::Error> {
@@ -91,7 +93,7 @@ where
         })
     }
 
-    fn nth_mut(
+    fn nth_mut<const N: usize>(
         &'a mut self,
         mut index: u64,
     ) -> Result<Option<BranchMut<'a, Self, S, N>>, S::Error> {
