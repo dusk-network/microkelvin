@@ -10,7 +10,7 @@ use core::ops::{Deref, DerefMut};
 
 use canonical::Store;
 
-use crate::annotation::Annotated;
+use crate::annotation::{Annotated, Annotation};
 use crate::compound::{Child, ChildMut, Compound};
 
 use const_arrayvec::ArrayVec;
@@ -55,6 +55,7 @@ where
 impl<'a, C, S> LevelMut<'a, C, S>
 where
     C: Compound<S>,
+    C::Annotation: Annotation<C, S>,
     S: Store,
 {
     pub fn offset(&self) -> usize {
@@ -95,6 +96,7 @@ where
 impl<'a, C, S> Deref for LevelMut<'a, C, S>
 where
     C: Compound<S>,
+    C::Annotation: Annotation<C, S>,
     S: Store,
 {
     type Target = C;
@@ -110,16 +112,19 @@ where
 pub struct PartialBranchMut<'a, C, S, const N: usize>(LevelsMut<'a, C, S, N>)
 where
     C: Compound<S>,
+    C::Annotation: Annotation<C, S>,
     S: Store;
 
 pub struct LevelsMut<'a, C, S, const N: usize>(ArrayVec<LevelMut<'a, C, S>, N>)
 where
     C: Compound<S>,
+    C::Annotation: Annotation<C, S>,
     S: Store;
 
 impl<'a, C, S, const N: usize> LevelsMut<'a, C, S, N>
 where
     C: Compound<S>,
+    C::Annotation: Annotation<C, S>,
     S: Store,
 {
     pub fn new(first: LevelMut<'a, C, S>) -> Self {
@@ -189,6 +194,7 @@ where
 impl<'a, C, S, const N: usize> PartialBranchMut<'a, C, S, N>
 where
     C: Compound<S>,
+    C::Annotation: Annotation<C, S>,
     S: Store,
 {
     fn new(root: &'a mut C) -> Self {
@@ -267,6 +273,7 @@ where
 impl<'a, C, S, const N: usize> Drop for PartialBranchMut<'a, C, S, N>
 where
     C: Compound<S>,
+    C::Annotation: Annotation<C, S>,
     S: Store,
 {
     fn drop(&mut self) {
@@ -278,6 +285,7 @@ where
 impl<'a, C, S, const N: usize> BranchMut<'a, C, S, N>
 where
     C: Compound<S>,
+    C::Annotation: Annotation<C, S>,
     S: Store,
 {
     pub fn depth(&self) -> usize {
@@ -303,11 +311,13 @@ where
 pub struct BranchMut<'a, C, S, const N: usize>(PartialBranchMut<'a, C, S, N>)
 where
     C: Compound<S>,
+    C::Annotation: Annotation<C, S>,
     S: Store;
 
 impl<'a, C, S, const N: usize> Deref for BranchMut<'a, C, S, N>
 where
     C: Compound<S>,
+    C::Annotation: Annotation<C, S>,
     S: Store,
 {
     type Target = C::Leaf;
@@ -320,6 +330,7 @@ where
 impl<'a, C, S, const N: usize> DerefMut for BranchMut<'a, C, S, N>
 where
     C: Compound<S>,
+    C::Annotation: Annotation<C, S>,
     S: Store,
 {
     fn deref_mut(&mut self) -> &mut Self::Target {

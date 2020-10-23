@@ -9,7 +9,7 @@ use core::ops::Deref;
 
 use canonical::Store;
 
-use crate::annotation::Annotated;
+use crate::annotation::{Annotated, Annotation};
 use crate::compound::{Child, Compound};
 
 use const_arrayvec::ArrayVec;
@@ -138,6 +138,7 @@ where
 impl<'a, C, S, const N: usize> PartialBranch<'a, C, S, N>
 where
     C: Compound<S>,
+    C::Annotation: Annotation<C, S>,
     S: Store,
 {
     fn new(root: &'a C) -> Self {
@@ -213,6 +214,7 @@ where
 impl<'a, C, S, const N: usize> Branch<'a, C, S, N>
 where
     C: Compound<S>,
+    C::Annotation: Annotation<C, S>,
     S: Store,
 {
     pub fn depth(&self) -> usize {
@@ -242,6 +244,7 @@ where
 impl<'a, C, S, const N: usize> Deref for Branch<'a, C, S, N>
 where
     C: Compound<S>,
+    C::Annotation: Annotation<C, S>,
     S: Store,
 {
     type Target = C::Leaf;

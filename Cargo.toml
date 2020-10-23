@@ -1,6 +1,6 @@
 [package]
 name = "microkelvin"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Kristoffer Ström <kristoffer@dusk.network>"]
 edition = "2018"
 keywords = ["datastructures"]
