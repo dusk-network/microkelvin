@@ -15,22 +15,31 @@ use crate::compound::{Child, ChildMut, Compound};
 
 use const_arrayvec::ArrayVec;
 
+/// The argument given to a closure to `walk` a `BranchMut`.
 pub enum WalkMut<'a, C, S>
 where
     C: Compound<S>,
     S: Store,
 {
+    /// Walk encountered a leaf
     Leaf(&'a mut C::Leaf),
+    /// Walk encountered a node
     Node(&'a mut Annotated<C, S>),
 }
 
+/// The return value from a closure to `walk` the tree.
+///
+/// Determines how the `BranchMut` is constructed
 pub enum StepMut<'a, C, S>
 where
     C: Compound<S>,
     S: Store,
 {
+    /// The correct leaf was found!
     Found(&'a mut C::Leaf),
+    /// Step to the next child on this level
     Next,
+    /// Traverse the branch deeper
     Into(&'a mut Annotated<C, S>),
 }
 
@@ -43,6 +52,10 @@ where
     Owned(C, PhantomData<S>),
 }
 
+/// Represents a level in the branch.
+///
+/// The offset is pointing at the child of the node stored behind the LevelInner
+/// pointer.
 pub struct LevelMut<'a, C, S>
 where
     C: Compound<S>,
@@ -58,6 +71,7 @@ where
     C::Annotation: Annotation<C, S>,
     S: Store,
 {
+    /// Returns the offset of the branch level
     pub fn offset(&self) -> usize {
         self.offset
     }
@@ -288,14 +302,18 @@ where
     C::Annotation: Annotation<C, S>,
     S: Store,
 {
+    /// Returns the depth of the branch
     pub fn depth(&self) -> usize {
         self.0.depth()
     }
 
+    /// Returns a reference to the levels in the branch
     pub fn levels(&self) -> &[LevelMut<C, S>] {
         &((self.0).0).0[..]
     }
 
+    /// Performs a tree walk, returning either a valid branch or None if the
+    /// walk failed.
     pub fn walk<W: FnMut(WalkMut<C, S>) -> StepMut<C, S>>(
         root: &'a mut C,
         walker: W,
@@ -308,6 +326,14 @@ where
     }
 }
 
+/// Reprents a branch view into a collection.
+///
+/// BranchMut allows you to manipulate the value of the leaf, but disallows
+/// manipulating the branch nodes directly, to avoid breaking any datastructure
+/// invariants.
+///
+/// Branche are always guaranteed to point at a leaf, and can be dereferenced
+/// to the pointed-at leaf.
 pub struct BranchMut<'a, C, S, const N: usize>(PartialBranchMut<'a, C, S, N>)
 where
     C: Compound<S>,

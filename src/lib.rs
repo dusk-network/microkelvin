@@ -4,8 +4,18 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+//! Microkelvin
+//!
+//! A library for dealing with tree-shaped Canonical data. It has three parts:
+//!
+//! `Compound`, a trait for a generic way to implement tree structures
+//! `Annotation`, a trait for annotated subtrees used for searching
+//! `Branch` and `BranchMut`, types for representing branches in tree-formed
+//! data as well as methods of search.
+
 #![no_std]
 #![feature(min_const_generics)]
+#![warn(missing_docs)]
 
 mod annotation;
 mod branch;
@@ -13,6 +23,6 @@ mod branch_mut;
 mod compound;
 
 pub use annotation::{Annotated, Annotation, Associative, Cardinality, Max};
-pub use branch::Branch;
-pub use branch_mut::BranchMut;
+pub use branch::{Branch, Level, Step, Walk};
+pub use branch_mut::{BranchMut, LevelMut, StepMut, WalkMut};
 pub use compound::{Child, ChildMut, Compound, Nth};

@@ -8,24 +8,37 @@ use core::borrow::Borrow;
 use core::marker::PhantomData;
 use core::ops::{Deref, DerefMut};
 
-use canonical::{Canon, Cow, Repr, Store, ValMut};
+use canonical::{Canon, Cow, Repr, Sink, Source, Store, ValMut};
 use canonical_derive::Canon;
 
 use crate::compound::{Child, Compound};
 
+/// The main `Annotation` trait
 pub trait Annotation<C, S>
 where
     C: Compound<S>,
     S: Store,
 {
+    /// The empty annotation.
     fn identity() -> Self;
+
+    /// Creates annotation from a leaf.
     fn from_leaf(leaf: &C::Leaf) -> Self;
+
+    /// Creates annotation from a node.
     fn from_node(node: &C) -> Self;
 }
 
+/// Helper trait for associative cases, automatically implements
+/// `Annotation` for the type implemented for.
 pub trait Associative<L> {
+    /// The empty annotation.
     fn identity() -> Self;
+
+    /// Creates annotation from a leaf.
     fn from_leaf(leaf: &L) -> Self;
+
+    /// Operaion to create an annotation by combining two of them
     fn op(self, b: &Self) -> Self;
 }
 
@@ -58,6 +71,7 @@ where
     }
 }
 
+/// A reference o a value carrying an annotation
 pub struct AnnRef<'a, C, S>
 where
     C: Compound<S>,
@@ -135,11 +149,34 @@ where
     }
 }
 
-#[derive(Clone, Canon, Debug)]
+#[derive(Clone, Debug)]
+/// A wrapper type that keeps the annotation of the Compound referenced cached
 pub struct Annotated<C, S>(Repr<C, S>, C::Annotation)
 where
     C: Compound<S>,
     S: Store;
+
+// Manual implementation to avoid restraining the type to `Canon` in the trait
+// which would be required by the derive macro
+impl<C, S> Canon<S> for Annotated<C, S>
+where
+    C: Compound<S>,
+    C::Annotation: Canon<S>,
+    S: Store,
+{
+    fn write(&self, sink: &mut impl Sink<S>) -> Result<(), S::Error> {
+        self.0.write(sink)?;
+        self.1.write(sink)
+    }
+
+    fn read(source: &mut impl Source<S>) -> Result<Self, S::Error> {
+        Ok(Annotated(Repr::read(source)?, C::Annotation::read(source)?))
+    }
+
+    fn encoded_len(&self) -> usize {
+        self.0.encoded_len() + self.1.encoded_len()
+    }
+}
 
 impl<C, S> Annotated<C, S>
 where
@@ -147,15 +184,18 @@ where
     C::Annotation: Annotation<C, S>,
     S: Store,
 {
+    /// Create a new annotated type
     pub fn new(compound: C) -> Self {
         let a = C::Annotation::from_node(&compound);
         Annotated(Repr::<C, S>::new(compound), a)
     }
 
+    /// Returns a reference to to the annotation stored
     pub fn annotation(&self) -> &C::Annotation {
         &self.1
     }
 
+    /// Returns an annotated reference to the underlying type
     pub fn val(&self) -> Result<AnnRef<C, S>, S::Error> {
         Ok(AnnRef {
             annotation: &self.1,
@@ -164,6 +204,7 @@ where
         })
     }
 
+    /// Returns a Mutable annotated reference to the underlying type
     pub fn val_mut(&mut self) -> Result<AnnRefMut<C, S>, S::Error> {
         Ok(AnnRefMut {
             annotation: &mut self.1,
@@ -175,14 +216,10 @@ where
 
 // implementations
 
+/// Annotation to keep track of the cardinality,
+/// i.e. the amount of elements of a collection
 #[derive(Canon, PartialEq, Debug, Clone)]
 pub struct Cardinality(pub(crate) u64);
-
-impl Cardinality {
-    pub fn new(i: u64) -> Self {
-        Cardinality(i)
-    }
-}
 
 impl<L> Associative<L> for Cardinality {
     fn identity() -> Self {
@@ -199,9 +236,12 @@ impl<L> Associative<L> for Cardinality {
     }
 }
 
+/// Annotation to keep track of the largest element of a collection
 #[derive(Canon, PartialEq, Debug, Clone, Copy)]
 pub enum Max<K> {
+    /// Identity of max, everything else is larger
     NegativeInfinity,
+    /// Actual max value
     Maximum(K),
 }
 
