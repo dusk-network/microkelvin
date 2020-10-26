@@ -332,8 +332,10 @@ where
 /// manipulating the branch nodes directly, to avoid breaking any datastructure
 /// invariants.
 ///
-/// Branche are always guaranteed to point at a leaf, and can be dereferenced
+/// Branches are always guaranteed to point at a leaf, and can be dereferenced
 /// to the pointed-at leaf.
+///
+/// The const generic `N` represents the maximum depth of the branch.
 pub struct BranchMut<'a, C, S, const N: usize>(PartialBranchMut<'a, C, S, N>)
 where
     C: Compound<S>,
