@@ -14,6 +14,10 @@ use crate::compound::{Child, Compound};
 
 use const_arrayvec::ArrayVec;
 
+/// Represents a level in the branch.
+///
+/// The offset is pointing at the child of the node stored behind the LevelInner
+/// pointer.
 pub struct Level<'a, C, S>
 where
     C: Clone,
@@ -40,6 +44,11 @@ impl<'a, C, S> Level<'a, C, S>
 where
     C: Clone,
 {
+    /// Returns the offset of the branch level
+    pub fn offset(&self) -> usize {
+        self.offset
+    }
+
     fn new_owned(node: C) -> Self {
         Level {
             offset: 0,
@@ -52,10 +61,6 @@ where
             offset: 0,
             inner: LevelInner::Borrowed(node),
         }
-    }
-
-    pub fn offset(&self) -> usize {
-        self.offset
     }
 
     fn offset_mut(&mut self) -> &mut usize {
@@ -192,22 +197,31 @@ where
     }
 }
 
+/// The argument given to a closure to `walk` a `Branch`.
 pub enum Walk<'a, C, S>
 where
     C: Compound<S>,
     S: Store,
 {
+    /// Walk encountered a leaf
     Leaf(&'a C::Leaf),
+    /// Walk encountered a node
     Node(&'a Annotated<C, S>),
 }
 
+/// The return value from a closure to `walk` the tree.
+///
+/// Determines how the `Branch` is constructed
 pub enum Step<'a, C, S>
 where
     C: Compound<S>,
     S: Store,
 {
+    /// The correct leaf was found!
     Found(&'a C::Leaf),
+    /// Step to the next child on this level
     Next,
+    /// Traverse the branch deeper
     Into(&'a Annotated<C, S>),
 }
 
@@ -217,14 +231,18 @@ where
     C::Annotation: Annotation<C, S>,
     S: Store,
 {
+    /// Returns the depth of the branch
     pub fn depth(&self) -> usize {
         self.0.depth()
     }
 
+    /// Returns a reference to the levels in the branch
     pub fn levels(&self) -> &[Level<C, S>] {
         &((self.0).0).0[..]
     }
 
+    /// Performs a tree walk, returning either a valid branch or None if the
+    /// walk failed.
     pub fn walk<W: FnMut(Walk<C, S>) -> Step<C, S>>(
         root: &'a C,
         walker: W,
@@ -237,6 +255,12 @@ where
     }
 }
 
+/// Reprents an immutable branch view into a collection.
+///
+/// Branche are always guaranteed to point at a leaf, and can be dereferenced
+/// to the pointed-at leaf.
+///
+/// The const generic `N` represents the maximum depth of the branch.
 pub struct Branch<'a, C, S, const N: usize>(PartialBranch<'a, C, S, N>)
 where
     C: Clone;
