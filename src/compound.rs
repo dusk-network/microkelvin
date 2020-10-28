@@ -5,6 +5,7 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use core::borrow::Borrow;
+use core::marker::PhantomData;
 
 use canonical::{Canon, Store};
 
@@ -42,7 +43,52 @@ where
     type Annotation: Canon<S> + Clone + Sized;
 
     fn child(&self, ofs: usize) -> Child<Self, S>;
+    fn child_iter(&self) -> ChildIterator<Self, S> {
+        self.into()
+    }
     fn child_mut(&mut self, ofs: usize) -> ChildMut<Self, S>;
+}
+
+pub struct ChildIterator<'a, C, S>
+where
+    C: Compound<S>,
+    S: Store,
+{
+    ofs: usize,
+    compound: &'a C,
+    store: PhantomData<S>,
+}
+
+impl<'a, C, S> From<&'a C> for ChildIterator<'a, C, S>
+where
+    C: Compound<S>,
+    S: Store,
+{
+    fn from(c: &C) -> ChildIterator<C, S> {
+        ChildIterator {
+            ofs: 0,
+            compound: c,
+            store: PhantomData,
+        }
+    }
+}
+
+impl<'a, C, S> Iterator for ChildIterator<'a, C, S>
+where
+    C: Compound<S>,
+    S: Store,
+{
+    type Item = Child<'a, C, S>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let c = self.compound.child(self.ofs);
+        self.ofs += 1;
+
+        match c {
+            Child::EndOfNode => None,
+            _ => Some(c),
+        }
+    }
 }
 
 pub trait Nth<'a, S>

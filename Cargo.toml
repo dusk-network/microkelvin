@@ -15,3 +15,7 @@ const-arrayvec = "0.2"
 
 [dev-dependencies]
 canonical_host = "0.4"
+
+[features]
+default = []
+associative = []

@@ -12,7 +12,9 @@ mod branch;
 mod branch_mut;
 mod compound;
 
-pub use annotation::{Annotated, Annotation, Associative, Cardinality, Max};
+#[cfg(feature = "associative")]
+pub use annotation::Associative;
+pub use annotation::{Annotated, Annotation, Cardinality, Max};
 pub use branch::Branch;
 pub use branch_mut::BranchMut;
-pub use compound::{Child, ChildMut, Compound, Nth};
+pub use compound::{Child, ChildIterator, ChildMut, Compound, Nth};

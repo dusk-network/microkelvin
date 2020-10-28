@@ -23,12 +23,14 @@ where
     fn from_node(node: &C) -> Self;
 }
 
+#[cfg(feature = "associative")]
 pub trait Associative<L> {
     fn identity() -> Self;
     fn from_leaf(leaf: &L) -> Self;
     fn op(self, b: &Self) -> Self;
 }
 
+#[cfg(feature = "associative")]
 impl<A, C, S> Annotation<C, S> for A
 where
     A: Associative<C::Leaf>,
@@ -184,6 +186,7 @@ impl Cardinality {
     }
 }
 
+#[cfg(feature = "associative")]
 impl<L> Associative<L> for Cardinality {
     fn identity() -> Self {
         Cardinality(0)
@@ -199,12 +202,32 @@ impl<L> Associative<L> for Cardinality {
     }
 }
 
+#[cfg(not(feature = "associative"))]
+impl<C, S> Annotation<C, S> for Cardinality
+where
+    C: Compound<S>,
+    S: Store,
+{
+    fn identity() -> Self {
+        Cardinality(0)
+    }
+
+    fn from_leaf(_leaf: &C::Leaf) -> Self {
+        Cardinality(1)
+    }
+
+    fn from_node(node: &C) -> Self {
+        Cardinality(node.child_iter().count() as u64)
+    }
+}
+
 #[derive(Canon, PartialEq, Debug, Clone, Copy)]
 pub enum Max<K> {
     NegativeInfinity,
     Maximum(K),
 }
 
+#[cfg(feature = "associative")]
 impl<K, L> Associative<L> for Max<K>
 where
     K: Ord + Clone,
@@ -230,6 +253,39 @@ where
                 }
             }
         }
+    }
+}
+
+#[cfg(not(feature = "associative"))]
+impl<C, S, K> Annotation<C, S> for Max<K>
+where
+    C: Compound<S>,
+    S: Store,
+    K: Ord + Clone,
+    C::Leaf: Borrow<K>,
+    C::Annotation: Borrow<K>,
+{
+    fn identity() -> Self {
+        Max::NegativeInfinity
+    }
+
+    fn from_leaf(leaf: &C::Leaf) -> Self {
+        Max::Maximum(leaf.borrow().clone())
+    }
+
+    fn from_node(node: &C) -> Self {
+        node.child_iter().fold(Max::NegativeInfinity, |m, c| {
+            let k = match c {
+                Child::Leaf(l) => l.borrow().clone(),
+                Child::Node(n) => n.1.borrow().clone(),
+                _ => return m,
+            };
+
+            match &m {
+                Max::Maximum(v) if v >= &k => m,
+                _ => Max::Maximum(k),
+            }
+        })
     }
 }
 
