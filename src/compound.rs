@@ -5,6 +5,7 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use core::borrow::Borrow;
+use core::marker::PhantomData;
 
 use canonical::{Canon, Store};
 
@@ -54,9 +55,54 @@ where
 
     /// Returns a reference to a possible child at specified offset
     fn child(&self, ofs: usize) -> Child<Self, S>;
-
+    /// Returns an iterator over all the available offsets for this compound
+    fn child_iter(&self) -> ChildIterator<Self, S> {
+        self.into()
+    }
     /// Returns a mutable reference to a possible child at specified offset
     fn child_mut(&mut self, ofs: usize) -> ChildMut<Self, S>;
+}
+
+pub struct ChildIterator<'a, C, S>
+where
+    C: Compound<S>,
+    S: Store,
+{
+    ofs: usize,
+    compound: &'a C,
+    store: PhantomData<S>,
+}
+
+impl<'a, C, S> From<&'a C> for ChildIterator<'a, C, S>
+where
+    C: Compound<S>,
+    S: Store,
+{
+    fn from(c: &C) -> ChildIterator<C, S> {
+        ChildIterator {
+            ofs: 0,
+            compound: c,
+            store: PhantomData,
+        }
+    }
+}
+
+impl<'a, C, S> Iterator for ChildIterator<'a, C, S>
+where
+    C: Compound<S>,
+    S: Store,
+{
+    type Item = Child<'a, C, S>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let c = self.compound.child(self.ofs);
+        self.ofs += 1;
+
+        match c {
+            Child::EndOfNode => None,
+            _ => Some(c),
+        }
+    }
 }
 
 /// Find the nth element of any collection satisfying the given annotation
