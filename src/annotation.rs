@@ -243,6 +243,7 @@ impl<L> Associative<L> for Cardinality {
 impl<C, S> Annotation<C, S> for Cardinality
 where
     C: Compound<S>,
+    C::Annotation: Borrow<Cardinality>,
     S: Store,
 {
     fn identity() -> Self {
@@ -254,7 +255,16 @@ where
     }
 
     fn from_node(node: &C) -> Self {
-        Cardinality(node.child_iter().count() as u64)
+        let c = node
+            .child_iter()
+            .map(|c| match c {
+                Child::Leaf(_) => 1,
+                Child::Node(n) => n.1.borrow().0,
+                Child::EndOfNode => 0,
+            })
+            .sum();
+
+        Cardinality(c)
     }
 }
 
