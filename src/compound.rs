@@ -13,23 +13,31 @@ use crate::annotation::{Annotated, Annotation, Cardinality};
 use crate::branch::{Branch, Step, Walk};
 use crate::branch_mut::{BranchMut, StepMut, WalkMut};
 
+/// The response of the `child` method on a `Compound` node.
 pub enum Child<'a, C, S>
 where
     C: Compound<S>,
     S: Store,
 {
+    /// Child is a leaf
     Leaf(&'a C::Leaf),
+    /// Child is an annotated subtree node
     Node(&'a Annotated<C, S>),
+    /// No more children
     EndOfNode,
 }
 
+/// The response of the `child_mut` method on a `Compound` node.
 pub enum ChildMut<'a, C, S>
 where
     C: Compound<S>,
     S: Store,
 {
+    /// Child is a leaf
     Leaf(&'a mut C::Leaf),
+    /// Child is an annotated node
     Node(&'a mut Annotated<C, S>),
+    /// No more children
     EndOfNode,
 }
 
@@ -39,13 +47,19 @@ where
     Self: Canon<S>,
     S: Store,
 {
+    /// The leaf type of the collection
     type Leaf;
-    type Annotation: Canon<S> + Clone + Sized;
 
+    /// The annotation type of the connection
+    type Annotation;
+
+    /// Returns a reference to a possible child at specified offset
     fn child(&self, ofs: usize) -> Child<Self, S>;
+    /// Returns an iterator over all the available offsets for this compound
     fn child_iter(&self) -> ChildIterator<Self, S> {
         self.into()
     }
+    /// Returns a mutable reference to a possible child at specified offset
     fn child_mut(&mut self, ofs: usize) -> ChildMut<Self, S>;
 }
 
@@ -91,17 +105,21 @@ where
     }
 }
 
+/// Find the nth element of any collection satisfying the given annotation
+/// constraints
 pub trait Nth<'a, S>
 where
     Self: Compound<S> + Sized,
     Self::Annotation: Annotation<Self, S>,
     S: Store,
 {
+    /// Construct a `Branch` pointing to the `nth` element, if any
     fn nth<const N: usize>(
         &'a self,
         n: u64,
     ) -> Result<Option<Branch<'a, Self, S, N>>, S::Error>;
 
+    /// Construct a `BranchMut` pointing to the `nth` element, if any
     fn nth_mut<const N: usize>(
         &'a mut self,
         n: u64,
