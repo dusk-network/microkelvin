@@ -223,6 +223,12 @@ where
 #[derive(Canon, PartialEq, Debug, Clone)]
 pub struct Cardinality(pub(crate) u64);
 
+impl Into<u64> for &Cardinality {
+    fn into(self) -> u64 {
+        self.0
+    }
+}
+
 #[cfg(feature = "associative")]
 impl<L> Associative<L> for Cardinality {
     fn identity() -> Self {
