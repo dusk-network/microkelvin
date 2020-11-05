@@ -29,50 +29,6 @@ where
     fn from_node(node: &C) -> Self;
 }
 
-/// Helper trait for associative cases, automatically implements
-/// `Annotation` for the type implemented for.
-#[cfg(feature = "associative")]
-pub trait Associative<L> {
-    /// The empty annotation.
-    fn identity() -> Self;
-
-    /// Creates annotation from a leaf.
-    fn from_leaf(leaf: &L) -> Self;
-
-    /// Operaion to create an annotation by combining two of them
-    fn op(self, b: &Self) -> Self;
-}
-
-#[cfg(feature = "associative")]
-impl<A, C, S> Annotation<C, S> for A
-where
-    A: Associative<C::Leaf>,
-    C: Compound<S, Annotation = A>,
-    S: Store,
-{
-    fn identity() -> Self {
-        A::identity()
-    }
-
-    fn from_leaf(leaf: &C::Leaf) -> Self {
-        A::from_leaf(leaf)
-    }
-
-    fn from_node(node: &C) -> Self {
-        let mut annotation = Self::identity();
-        for i in 0.. {
-            match node.child(i) {
-                Child::Leaf(l) => {
-                    annotation = annotation.op(&Self::from_leaf(l))
-                }
-                Child::Node(n) => annotation = annotation.op(n.annotation()),
-                Child::EndOfNode => return annotation,
-            };
-        }
-        unreachable!()
-    }
-}
-
 /// A reference o a value carrying an annotation
 pub struct AnnRef<'a, C, S>
 where
@@ -229,23 +185,6 @@ impl Into<u64> for &Cardinality {
     }
 }
 
-#[cfg(feature = "associative")]
-impl<L> Associative<L> for Cardinality {
-    fn identity() -> Self {
-        Cardinality(0)
-    }
-
-    fn from_leaf(_leaf: &L) -> Self {
-        Cardinality(1)
-    }
-
-    fn op(mut self, b: &Self) -> Self {
-        self.0 += b.0;
-        self
-    }
-}
-
-#[cfg(not(feature = "associative"))]
 impl<C, S> Annotation<C, S> for Cardinality
 where
     C: Compound<S>,
@@ -283,36 +222,6 @@ pub enum Max<K> {
     Maximum(K),
 }
 
-#[cfg(feature = "associative")]
-impl<K, L> Associative<L> for Max<K>
-where
-    K: Ord + Clone,
-    L: Borrow<K>,
-{
-    fn identity() -> Self {
-        Max::NegativeInfinity
-    }
-
-    fn from_leaf(leaf: &L) -> Self {
-        Max::Maximum(leaf.borrow().clone())
-    }
-
-    fn op(self, b: &Self) -> Self {
-        match (self, b) {
-            (a @ Max::Maximum(_), Max::NegativeInfinity) => a,
-            (Max::NegativeInfinity, b) => b.clone(),
-            (Max::Maximum(ref a), Max::Maximum(b)) => {
-                if a > b {
-                    Max::Maximum(a.clone())
-                } else {
-                    Max::Maximum(b.clone())
-                }
-            }
-        }
-    }
-}
-
-#[cfg(not(feature = "associative"))]
 impl<C, S, K> Annotation<C, S> for Max<K>
 where
     C: Compound<S>,

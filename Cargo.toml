@@ -18,4 +18,3 @@ canonical_host = "0.4"
 
 [features]
 default = []
-associative = []
