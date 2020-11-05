@@ -5,6 +5,7 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use core::marker::PhantomData;
+#[cfg(feature = "host")]
 use core::mem;
 use core::ops::{Deref, DerefMut};
 
@@ -43,6 +44,7 @@ where
     Into(&'a mut Annotated<C, S>),
 }
 
+#[allow(dead_code)]
 enum LevelInnerMut<'a, C, S>
 where
     C: Compound<S>,
@@ -76,6 +78,7 @@ where
         self.offset
     }
 
+    #[allow(dead_code)]
     fn new_owned(node: C) -> Self {
         LevelMut {
             offset: 0,
@@ -83,6 +86,7 @@ where
         }
     }
 
+    #[allow(dead_code)]
     fn new_borrowed(node: &'a mut C) -> Self {
         LevelMut {
             offset: 0,
@@ -102,6 +106,7 @@ where
         &self.inner
     }
 
+    #[allow(dead_code)]
     fn offset_mut(&mut self) -> &mut usize {
         &mut self.offset
     }
@@ -141,6 +146,7 @@ where
     C::Annotation: Annotation<C, S>,
     S: Store,
 {
+    #[allow(dead_code)]
     pub fn new(first: LevelMut<'a, C, S>) -> Self {
         let mut levels: ArrayVec<LevelMut<'a, C, S>, N> = ArrayVec::new();
         levels.push(first);
@@ -159,6 +165,7 @@ where
         self.0.last_mut().expect("always > 0 len")
     }
 
+    #[allow(dead_code)]
     fn advance(&mut self) {
         *self.top_mut().offset_mut() += 1
     }
@@ -178,6 +185,7 @@ where
         }
     }
 
+    #[allow(dead_code)]
     pub fn push(&mut self, node: C) {
         self.0.push(LevelMut::new_owned(node))
     }
@@ -211,6 +219,7 @@ where
     C::Annotation: Annotation<C, S>,
     S: Store,
 {
+    #[allow(dead_code)]
     fn new(root: &'a mut C) -> Self {
         let levels = LevelsMut::new(LevelMut::new_borrowed(root));
         PartialBranchMut(levels)
@@ -232,10 +241,12 @@ where
         self.0.pop()
     }
 
+    #[allow(dead_code)]
     fn advance(&mut self) {
         self.0.advance()
     }
 
+    #[cfg(feature = "host")]
     fn walk<W>(&mut self, mut walker: W) -> Result<Option<()>, S::Error>
     where
         W: FnMut(WalkMut<C, S>) -> StepMut<C, S>,
@@ -314,6 +325,7 @@ where
 
     /// Performs a tree walk, returning either a valid branch or None if the
     /// walk failed.
+    #[cfg(feature = "host")]
     pub fn walk<W: FnMut(WalkMut<C, S>) -> StepMut<C, S>>(
         root: &'a mut C,
         walker: W,

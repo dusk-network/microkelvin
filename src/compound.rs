@@ -4,14 +4,21 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+#[cfg(feature = "host")]
 use core::borrow::Borrow;
 use core::marker::PhantomData;
 
 use canonical::{Canon, Store};
 
-use crate::annotation::{Annotated, Annotation, Cardinality};
-use crate::branch::{Branch, Step, Walk};
-use crate::branch_mut::{BranchMut, StepMut, WalkMut};
+#[cfg(feature = "host")]
+use crate::annotation::Cardinality;
+use crate::annotation::{Annotated, Annotation};
+use crate::branch::Branch;
+#[cfg(feature = "host")]
+use crate::branch::{Step, Walk};
+use crate::branch_mut::BranchMut;
+#[cfg(feature = "host")]
+use crate::branch_mut::{StepMut, WalkMut};
 
 /// The response of the `child` method on a `Compound` node.
 pub enum Child<'a, C, S>
@@ -126,6 +133,7 @@ where
     ) -> Result<Option<BranchMut<'a, Self, S, N>>, S::Error>;
 }
 
+#[cfg(feature = "host")]
 impl<'a, C, S> Nth<'a, S> for C
 where
     C: Compound<S>,

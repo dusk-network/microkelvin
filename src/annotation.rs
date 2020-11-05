@@ -6,9 +6,13 @@
 
 use core::borrow::Borrow;
 use core::marker::PhantomData;
-use core::ops::{Deref, DerefMut};
+use core::ops::Deref;
+#[cfg(feature = "host")]
+use core::ops::DerefMut;
 
-use canonical::{Canon, Cow, Repr, Sink, Source, Store, ValMut};
+#[cfg(feature = "host")]
+use canonical::ValMut;
+use canonical::{Canon, Cow, Repr, Sink, Source, Store};
 use canonical_derive::Canon;
 
 use crate::compound::{Child, Compound};
@@ -30,6 +34,7 @@ where
 }
 
 /// A reference o a value carrying an annotation
+#[allow(dead_code)]
 pub struct AnnRef<'a, C, S>
 where
     C: Compound<S>,
@@ -45,6 +50,7 @@ where
     C: Compound<S>,
     S: Store,
 {
+    #[allow(dead_code)]
     pub fn annotation(&self) -> &C::Annotation {
         self.annotation
     }
@@ -61,6 +67,7 @@ where
     }
 }
 
+#[allow(dead_code)]
 pub struct AnnRefMut<'a, C, S>
 where
     C: Compound<S>,
@@ -68,10 +75,12 @@ where
     S: Store,
 {
     annotation: &'a mut C::Annotation,
+    #[cfg(feature = "host")]
     compound: ValMut<'a, C>,
     _marker: PhantomData<S>,
 }
 
+#[cfg(feature = "host")]
 impl<'a, C, S> Deref for AnnRefMut<'a, C, S>
 where
     C: Compound<S>,
@@ -85,6 +94,7 @@ where
     }
 }
 
+#[cfg(feature = "host")]
 impl<'a, C, S> DerefMut for AnnRefMut<'a, C, S>
 where
     C: Compound<S>,
@@ -96,6 +106,7 @@ where
     }
 }
 
+#[cfg(feature = "host")]
 impl<'a, C, S> Drop for AnnRefMut<'a, C, S>
 where
     C: Compound<S>,
@@ -154,6 +165,7 @@ where
     }
 
     /// Returns an annotated reference to the underlying type
+    #[cfg(feature = "host")]
     pub fn val(&self) -> Result<AnnRef<C, S>, S::Error> {
         Ok(AnnRef {
             annotation: &self.1,
@@ -163,6 +175,7 @@ where
     }
 
     /// Returns a Mutable annotated reference to the underlying type
+    #[cfg(feature = "host")]
     pub fn val_mut(&mut self) -> Result<AnnRefMut<C, S>, S::Error> {
         Ok(AnnRefMut {
             annotation: &mut self.1,
@@ -255,6 +268,7 @@ where
 }
 
 #[cfg(test)]
+#[cfg(feature = "host")]
 mod tests {
     use super::*;
 
@@ -263,7 +277,8 @@ mod tests {
     use canonical_host::MemStore;
     use const_arrayvec::ArrayVec;
 
-    use crate::compound::{Child, ChildMut, Nth};
+    use crate::compound::Nth;
+    use crate::compound::{Child, ChildMut};
 
     #[derive(Clone)]
     struct CanonArrayVec<T, const N: usize>(ArrayVec<T, N>);

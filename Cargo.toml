@@ -9,7 +9,7 @@ license = "MPL-2.0"
 readme = "README.md"
 
 [dependencies]
-canonical = { version = "0.4", features = ["host"] }
+canonical = "0.4"
 canonical_derive = "0.4"
 const-arrayvec = "0.2"
 
@@ -18,3 +18,4 @@ canonical_host = "0.4"
 
 [features]
 default = []
+host = ["canonical/host"]

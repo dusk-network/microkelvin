@@ -49,6 +49,7 @@ where
         self.offset
     }
 
+    #[allow(dead_code)]
     fn new_owned(node: C) -> Self {
         Level {
             offset: 0,
@@ -56,6 +57,7 @@ where
         }
     }
 
+    #[allow(dead_code)]
     fn new_borrowed(node: &'a C) -> Self {
         Level {
             offset: 0,
@@ -63,10 +65,12 @@ where
         }
     }
 
+    #[allow(dead_code)]
     fn offset_mut(&mut self) -> &mut usize {
         &mut self.offset
     }
 
+    #[allow(dead_code)]
     fn inner(&self) -> &LevelInner<'a, C, S> {
         &self.inner
     }
@@ -94,6 +98,7 @@ where
     C: Compound<S>,
     S: Store,
 {
+    #[allow(dead_code)]
     pub fn new(node: &'a C) -> Self {
         let mut levels: ArrayVec<Level<'a, C, S>, N> = ArrayVec::new();
         levels.push(Level::new_borrowed(node));
@@ -108,10 +113,12 @@ where
         self.0.last().expect("always > 0 len")
     }
 
+    #[allow(dead_code)]
     pub fn top_mut(&mut self) -> &mut Level<'a, C, S> {
         self.0.last_mut().expect("always > 0 len")
     }
 
+    #[allow(dead_code)]
     pub fn pop(&mut self) -> bool {
         if self.0.len() > 1 {
             self.0.pop();
@@ -121,6 +128,7 @@ where
         }
     }
 
+    #[allow(dead_code)]
     pub fn push(&mut self, node: C) {
         self.0.push(Level::new_owned(node))
     }
@@ -146,6 +154,7 @@ where
     C::Annotation: Annotation<C, S>,
     S: Store,
 {
+    #[allow(dead_code)]
     fn new(root: &'a C) -> Self {
         let levels = Levels::new(root);
         PartialBranch(levels)
@@ -159,6 +168,7 @@ where
         self.0.leaf()
     }
 
+    #[cfg(feature = "host")]
     fn walk<W>(&mut self, mut walker: W) -> Result<Option<()>, S::Error>
     where
         W: FnMut(Walk<C, S>) -> Step<C, S>,
@@ -243,6 +253,7 @@ where
 
     /// Performs a tree walk, returning either a valid branch or None if the
     /// walk failed.
+    #[cfg(feature = "host")]
     pub fn walk<W: FnMut(Walk<C, S>) -> Step<C, S>>(
         root: &'a C,
         walker: W,
