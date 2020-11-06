@@ -22,8 +22,6 @@ mod branch;
 mod branch_mut;
 mod compound;
 
-#[cfg(feature = "associative")]
-pub use annotation::Associative;
 pub use annotation::{Annotated, Annotation, Cardinality, Max};
 pub use branch::{Branch, Level, Step, Walk};
 pub use branch_mut::{BranchMut, LevelMut, StepMut, WalkMut};

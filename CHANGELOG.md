@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.2] - 06-11-20
+### Changed
+- Canonical update to support hosted-only calls
+- Unused associative feature removed
+
 ## [0.5.1] - 30-10-20
 ### Added
 - Cardinality reference implements Into<u64>
