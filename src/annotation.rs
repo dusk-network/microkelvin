@@ -226,7 +226,7 @@ impl<C, S, K> Annotation<C, S> for Max<K>
 where
     C: Compound<S>,
     S: Store,
-    K: Ord + Clone,
+    K: PartialOrd + Clone,
     C::Leaf: Borrow<K>,
     C::Annotation: Borrow<K>,
 {
