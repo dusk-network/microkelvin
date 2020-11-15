@@ -5,6 +5,7 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use core::borrow::Borrow;
+use core::cmp::Ordering;
 use core::marker::PhantomData;
 use core::ops::{Deref, DerefMut};
 
@@ -220,6 +221,47 @@ pub enum Max<K> {
     NegativeInfinity,
     /// Actual max value
     Maximum(K),
+}
+
+impl<K> PartialEq<K> for Max<K>
+where
+    K: PartialOrd,
+{
+    fn eq(&self, rhs: &K) -> bool {
+        match (self, rhs) {
+            (Max::Maximum(k), rhs) => k == rhs,
+            _ => false,
+        }
+    }
+}
+
+impl<K> PartialOrd<K> for Max<K>
+where
+    K: PartialOrd,
+{
+    fn partial_cmp(&self, other: &K) -> Option<Ordering> {
+        match self {
+            Max::NegativeInfinity => Some(Ordering::Less),
+            Max::Maximum(m) => m.partial_cmp(other),
+        }
+    }
+}
+
+impl<K> PartialOrd for Max<K>
+where
+    K: PartialOrd,
+{
+    fn partial_cmp(&self, other: &Max<K>) -> Option<Ordering> {
+        // Prevent ordering inconsistency for cmp between two negative infinity
+        if self == other {
+            return Some(Ordering::Equal);
+        }
+
+        match other {
+            Max::NegativeInfinity => Some(Ordering::Greater),
+            Max::Maximum(other) => self.partial_cmp(other),
+        }
+    }
 }
 
 impl<C, S, K> Annotation<C, S> for Max<K>
