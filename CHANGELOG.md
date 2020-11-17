@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.3] - 16-11-20
+### Changed
+- Use PartialOrd with K in Max<K>
+
 ## [0.5.2] - 06-11-20
 ### Changed
 - Canonical update to support hosted-only calls
