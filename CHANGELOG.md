@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.5] - 03-12-20
+### Changed
+- `Max<K>` should implement `PartialOrd<K>`
+
 ## [0.5.4] - 03-12-20
 ### Changed
 - Annotation impl of Max<K> should require `Borrow<Max<K>>`
