@@ -255,6 +255,30 @@ where
     }
 }
 
+impl<K> PartialEq<K> for Max<K>
+where
+    K: PartialEq,
+{
+    fn eq(&self, k: &K) -> bool {
+        match self {
+            Max::NegativeInfinity => false,
+            Max::Maximum(k_p) => k_p == k,
+        }
+    }
+}
+
+impl<K> PartialOrd<K> for Max<K>
+where
+    K: PartialOrd + Eq,
+{
+    fn partial_cmp(&self, k: &K) -> Option<Ordering> {
+        match self {
+            Max::NegativeInfinity => Some(Ordering::Less),
+            Max::Maximum(k_p) => k_p.partial_cmp(k),
+        }
+    }
+}
+
 impl<C, S, K> Annotation<C, S> for Max<K>
 where
     C: Compound<S>,
@@ -442,8 +466,10 @@ mod tests {
 
     #[test]
     fn ordering() {
+        const N_INF: Max<i32> = Max::NegativeInfinity;
+
         assert!(Max::Maximum(0) > Max::Maximum(-1));
         assert!(Max::Maximum(-1234) > Max::NegativeInfinity);
-        assert!(Max::NegativeInfinity < Max::Maximum(-1234));
+        assert!(N_INF < Max::Maximum(-1234));
     }
 }
