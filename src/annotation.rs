@@ -14,6 +14,8 @@ use canonical_derive::Canon;
 
 use crate::compound::{Child, Compound};
 
+use core::cmp;
+
 /// The main `Annotation` trait
 pub trait Annotation<C, S>
 where
@@ -215,7 +217,7 @@ where
 }
 
 /// Annotation to keep track of the largest element of a collection
-#[derive(Canon, PartialEq, Debug, Clone, Copy)]
+#[derive(Canon, PartialEq, Eq, Debug, Clone, Copy)]
 pub enum Max<K> {
     /// Identity of max, everything else is larger
     NegativeInfinity,
@@ -223,43 +225,32 @@ pub enum Max<K> {
     Maximum(K),
 }
 
-impl<K> PartialEq<K> for Max<K>
-where
-    K: PartialOrd,
-{
-    fn eq(&self, rhs: &K) -> bool {
-        match (self, rhs) {
-            (Max::Maximum(k), rhs) => k == rhs,
-            _ => false,
-        }
-    }
-}
-
-impl<K> PartialOrd<K> for Max<K>
-where
-    K: PartialOrd,
-{
-    fn partial_cmp(&self, other: &K) -> Option<Ordering> {
-        match self {
-            Max::NegativeInfinity => Some(Ordering::Less),
-            Max::Maximum(m) => m.partial_cmp(other),
-        }
-    }
-}
-
 impl<K> PartialOrd for Max<K>
 where
-    K: PartialOrd,
+    K: PartialOrd + Eq,
 {
     fn partial_cmp(&self, other: &Max<K>) -> Option<Ordering> {
-        // Prevent ordering inconsistency for cmp between two negative infinity
-        if self == other {
-            return Some(Ordering::Equal);
+        match (self, other) {
+            (Max::NegativeInfinity, Max::NegativeInfinity) => {
+                Some(Ordering::Equal)
+            }
+            (Max::NegativeInfinity, _) => Some(Ordering::Less),
+            (_, Max::NegativeInfinity) => Some(Ordering::Greater),
+            (Max::Maximum(a), Max::Maximum(b)) => a.partial_cmp(b),
         }
+    }
+}
 
-        match other {
-            Max::NegativeInfinity => Some(Ordering::Greater),
-            Max::Maximum(other) => self.partial_cmp(other),
+impl<K> Ord for Max<K>
+where
+    K: Ord + Eq,
+{
+    fn cmp(&self, other: &Max<K>) -> Ordering {
+        match (self, other) {
+            (Max::NegativeInfinity, Max::NegativeInfinity) => Ordering::Equal,
+            (Max::NegativeInfinity, _) => Ordering::Less,
+            (_, Max::NegativeInfinity) => Ordering::Greater,
+            (Max::Maximum(a), Max::Maximum(b)) => a.cmp(b),
         }
     }
 }
@@ -268,9 +259,9 @@ impl<C, S, K> Annotation<C, S> for Max<K>
 where
     C: Compound<S>,
     S: Store,
-    K: PartialOrd + Clone,
+    K: Ord + Clone,
     C::Leaf: Borrow<K>,
-    C::Annotation: Borrow<K>,
+    C::Annotation: Borrow<Max<K>>,
 {
     fn identity() -> Self {
         Max::NegativeInfinity
@@ -281,18 +272,12 @@ where
     }
 
     fn from_node(node: &C) -> Self {
-        node.child_iter().fold(Max::NegativeInfinity, |m, c| {
-            let k = match c {
-                Child::Leaf(l) => l.borrow().clone(),
-                Child::Node(n) => n.1.borrow().clone(),
-                _ => return m,
-            };
-
-            match &m {
-                Max::Maximum(v) if v >= &k => m,
-                _ => Max::Maximum(k),
-            }
-        })
+        node.child_iter()
+            .fold(Max::NegativeInfinity, |m, c| match c {
+                Child::Leaf(l) => cmp::max(m, Max::Maximum(l.borrow().clone())),
+                Child::Node(n) => cmp::max(m, n.1.borrow().clone()),
+                _ => m,
+            })
     }
 }
 
@@ -453,5 +438,12 @@ mod tests {
         }
 
         Ok(())
+    }
+
+    #[test]
+    fn ordering() {
+        assert!(Max::Maximum(0) > Max::Maximum(-1));
+        assert!(Max::Maximum(-1234) > Max::NegativeInfinity);
+        assert!(Max::NegativeInfinity < Max::Maximum(-1234));
     }
 }
