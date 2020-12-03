@@ -14,6 +14,8 @@ use canonical_derive::Canon;
 
 use crate::compound::{Child, Compound};
 
+use core::cmp;
+
 /// The main `Annotation` trait
 pub trait Annotation<C, S>
 where
@@ -268,9 +270,9 @@ impl<C, S, K> Annotation<C, S> for Max<K>
 where
     C: Compound<S>,
     S: Store,
-    K: PartialOrd + Clone,
+    K: Default + Ord + Clone,
     C::Leaf: Borrow<K>,
-    C::Annotation: Borrow<K>,
+    C::Annotation: Borrow<Max<K>>,
 {
     fn identity() -> Self {
         Max::NegativeInfinity
@@ -284,7 +286,20 @@ where
         node.child_iter().fold(Max::NegativeInfinity, |m, c| {
             let k = match c {
                 Child::Leaf(l) => l.borrow().clone(),
-                Child::Node(n) => n.1.borrow().clone(),
+                Child::Node(n) => {
+                    let max: &Max<K> = n.1.borrow();
+
+                    match (&m, max) {
+                        (Max::NegativeInfinity, Max::NegativeInfinity) => {
+                            K::default()
+                        }
+                        (Max::NegativeInfinity, Max::Maximum(k)) => k.clone(),
+                        (Max::Maximum(k), Max::NegativeInfinity) => k.clone(),
+                        (Max::Maximum(k_p), Max::Maximum(k)) => {
+                            cmp::max(k_p, k).clone()
+                        }
+                    }
+                }
                 _ => return m,
             };
 
