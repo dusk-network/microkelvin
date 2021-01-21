@@ -13,6 +13,7 @@
 //! `Branch` and `BranchMut`, types for representing branches in tree-formed
 //! data as well as methods of search.
 
+#![no_std]
 #![warn(missing_docs)]
 
 mod annotation;
