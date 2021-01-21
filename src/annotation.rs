@@ -305,6 +305,25 @@ where
     }
 }
 
+impl<C, S> Annotation<C, S> for ()
+where
+    C: Compound<S>,
+    C::Annotation: Borrow<Cardinality>,
+    S: Store,
+{
+    fn identity() -> Self {
+        ()
+    }
+
+    fn from_leaf(_leaf: &C::Leaf) -> Self {
+        ()
+    }
+
+    fn from_node(_node: &C) -> Self {
+        ()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
