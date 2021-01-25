@@ -7,12 +7,12 @@
 use core::marker::PhantomData;
 use core::ops::Deref;
 
+use alloc::vec::Vec;
+
 use canonical::Store;
 
 use crate::annotation::{Annotated, Annotation};
 use crate::compound::{Child, Compound};
-
-use const_arrayvec::ArrayVec;
 
 /// Represents a level in the branch.
 ///
@@ -81,21 +81,21 @@ where
     Owned(C, PhantomData<S>),
 }
 
-pub struct PartialBranch<'a, C, S, const N: usize>(Levels<'a, C, S, N>)
+pub struct PartialBranch<'a, C, S>(Levels<'a, C, S>)
 where
     C: Clone;
 
-pub struct Levels<'a, C, S, const N: usize>(ArrayVec<Level<'a, C, S>, N>)
+pub struct Levels<'a, C, S>(Vec<Level<'a, C, S>>)
 where
     C: Clone;
 
-impl<'a, C, S, const N: usize> Levels<'a, C, S, N>
+impl<'a, C, S> Levels<'a, C, S>
 where
     C: Compound<S>,
     S: Store,
 {
     pub fn new(node: &'a C) -> Self {
-        let mut levels: ArrayVec<Level<'a, C, S>, N> = ArrayVec::new();
+        let mut levels: Vec<Level<'a, C, S>> = Vec::new();
         levels.push(Level::new_borrowed(node));
         Levels(levels)
     }
@@ -140,7 +140,7 @@ where
     }
 }
 
-impl<'a, C, S, const N: usize> PartialBranch<'a, C, S, N>
+impl<'a, C, S> PartialBranch<'a, C, S>
 where
     C: Compound<S>,
     C::Annotation: Annotation<C, S>,
@@ -225,7 +225,7 @@ where
     Into(&'a Annotated<C, S>),
 }
 
-impl<'a, C, S, const N: usize> Branch<'a, C, S, N>
+impl<'a, C, S> Branch<'a, C, S>
 where
     C: Compound<S>,
     C::Annotation: Annotation<C, S>,
@@ -261,11 +261,11 @@ where
 /// to the pointed-at leaf.
 ///
 /// The const generic `N` represents the maximum depth of the branch.
-pub struct Branch<'a, C, S, const N: usize>(PartialBranch<'a, C, S, N>)
+pub struct Branch<'a, C, S>(PartialBranch<'a, C, S>)
 where
     C: Clone;
 
-impl<'a, C, S, const N: usize> Deref for Branch<'a, C, S, N>
+impl<'a, C, S> Deref for Branch<'a, C, S>
 where
     C: Compound<S>,
     C::Annotation: Annotation<C, S>,

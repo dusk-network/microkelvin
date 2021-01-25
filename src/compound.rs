@@ -114,16 +114,13 @@ where
     S: Store,
 {
     /// Construct a `Branch` pointing to the `nth` element, if any
-    fn nth<const N: usize>(
-        &'a self,
-        n: u64,
-    ) -> Result<Option<Branch<'a, Self, S, N>>, S::Error>;
+    fn nth(&'a self, n: u64) -> Result<Option<Branch<'a, Self, S>>, S::Error>;
 
     /// Construct a `BranchMut` pointing to the `nth` element, if any
-    fn nth_mut<const N: usize>(
+    fn nth_mut(
         &'a mut self,
         n: u64,
-    ) -> Result<Option<BranchMut<'a, Self, S, N>>, S::Error>;
+    ) -> Result<Option<BranchMut<'a, Self, S>>, S::Error>;
 }
 
 impl<'a, C, S> Nth<'a, S> for C
@@ -132,10 +129,10 @@ where
     C::Annotation: Annotation<C, S> + Borrow<Cardinality>,
     S: Store,
 {
-    fn nth<const N: usize>(
+    fn nth(
         &'a self,
         mut index: u64,
-    ) -> Result<Option<Branch<'a, Self, S, N>>, S::Error> {
+    ) -> Result<Option<Branch<'a, Self, S>>, S::Error> {
         Branch::walk(self, |f| match f {
             Walk::Leaf(l) => {
                 if index == 0 {
@@ -157,10 +154,10 @@ where
         })
     }
 
-    fn nth_mut<const N: usize>(
+    fn nth_mut(
         &'a mut self,
         mut index: u64,
-    ) -> Result<Option<BranchMut<'a, Self, S, N>>, S::Error> {
+    ) -> Result<Option<BranchMut<'a, Self, S>>, S::Error> {
         BranchMut::walk(self, |f| match f {
             WalkMut::Leaf(l) => {
                 if index == 0 {

@@ -1,6 +1,6 @@
 [package]
 name = "microkelvin"
-version = "0.5.8"
+version = "0.6.0"
 authors = ["Kristoffer Ström <kristoffer@dusk.network>"]
 edition = "2018"
 keywords = ["datastructures"]
@@ -11,7 +11,6 @@ readme = "README.md"
 [dependencies]
 canonical = "0.5"
 canonical_derive = "0.5"
-const-arrayvec = "0.2"
 
 [dev-dependencies]
 canonical_host = "0.5"

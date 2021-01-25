@@ -328,80 +328,38 @@ where
 mod tests {
     use super::*;
 
+    use alloc::vec::Vec;
     use canonical::Store;
-    use canonical::{Sink, Source};
     use canonical_host::MemStore;
-    use const_arrayvec::ArrayVec;
 
     use crate::compound::{Child, ChildMut, Nth};
 
-    #[derive(Clone)]
-    struct CanonArrayVec<T, const N: usize>(ArrayVec<T, N>);
-
-    impl<T, const N: usize> CanonArrayVec<T, N> {
-        pub fn new() -> Self {
-            CanonArrayVec(ArrayVec::new())
-        }
-    }
-
-    impl<S: Store, T: Canon<S>, const N: usize> Canon<S> for CanonArrayVec<T, N> {
-        fn write(&self, sink: &mut impl Sink<S>) -> Result<(), S::Error> {
-            let len = self.0.len() as u64;
-            len.write(sink)?;
-            for t in self.0.iter() {
-                t.write(sink)?;
-            }
-            Ok(())
-        }
-
-        fn read(source: &mut impl Source<S>) -> Result<Self, S::Error> {
-            let mut vec: ArrayVec<T, N> = ArrayVec::new();
-            let len = u64::read(source)?;
-            for _ in 0..len {
-                vec.push(T::read(source)?);
-            }
-            Ok(CanonArrayVec(vec))
-        }
-
-        fn encoded_len(&self) -> usize {
-            // length of length
-            let mut len = Canon::<S>::encoded_len(&0u64);
-            for t in self.0.iter() {
-                len += t.encoded_len()
-            }
-            len
-        }
-    }
-
     #[derive(Clone, Canon)]
-    struct Recepticle<T, S, const N: usize>(
-        CanonArrayVec<T, N>,
-        PhantomData<S>,
-    );
+    struct Recepticle<T, S>(Vec<T>, PhantomData<S>);
 
-    impl<T, S, const N: usize> Recepticle<T, S, N>
+    impl<T, S> Recepticle<T, S>
     where
         T: Canon<S>,
         S: Store,
     {
         fn new() -> Self {
-            Recepticle(CanonArrayVec::new(), PhantomData)
+            Recepticle(Vec::new(), PhantomData)
         }
 
         fn push(&mut self, t: T) {
-            (self.0).0.push(t)
+            self.0.push(t)
         }
 
         fn get(&self, i: usize) -> Option<&T> {
-            (self.0).0.get(i)
+            self.0.get(i)
         }
 
         fn get_mut(&mut self, i: usize) -> Option<&mut T> {
-            (self.0).0.get_mut(i)
+            self.0.get_mut(i)
         }
     }
 
-    impl<T, S, const N: usize> Compound<S> for Recepticle<T, S, N>
+    impl<T, S> Compound<S> for Recepticle<T, S>
     where
         T: Canon<S>,
         S: Store,
@@ -426,7 +384,7 @@ mod tests {
 
     #[test]
     fn annotated() -> Result<(), <MemStore as Store>::Error> {
-        let mut hello: Annotated<Recepticle<u64, MemStore, 4>, MemStore> =
+        let mut hello: Annotated<Recepticle<u64, MemStore>, MemStore> =
             Annotated::new(Recepticle::new());
 
         assert_eq!(hello.annotation(), &Cardinality(0));
@@ -447,7 +405,7 @@ mod tests {
         const N: usize = 16;
         let n = N as u64;
 
-        let mut hello: Annotated<Recepticle<u64, MemStore, N>, MemStore> =
+        let mut hello: Annotated<Recepticle<u64, MemStore>, MemStore> =
             Annotated::new(Recepticle::new());
 
         for i in 0..n {
@@ -455,7 +413,7 @@ mod tests {
         }
 
         for i in 0..n {
-            assert_eq!(*hello.val()?.nth::<N>(i)?.unwrap(), i)
+            assert_eq!(*hello.val()?.nth(i)?.unwrap(), i)
         }
 
         Ok(())
@@ -466,18 +424,18 @@ mod tests {
         const N: usize = 16;
         let n = N as u64;
 
-        let mut hello: Recepticle<_, MemStore, N> = Recepticle::new();
+        let mut hello: Recepticle<_, MemStore> = Recepticle::new();
 
         for i in 0..n {
             hello.push(i);
         }
 
         for i in 0..n {
-            *hello.nth_mut::<N>(i)?.expect("Some") += 1;
+            *hello.nth_mut(i)?.expect("Some") += 1;
         }
 
         for i in 0..n {
-            assert_eq!(*hello.nth::<N>(i)?.unwrap(), i + 1)
+            assert_eq!(*hello.nth(i)?.unwrap(), i + 1)
         }
 
         Ok(())
