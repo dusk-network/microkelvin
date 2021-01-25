@@ -16,6 +16,8 @@
 #![no_std]
 #![warn(missing_docs)]
 
+extern crate alloc;
+
 mod annotation;
 mod branch;
 mod branch_mut;

@@ -8,12 +8,12 @@ use core::marker::PhantomData;
 use core::mem;
 use core::ops::{Deref, DerefMut};
 
+use alloc::vec::Vec;
+
 use canonical::Store;
 
 use crate::annotation::{Annotated, Annotation};
 use crate::compound::{Child, ChildMut, Compound};
-
-use const_arrayvec::ArrayVec;
 
 /// The argument given to a closure to `walk` a `BranchMut`.
 pub enum WalkMut<'a, C, S>
@@ -123,26 +123,26 @@ where
     }
 }
 
-pub struct PartialBranchMut<'a, C, S, const N: usize>(LevelsMut<'a, C, S, N>)
+pub struct PartialBranchMut<'a, C, S>(LevelsMut<'a, C, S>)
 where
     C: Compound<S>,
     C::Annotation: Annotation<C, S>,
     S: Store;
 
-pub struct LevelsMut<'a, C, S, const N: usize>(ArrayVec<LevelMut<'a, C, S>, N>)
+pub struct LevelsMut<'a, C, S>(Vec<LevelMut<'a, C, S>>)
 where
     C: Compound<S>,
     C::Annotation: Annotation<C, S>,
     S: Store;
 
-impl<'a, C, S, const N: usize> LevelsMut<'a, C, S, N>
+impl<'a, C, S> LevelsMut<'a, C, S>
 where
     C: Compound<S>,
     C::Annotation: Annotation<C, S>,
     S: Store,
 {
     pub fn new(first: LevelMut<'a, C, S>) -> Self {
-        let mut levels: ArrayVec<LevelMut<'a, C, S>, N> = ArrayVec::new();
+        let mut levels: Vec<LevelMut<'a, C, S>> = Vec::new();
         levels.push(first);
         LevelsMut(levels)
     }
@@ -205,7 +205,7 @@ where
     }
 }
 
-impl<'a, C, S, const N: usize> PartialBranchMut<'a, C, S, N>
+impl<'a, C, S> PartialBranchMut<'a, C, S>
 where
     C: Compound<S>,
     C::Annotation: Annotation<C, S>,
@@ -284,7 +284,7 @@ where
     }
 }
 
-impl<'a, C, S, const N: usize> Drop for PartialBranchMut<'a, C, S, N>
+impl<'a, C, S> Drop for PartialBranchMut<'a, C, S>
 where
     C: Compound<S>,
     C::Annotation: Annotation<C, S>,
@@ -296,7 +296,7 @@ where
     }
 }
 
-impl<'a, C, S, const N: usize> BranchMut<'a, C, S, N>
+impl<'a, C, S> BranchMut<'a, C, S>
 where
     C: Compound<S>,
     C::Annotation: Annotation<C, S>,
@@ -336,13 +336,13 @@ where
 /// to the pointed-at leaf.
 ///
 /// The const generic `N` represents the maximum depth of the branch.
-pub struct BranchMut<'a, C, S, const N: usize>(PartialBranchMut<'a, C, S, N>)
+pub struct BranchMut<'a, C, S>(PartialBranchMut<'a, C, S>)
 where
     C: Compound<S>,
     C::Annotation: Annotation<C, S>,
     S: Store;
 
-impl<'a, C, S, const N: usize> Deref for BranchMut<'a, C, S, N>
+impl<'a, C, S> Deref for BranchMut<'a, C, S>
 where
     C: Compound<S>,
     C::Annotation: Annotation<C, S>,
@@ -355,7 +355,7 @@ where
     }
 }
 
-impl<'a, C, S, const N: usize> DerefMut for BranchMut<'a, C, S, N>
+impl<'a, C, S> DerefMut for BranchMut<'a, C, S>
 where
     C: Compound<S>,
     C::Annotation: Annotation<C, S>,
