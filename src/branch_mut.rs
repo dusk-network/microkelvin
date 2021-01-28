@@ -59,6 +59,7 @@ where
 pub struct LevelMut<'a, C, S>
 where
     C: Compound<S>,
+    C::Annotation: Annotation<C, C::Leaf>,
     S: Store,
 {
     offset: usize,
@@ -68,7 +69,7 @@ where
 impl<'a, C, S> LevelMut<'a, C, S>
 where
     C: Compound<S>,
-    C::Annotation: Annotation<C, S>,
+    C::Annotation: Annotation<C, C::Leaf>,
     S: Store,
 {
     /// Returns the offset of the branch level
@@ -110,7 +111,7 @@ where
 impl<'a, C, S> Deref for LevelMut<'a, C, S>
 where
     C: Compound<S>,
-    C::Annotation: Annotation<C, S>,
+    C::Annotation: Annotation<C, C::Leaf>,
     S: Store,
 {
     type Target = C;
@@ -126,19 +127,20 @@ where
 pub struct PartialBranchMut<'a, C, S>(LevelsMut<'a, C, S>)
 where
     C: Compound<S>,
-    C::Annotation: Annotation<C, S>,
+    C::Annotation: Annotation<C, C::Leaf>,
     S: Store;
 
 pub struct LevelsMut<'a, C, S>(Vec<LevelMut<'a, C, S>>)
 where
     C: Compound<S>,
-    C::Annotation: Annotation<C, S>,
+    C::Annotation: Annotation<C, C::Leaf>,
     S: Store;
 
 impl<'a, C, S> LevelsMut<'a, C, S>
 where
     C: Compound<S>,
-    C::Annotation: Annotation<C, S>,
+
+    C::Annotation: Annotation<C, C::Leaf>,
     S: Store,
 {
     pub fn new(first: LevelMut<'a, C, S>) -> Self {
@@ -168,7 +170,7 @@ where
             let popped_node = self.0.pop().expect("length > 1");
             let top_node = self.top_mut();
             if let ChildMut::Node(top_child) = top_node.level_child_mut() {
-                *top_child = Annotated::new(popped_node.clone())
+                *top_child = Annotated::new(popped_node.clone());
             } else {
                 unreachable!("Invalid parent structure")
             }
@@ -208,7 +210,7 @@ where
 impl<'a, C, S> PartialBranchMut<'a, C, S>
 where
     C: Compound<S>,
-    C::Annotation: Annotation<C, S>,
+    C::Annotation: Annotation<C, C::Leaf>,
     S: Store,
 {
     fn new(root: &'a mut C) -> Self {
@@ -228,7 +230,10 @@ where
         self.0.leaf_mut()
     }
 
-    pub fn pop(&mut self) -> Option<()> {
+    pub fn pop(&mut self) -> Option<()>
+    where
+        C::Annotation: Annotation<C, C::Leaf>,
+    {
         self.0.pop()
     }
 
@@ -239,6 +244,7 @@ where
     fn walk<W>(&mut self, mut walker: W) -> Result<Option<()>, S::Error>
     where
         W: FnMut(WalkMut<C, S>) -> StepMut<C, S>,
+        C::Annotation: Annotation<C, C::Leaf>,
     {
         enum State<C> {
             Init,
@@ -265,6 +271,7 @@ where
             match match top_node.level_child_mut() {
                 ChildMut::Leaf(l) => walker(WalkMut::Leaf(l)),
                 ChildMut::Node(c) => walker(WalkMut::Node(c)),
+                ChildMut::Empty => todo!(),
                 ChildMut::EndOfNode => {
                     state = State::Pop;
                     continue;
@@ -282,12 +289,42 @@ where
             };
         }
     }
+
+    fn path<P>(&mut self, mut path: P) -> Result<Option<()>, S::Error>
+    where
+        P: FnMut() -> usize,
+    {
+        let mut push = None;
+        loop {
+            if let Some(push) = push.take() {
+                self.0.push(push);
+            }
+
+            let top_level = self.0.top_mut();
+
+            let ofs = path();
+            *top_level.offset_mut() = ofs;
+
+            match top_level.child(ofs) {
+                Child::Leaf(_) => {
+                    return Ok(Some(()));
+                }
+                Child::Node(c) => push = Some(c.val()?.clone()),
+                Child::Empty => {
+                    return Ok(None);
+                }
+                Child::EndOfNode => {
+                    return Ok(None);
+                }
+            }
+        }
+    }
 }
 
 impl<'a, C, S> Drop for PartialBranchMut<'a, C, S>
 where
     C: Compound<S>,
-    C::Annotation: Annotation<C, S>,
+    C::Annotation: Annotation<C, C::Leaf>,
     S: Store,
 {
     fn drop(&mut self) {
@@ -299,7 +336,7 @@ where
 impl<'a, C, S> BranchMut<'a, C, S>
 where
     C: Compound<S>,
-    C::Annotation: Annotation<C, S>,
+    C::Annotation: Annotation<C, C::Leaf>,
     S: Store,
 {
     /// Returns the depth of the branch
@@ -324,6 +361,19 @@ where
             None => None,
         })
     }
+
+    /// Construct a branch given a function returning child offsets
+    pub fn path<P>(root: &'a mut C, path: P) -> Result<Option<Self>, S::Error>
+    where
+        P: FnMut() -> usize,
+        C::Annotation: Annotation<C, C::Leaf>,
+    {
+        let mut partial = PartialBranchMut::new(root);
+        Ok(match partial.path(path)? {
+            Some(()) => Some(BranchMut(partial)),
+            None => None,
+        })
+    }
 }
 
 /// Reprents a branch view into a collection.
@@ -339,13 +389,13 @@ where
 pub struct BranchMut<'a, C, S>(PartialBranchMut<'a, C, S>)
 where
     C: Compound<S>,
-    C::Annotation: Annotation<C, S>,
+    C::Annotation: Annotation<C, C::Leaf>,
     S: Store;
 
 impl<'a, C, S> Deref for BranchMut<'a, C, S>
 where
     C: Compound<S>,
-    C::Annotation: Annotation<C, S>,
+    C::Annotation: Annotation<C, C::Leaf>,
     S: Store,
 {
     type Target = C::Leaf;
@@ -358,7 +408,7 @@ where
 impl<'a, C, S> DerefMut for BranchMut<'a, C, S>
 where
     C: Compound<S>,
-    C::Annotation: Annotation<C, S>,
+    C::Annotation: Annotation<C, C::Leaf>,
     S: Store,
 {
     fn deref_mut(&mut self) -> &mut Self::Target {

@@ -4,7 +4,6 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use core::borrow::Borrow;
 use core::cmp::Ordering;
 use core::marker::PhantomData;
 use core::ops::{Deref, DerefMut};
@@ -12,24 +11,21 @@ use core::ops::{Deref, DerefMut};
 use canonical::{Canon, Repr, Sink, Source, Store, Val, ValMut};
 use canonical_derive::Canon;
 
-use crate::compound::{Child, Compound};
+use crate::compound::Compound;
 
-use core::cmp;
-
-/// The main `Annotation` trait
-pub trait Annotation<C, S>
+/// This type can annotate a leaf and a node
+pub trait Annotation<N, L>
 where
-    C: Compound<S>,
-    S: Store,
+    Self: Sized,
 {
-    /// The empty annotation.
+    /// The identity annotation
     fn identity() -> Self;
 
-    /// Creates annotation from a leaf.
-    fn from_leaf(leaf: &C::Leaf) -> Self;
+    /// Annotate a leaf
+    fn from_leaf(leaf: &L) -> Self;
 
-    /// Creates annotation from a node.
-    fn from_node(node: &C) -> Self;
+    /// Annotate a node
+    fn from_node(node: &N) -> Self;
 }
 
 /// A reference o a value carrying an annotation
@@ -59,6 +55,7 @@ where
     S: Store,
 {
     type Target = C;
+
     fn deref(&self) -> &Self::Target {
         &*self.compound
     }
@@ -67,7 +64,7 @@ where
 pub struct AnnRefMut<'a, C, S>
 where
     C: Compound<S>,
-    C::Annotation: Annotation<C, S>,
+    C::Annotation: Annotation<C, C::Leaf>,
     S: Store,
 {
     annotation: &'a mut C::Annotation,
@@ -78,7 +75,7 @@ where
 impl<'a, C, S> Deref for AnnRefMut<'a, C, S>
 where
     C: Compound<S>,
-    C::Annotation: Annotation<C, S>,
+    C::Annotation: Annotation<C, C::Leaf>,
     S: Store,
 {
     type Target = C;
@@ -91,7 +88,7 @@ where
 impl<'a, C, S> DerefMut for AnnRefMut<'a, C, S>
 where
     C: Compound<S>,
-    C::Annotation: Annotation<C, S>,
+    C::Annotation: Annotation<C, C::Leaf>,
     S: Store,
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
@@ -102,7 +99,7 @@ where
 impl<'a, C, S> Drop for AnnRefMut<'a, C, S>
 where
     C: Compound<S>,
-    C::Annotation: Annotation<C, S>,
+    C::Annotation: Annotation<C, C::Leaf>,
     S: Store,
 {
     fn drop(&mut self) {
@@ -122,7 +119,6 @@ where
 impl<C, S> Canon<S> for Annotated<C, S>
 where
     C: Compound<S>,
-    C::Annotation: Canon<S>,
     S: Store,
 {
     fn write(&self, sink: &mut impl Sink<S>) -> Result<(), S::Error> {
@@ -142,7 +138,7 @@ where
 impl<C, S> Annotated<C, S>
 where
     C: Compound<S>,
-    C::Annotation: Annotation<C, S>,
+    C::Annotation: Annotation<C, C::Leaf>,
     S: Store,
 {
     /// Create a new annotated type
@@ -185,34 +181,6 @@ pub struct Cardinality(pub(crate) u64);
 impl Into<u64> for &Cardinality {
     fn into(self) -> u64 {
         self.0
-    }
-}
-
-impl<C, S> Annotation<C, S> for Cardinality
-where
-    C: Compound<S>,
-    C::Annotation: Borrow<Cardinality>,
-    S: Store,
-{
-    fn identity() -> Self {
-        Cardinality(0)
-    }
-
-    fn from_leaf(_leaf: &C::Leaf) -> Self {
-        Cardinality(1)
-    }
-
-    fn from_node(node: &C) -> Self {
-        let c = node
-            .child_iter()
-            .map(|c| match c {
-                Child::Leaf(_) => 1,
-                Child::Node(n) => n.1.borrow().0,
-                Child::EndOfNode => 0,
-            })
-            .sum();
-
-        Cardinality(c)
     }
 }
 
@@ -279,47 +247,16 @@ where
     }
 }
 
-impl<C, S, K> Annotation<C, S> for Max<K>
-where
-    C: Compound<S>,
-    S: Store,
-    K: Ord + Clone,
-    C::Leaf: Borrow<K>,
-    C::Annotation: Borrow<Max<K>>,
-{
-    fn identity() -> Self {
-        Max::NegativeInfinity
-    }
-
-    fn from_leaf(leaf: &C::Leaf) -> Self {
-        Max::Maximum(leaf.borrow().clone())
-    }
-
-    fn from_node(node: &C) -> Self {
-        node.child_iter()
-            .fold(Max::NegativeInfinity, |m, c| match c {
-                Child::Leaf(l) => cmp::max(m, Max::Maximum(l.borrow().clone())),
-                Child::Node(n) => cmp::max(m, n.1.borrow().clone()),
-                _ => m,
-            })
-    }
-}
-
-impl<C, S> Annotation<C, S> for ()
-where
-    C: Compound<S>,
-    C::Annotation: Borrow<Cardinality>,
-    S: Store,
-{
-    fn identity() -> Self {
+impl<N, L> Annotation<N, L> for () {
+    fn identity() -> () {
         ()
     }
 
-    fn from_leaf(_leaf: &C::Leaf) -> Self {
+    fn from_leaf(_: &L) -> () {
         ()
     }
 
-    fn from_node(_node: &C) -> Self {
+    fn from_node(_: &N) -> () {
         ()
     }
 }
@@ -359,61 +296,20 @@ mod tests {
         }
     }
 
-    impl<T, S> Compound<S> for Recepticle<T, S>
-    where
-        T: Canon<S>,
-        S: Store,
-    {
-        type Leaf = T;
-        type Annotation = Cardinality;
-
-        fn child(&self, ofs: usize) -> Child<Self, S> {
-            match self.get(ofs) {
-                Some(l) => Child::Leaf(l),
-                None => Child::EndOfNode,
-            }
-        }
-
-        fn child_mut(&mut self, ofs: usize) -> ChildMut<Self, S> {
-            match self.get_mut(ofs) {
-                Some(l) => ChildMut::Leaf(l),
-                None => ChildMut::EndOfNode,
-            }
-        }
-    }
-
-    #[test]
-    fn annotated() -> Result<(), <MemStore as Store>::Error> {
-        let mut hello: Annotated<Recepticle<u64, MemStore>, MemStore> =
-            Annotated::new(Recepticle::new());
-
-        assert_eq!(hello.annotation(), &Cardinality(0));
-
-        hello.val_mut()?.push(0u64);
-
-        assert_eq!(hello.annotation(), &Cardinality(1));
-
-        hello.val_mut()?.push(0u64);
-
-        assert_eq!(hello.annotation(), &Cardinality(2));
-
-        Ok(())
-    }
-
     #[test]
     fn nth() -> Result<(), <MemStore as Store>::Error> {
         const N: usize = 16;
         let n = N as u64;
 
-        let mut hello: Annotated<Recepticle<u64, MemStore>, MemStore> =
-            Annotated::new(Recepticle::new());
+        let mut hello: Recepticle<u64, Cardinality, MemStore> =
+            Recepticle::new();
 
         for i in 0..n {
-            hello.val_mut()?.push(i);
+            hello.push(i);
         }
 
         for i in 0..n {
-            assert_eq!(*hello.val()?.nth(i)?.unwrap(), i)
+            assert_eq!(*hello.nth(i)?.unwrap(), i)
         }
 
         Ok(())
@@ -424,7 +320,7 @@ mod tests {
         const N: usize = 16;
         let n = N as u64;
 
-        let mut hello: Recepticle<_, MemStore> = Recepticle::new();
+        let mut hello: Recepticle<_, Cardinality, MemStore> = Recepticle::new();
 
         for i in 0..n {
             hello.push(i);

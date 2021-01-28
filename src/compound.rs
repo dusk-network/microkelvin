@@ -5,7 +5,6 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use core::borrow::Borrow;
-use core::marker::PhantomData;
 
 use canonical::{Canon, Store};
 
@@ -23,6 +22,8 @@ where
     Leaf(&'a C::Leaf),
     /// Child is an annotated subtree node
     Node(&'a Annotated<C, S>),
+    /// Empty slot
+    Empty,
     /// No more children
     EndOfNode,
 }
@@ -37,80 +38,41 @@ where
     Leaf(&'a mut C::Leaf),
     /// Child is an annotated node
     Node(&'a mut Annotated<C, S>),
+    /// Empty slot
+    Empty,
     /// No more children
     EndOfNode,
 }
 
-/// Trait for compound datastructures
+/// A type that can recursively contain itself and leaves.
 pub trait Compound<S>
 where
     Self: Canon<S>,
     S: Store,
 {
-    /// The leaf type of the collection
+    /// The leaf type of the Compound collection
     type Leaf;
 
-    /// The annotation type of the connection
-    type Annotation;
+    /// The annotation type of the compound.
+    type Annotation: Canon<S>;
 
     /// Returns a reference to a possible child at specified offset
-    fn child(&self, ofs: usize) -> Child<Self, S>;
-    /// Returns an iterator over all the available offsets for this compound
-    fn child_iter(&self) -> ChildIterator<Self, S> {
-        self.into()
-    }
+    fn child(&self, ofs: usize) -> Child<Self, S>
+    where
+        Self: Compound<S>;
+
     /// Returns a mutable reference to a possible child at specified offset
-    fn child_mut(&mut self, ofs: usize) -> ChildMut<Self, S>;
-}
-
-pub struct ChildIterator<'a, C, S>
-where
-    C: Compound<S>,
-    S: Store,
-{
-    ofs: usize,
-    compound: &'a C,
-    store: PhantomData<S>,
-}
-
-impl<'a, C, S> From<&'a C> for ChildIterator<'a, C, S>
-where
-    C: Compound<S>,
-    S: Store,
-{
-    fn from(c: &C) -> ChildIterator<C, S> {
-        ChildIterator {
-            ofs: 0,
-            compound: c,
-            store: PhantomData,
-        }
-    }
-}
-
-impl<'a, C, S> Iterator for ChildIterator<'a, C, S>
-where
-    C: Compound<S>,
-    S: Store,
-{
-    type Item = Child<'a, C, S>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let c = self.compound.child(self.ofs);
-        self.ofs += 1;
-
-        match c {
-            Child::EndOfNode => None,
-            _ => Some(c),
-        }
-    }
+    fn child_mut(&mut self, ofs: usize) -> ChildMut<Self, S>
+    where
+        Self: Compound<S>;
 }
 
 /// Find the nth element of any collection satisfying the given annotation
 /// constraints
 pub trait Nth<'a, S>
 where
-    Self: Compound<S> + Sized,
-    Self::Annotation: Annotation<Self, S>,
+    Self: Compound<S>,
+    Self::Annotation: Annotation<Self, Self::Leaf>,
     S: Store,
 {
     /// Construct a `Branch` pointing to the `nth` element, if any
@@ -126,7 +88,7 @@ where
 impl<'a, C, S> Nth<'a, S> for C
 where
     C: Compound<S>,
-    C::Annotation: Annotation<C, S> + Borrow<Cardinality>,
+    C::Annotation: Annotation<C, C::Leaf> + Borrow<Cardinality>,
     S: Store,
 {
     fn nth(
@@ -151,6 +113,7 @@ where
                     Step::Into(n)
                 }
             }
+            Walk::Abort => Step::Abort,
         })
     }
 

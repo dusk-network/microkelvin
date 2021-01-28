@@ -18,6 +18,7 @@ use crate::compound::{Child, Compound};
 ///
 /// The offset is pointing at the child of the node stored behind the LevelInner
 /// pointer.
+#[derive(Debug)]
 pub struct Level<'a, C, S>
 where
     C: Clone,
@@ -72,7 +73,7 @@ where
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 enum LevelInner<'a, C, S>
 where
     C: Clone,
@@ -81,10 +82,12 @@ where
     Owned(C, PhantomData<S>),
 }
 
+#[derive(Debug)]
 pub struct PartialBranch<'a, C, S>(Levels<'a, C, S>)
 where
     C: Clone;
 
+#[derive(Debug)]
 pub struct Levels<'a, C, S>(Vec<Level<'a, C, S>>)
 where
     C: Clone;
@@ -143,7 +146,6 @@ where
 impl<'a, C, S> PartialBranch<'a, C, S>
 where
     C: Compound<S>,
-    C::Annotation: Annotation<C, S>,
     S: Store,
 {
     fn new(root: &'a C) -> Self {
@@ -162,11 +164,12 @@ where
     fn walk<W>(&mut self, mut walker: W) -> Result<Option<()>, S::Error>
     where
         W: FnMut(Walk<C, S>) -> Step<C, S>,
+        C::Annotation: Annotation<C, C::Leaf>,
     {
         let mut push = None;
         loop {
             if let Some(push) = push.take() {
-                self.0.push(push)
+                self.0.push(push);
             }
 
             let top_level = self.0.top_mut();
@@ -174,6 +177,7 @@ where
             match match top_level.child(top_level.offset()) {
                 Child::Leaf(l) => walker(Walk::Leaf(l)),
                 Child::Node(c) => walker(Walk::Node(c)),
+                Child::Empty => todo!(),
                 Child::EndOfNode => {
                     if !self.0.pop() {
                         // last level
@@ -189,8 +193,40 @@ where
                 Step::Next => {
                     *self.0.top_mut().offset_mut() += 1;
                 }
+                Step::Abort => return Ok(None),
                 Step::Into(n) => {
                     push = Some(n.val()?.clone());
+                }
+            }
+        }
+    }
+
+    fn path<P>(&mut self, mut path: P) -> Result<Option<()>, S::Error>
+    where
+        P: FnMut() -> usize,
+        C::Annotation: Annotation<C, C::Leaf>,
+    {
+        let mut push = None;
+        loop {
+            if let Some(push) = push.take() {
+                self.0.push(push);
+            }
+
+            let top_level = self.0.top_mut();
+
+            let ofs = path();
+            *top_level.offset_mut() = ofs;
+
+            match top_level.child(ofs) {
+                Child::Leaf(_) => {
+                    return Ok(Some(()));
+                }
+                Child::Node(c) => push = Some(c.val()?.clone()),
+                Child::Empty => {
+                    return Ok(None);
+                }
+                Child::EndOfNode => {
+                    return Ok(None);
                 }
             }
         }
@@ -207,6 +243,8 @@ where
     Leaf(&'a C::Leaf),
     /// Walk encountered a node
     Node(&'a Annotated<C, S>),
+    /// Abort search
+    Abort,
 }
 
 /// The return value from a closure to `walk` the tree.
@@ -221,6 +259,8 @@ where
     Found(&'a C::Leaf),
     /// Step to the next child on this level
     Next,
+    /// Abort search
+    Abort,
     /// Traverse the branch deeper
     Into(&'a Annotated<C, S>),
 }
@@ -228,7 +268,6 @@ where
 impl<'a, C, S> Branch<'a, C, S>
 where
     C: Compound<S>,
-    C::Annotation: Annotation<C, S>,
     S: Store,
 {
     /// Returns the depth of the branch
@@ -243,12 +282,26 @@ where
 
     /// Performs a tree walk, returning either a valid branch or None if the
     /// walk failed.
-    pub fn walk<W: FnMut(Walk<C, S>) -> Step<C, S>>(
-        root: &'a C,
-        walker: W,
-    ) -> Result<Option<Self>, S::Error> {
+    pub fn walk<W>(root: &'a C, walker: W) -> Result<Option<Self>, S::Error>
+    where
+        W: FnMut(Walk<C, S>) -> Step<C, S>,
+        C::Annotation: Annotation<C, C::Leaf>,
+    {
         let mut partial = PartialBranch::new(root);
         Ok(match partial.walk(walker)? {
+            Some(()) => Some(Branch(partial)),
+            None => None,
+        })
+    }
+
+    /// Construct a branch given a function returning child offsets
+    pub fn path<P>(root: &'a C, path: P) -> Result<Option<Self>, S::Error>
+    where
+        P: FnMut() -> usize,
+        C::Annotation: Annotation<C, C::Leaf>,
+    {
+        let mut partial = PartialBranch::new(root);
+        Ok(match partial.path(path)? {
             Some(()) => Some(Branch(partial)),
             None => None,
         })
@@ -261,6 +314,7 @@ where
 /// to the pointed-at leaf.
 ///
 /// The const generic `N` represents the maximum depth of the branch.
+#[derive(Debug)]
 pub struct Branch<'a, C, S>(PartialBranch<'a, C, S>)
 where
     C: Clone;
@@ -268,7 +322,6 @@ where
 impl<'a, C, S> Deref for Branch<'a, C, S>
 where
     C: Compound<S>,
-    C::Annotation: Annotation<C, S>,
     S: Store,
 {
     type Target = C::Leaf;

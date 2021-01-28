@@ -13,7 +13,7 @@
 //! `Branch` and `BranchMut`, types for representing branches in tree-formed
 //! data as well as methods of search.
 
-#![no_std]
+// #![no_std]
 #![warn(missing_docs)]
 
 extern crate alloc;
