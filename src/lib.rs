@@ -13,17 +13,17 @@
 //! `Branch` and `BranchMut`, types for representing branches in tree-formed
 //! data as well as methods of search.
 
-#![no_std]
+// #![no_std]
 #![warn(missing_docs)]
 
 extern crate alloc;
 
-mod annotation;
+mod annotations;
 mod branch;
 mod branch_mut;
 mod compound;
 
-pub use annotation::{Annotated, Annotation, Cardinality, Max};
-pub use branch::{Branch, Level, Step, Walk};
+pub use annotations::{Annotated, Annotation, Cardinality, Max, Nth};
+pub use branch::{Branch, Step, Walk};
 pub use branch_mut::{BranchMut, LevelMut, StepMut, WalkMut};
-pub use compound::{Child, ChildMut, Compound, Nth};
+pub use compound::{Child, ChildMut, Compound};
