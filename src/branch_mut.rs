@@ -59,7 +59,7 @@ where
 pub struct LevelMut<'a, C, S>
 where
     C: Compound<S>,
-    C::Annotation: Annotation<C, C::Leaf>,
+    C::Annotation: Annotation<C, C::Leaf, S>,
     S: Store,
 {
     offset: usize,
@@ -69,7 +69,7 @@ where
 impl<'a, C, S> LevelMut<'a, C, S>
 where
     C: Compound<S>,
-    C::Annotation: Annotation<C, C::Leaf>,
+    C::Annotation: Annotation<C, C::Leaf, S>,
     S: Store,
 {
     /// Returns the offset of the branch level
@@ -111,7 +111,7 @@ where
 impl<'a, C, S> Deref for LevelMut<'a, C, S>
 where
     C: Compound<S>,
-    C::Annotation: Annotation<C, C::Leaf>,
+    C::Annotation: Annotation<C, C::Leaf, S>,
     S: Store,
 {
     type Target = C;
@@ -127,20 +127,20 @@ where
 pub struct PartialBranchMut<'a, C, S>(LevelsMut<'a, C, S>)
 where
     C: Compound<S>,
-    C::Annotation: Annotation<C, C::Leaf>,
+    C::Annotation: Annotation<C, C::Leaf, S>,
     S: Store;
 
 pub struct LevelsMut<'a, C, S>(Vec<LevelMut<'a, C, S>>)
 where
     C: Compound<S>,
-    C::Annotation: Annotation<C, C::Leaf>,
+    C::Annotation: Annotation<C, C::Leaf, S>,
     S: Store;
 
 impl<'a, C, S> LevelsMut<'a, C, S>
 where
     C: Compound<S>,
 
-    C::Annotation: Annotation<C, C::Leaf>,
+    C::Annotation: Annotation<C, C::Leaf, S>,
     S: Store,
 {
     pub fn new(first: LevelMut<'a, C, S>) -> Self {
@@ -210,7 +210,7 @@ where
 impl<'a, C, S> PartialBranchMut<'a, C, S>
 where
     C: Compound<S>,
-    C::Annotation: Annotation<C, C::Leaf>,
+    C::Annotation: Annotation<C, C::Leaf, S>,
     S: Store,
 {
     fn new(root: &'a mut C) -> Self {
@@ -232,7 +232,7 @@ where
 
     pub fn pop(&mut self) -> Option<()>
     where
-        C::Annotation: Annotation<C, C::Leaf>,
+        C::Annotation: Annotation<C, C::Leaf, S>,
     {
         self.0.pop()
     }
@@ -244,7 +244,7 @@ where
     fn walk<W>(&mut self, mut walker: W) -> Result<Option<()>, S::Error>
     where
         W: FnMut(WalkMut<C, S>) -> StepMut<C, S>,
-        C::Annotation: Annotation<C, C::Leaf>,
+        C::Annotation: Annotation<C, C::Leaf, S>,
     {
         enum State<C> {
             Init,
@@ -324,7 +324,7 @@ where
 impl<'a, C, S> Drop for PartialBranchMut<'a, C, S>
 where
     C: Compound<S>,
-    C::Annotation: Annotation<C, C::Leaf>,
+    C::Annotation: Annotation<C, C::Leaf, S>,
     S: Store,
 {
     fn drop(&mut self) {
@@ -336,7 +336,7 @@ where
 impl<'a, C, S> BranchMut<'a, C, S>
 where
     C: Compound<S>,
-    C::Annotation: Annotation<C, C::Leaf>,
+    C::Annotation: Annotation<C, C::Leaf, S>,
     S: Store,
 {
     /// Returns the depth of the branch
@@ -366,7 +366,7 @@ where
     pub fn path<P>(root: &'a mut C, path: P) -> Result<Option<Self>, S::Error>
     where
         P: FnMut() -> usize,
-        C::Annotation: Annotation<C, C::Leaf>,
+        C::Annotation: Annotation<C, C::Leaf, S>,
     {
         let mut partial = PartialBranchMut::new(root);
         Ok(match partial.path(path)? {
@@ -389,13 +389,13 @@ where
 pub struct BranchMut<'a, C, S>(PartialBranchMut<'a, C, S>)
 where
     C: Compound<S>,
-    C::Annotation: Annotation<C, C::Leaf>,
+    C::Annotation: Annotation<C, C::Leaf, S>,
     S: Store;
 
 impl<'a, C, S> Deref for BranchMut<'a, C, S>
 where
     C: Compound<S>,
-    C::Annotation: Annotation<C, C::Leaf>,
+    C::Annotation: Annotation<C, C::Leaf, S>,
     S: Store,
 {
     type Target = C::Leaf;
@@ -408,7 +408,7 @@ where
 impl<'a, C, S> DerefMut for BranchMut<'a, C, S>
 where
     C: Compound<S>,
-    C::Annotation: Annotation<C, C::Leaf>,
+    C::Annotation: Annotation<C, C::Leaf, S>,
     S: Store,
 {
     fn deref_mut(&mut self) -> &mut Self::Target {

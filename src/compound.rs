@@ -72,7 +72,7 @@ where
 pub trait Nth<'a, S>
 where
     Self: Compound<S>,
-    Self::Annotation: Annotation<Self, Self::Leaf>,
+    Self::Annotation: Annotation<Self, Self::Leaf, S>,
     S: Store,
 {
     /// Construct a `Branch` pointing to the `nth` element, if any
@@ -88,7 +88,7 @@ where
 impl<'a, C, S> Nth<'a, S> for C
 where
     C: Compound<S>,
-    C::Annotation: Annotation<C, C::Leaf> + Borrow<Cardinality>,
+    C::Annotation: Annotation<C, C::Leaf, S> + Borrow<Cardinality>,
     S: Store,
 {
     fn nth(

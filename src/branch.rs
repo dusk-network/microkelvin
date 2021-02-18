@@ -164,7 +164,7 @@ where
     fn walk<W>(&mut self, mut walker: W) -> Result<Option<()>, S::Error>
     where
         W: FnMut(Walk<C, S>) -> Step<C, S>,
-        C::Annotation: Annotation<C, C::Leaf>,
+        C::Annotation: Annotation<C, C::Leaf, S>,
     {
         let mut push = None;
         loop {
@@ -204,7 +204,7 @@ where
     fn path<P>(&mut self, mut path: P) -> Result<Option<()>, S::Error>
     where
         P: FnMut() -> usize,
-        C::Annotation: Annotation<C, C::Leaf>,
+        C::Annotation: Annotation<C, C::Leaf, S>,
     {
         let mut push = None;
         loop {
@@ -285,7 +285,7 @@ where
     pub fn walk<W>(root: &'a C, walker: W) -> Result<Option<Self>, S::Error>
     where
         W: FnMut(Walk<C, S>) -> Step<C, S>,
-        C::Annotation: Annotation<C, C::Leaf>,
+        C::Annotation: Annotation<C, C::Leaf, S>,
     {
         let mut partial = PartialBranch::new(root);
         Ok(match partial.walk(walker)? {
@@ -298,7 +298,7 @@ where
     pub fn path<P>(root: &'a C, path: P) -> Result<Option<Self>, S::Error>
     where
         P: FnMut() -> usize,
-        C::Annotation: Annotation<C, C::Leaf>,
+        C::Annotation: Annotation<C, C::Leaf, S>,
     {
         let mut partial = PartialBranch::new(root);
         Ok(match partial.path(path)? {

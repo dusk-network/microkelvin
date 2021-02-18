@@ -4,6 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use core::borrow::Borrow;
 use core::cmp::Ordering;
 use core::marker::PhantomData;
 use core::ops::{Deref, DerefMut};
@@ -11,10 +12,10 @@ use core::ops::{Deref, DerefMut};
 use canonical::{Canon, Repr, Sink, Source, Store, Val, ValMut};
 use canonical_derive::Canon;
 
-use crate::compound::Compound;
+use crate::compound::{Child, Compound};
 
 /// This type can annotate a leaf and a node
-pub trait Annotation<N, L>
+pub trait Annotation<N, L, S>
 where
     Self: Sized,
 {
@@ -64,7 +65,7 @@ where
 pub struct AnnRefMut<'a, C, S>
 where
     C: Compound<S>,
-    C::Annotation: Annotation<C, C::Leaf>,
+    C::Annotation: Annotation<C, C::Leaf, S>,
     S: Store,
 {
     annotation: &'a mut C::Annotation,
@@ -75,7 +76,7 @@ where
 impl<'a, C, S> Deref for AnnRefMut<'a, C, S>
 where
     C: Compound<S>,
-    C::Annotation: Annotation<C, C::Leaf>,
+    C::Annotation: Annotation<C, C::Leaf, S>,
     S: Store,
 {
     type Target = C;
@@ -88,7 +89,7 @@ where
 impl<'a, C, S> DerefMut for AnnRefMut<'a, C, S>
 where
     C: Compound<S>,
-    C::Annotation: Annotation<C, C::Leaf>,
+    C::Annotation: Annotation<C, C::Leaf, S>,
     S: Store,
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
@@ -99,7 +100,7 @@ where
 impl<'a, C, S> Drop for AnnRefMut<'a, C, S>
 where
     C: Compound<S>,
-    C::Annotation: Annotation<C, C::Leaf>,
+    C::Annotation: Annotation<C, C::Leaf, S>,
     S: Store,
 {
     fn drop(&mut self) {
@@ -138,7 +139,7 @@ where
 impl<C, S> Annotated<C, S>
 where
     C: Compound<S>,
-    C::Annotation: Annotation<C, C::Leaf>,
+    C::Annotation: Annotation<C, C::Leaf, S>,
     S: Store,
 {
     /// Create a new annotated type
@@ -181,6 +182,34 @@ pub struct Cardinality(pub(crate) u64);
 impl Into<u64> for &Cardinality {
     fn into(self) -> u64 {
         self.0
+    }
+}
+
+impl<C, S> Annotation<C, C::Leaf, S> for Cardinality
+where
+    C: Compound<S>,
+    C::Annotation: Annotation<C, C::Leaf, S> + Borrow<Cardinality>,
+    S: Store,
+{
+    fn identity() -> Self {
+        Cardinality(0)
+    }
+
+    fn from_leaf(_: &C::Leaf) -> Self {
+        Cardinality(1)
+    }
+
+    fn from_node(node: &C) -> Self {
+        let mut c = 0;
+        for i in 0.. {
+            c += match node.child(i) {
+                Child::Leaf(_) => 1,
+                Child::Node(n) => n.annotation().borrow().0,
+                Child::EndOfNode => return Cardinality(c),
+                Child::Empty => 0,
+            }
+        }
+        unreachable!()
     }
 }
 
@@ -247,7 +276,7 @@ where
     }
 }
 
-impl<N, L> Annotation<N, L> for () {
+impl<N, L, S> Annotation<N, L, S> for () {
     fn identity() -> () {
         ()
     }
