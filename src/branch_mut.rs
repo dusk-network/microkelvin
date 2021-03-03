@@ -10,67 +10,54 @@ use core::ops::{Deref, DerefMut};
 
 use alloc::vec::Vec;
 
-use canonical::Store;
+use canonical::{Canon, CanonError};
 
-use crate::annotation::{Annotated, Annotation};
+use crate::annotations::{Annotated, Annotation};
 use crate::compound::{Child, ChildMut, Compound};
 
 /// The argument given to a closure to `walk` a `BranchMut`.
-pub enum WalkMut<'a, C, S>
+pub enum WalkMut<'a, C, A>
 where
-    C: Compound<S>,
-    S: Store,
+    C: Compound,
 {
     /// Walk encountered a leaf
     Leaf(&'a mut C::Leaf),
     /// Walk encountered a node
-    Node(&'a mut Annotated<C, S>),
+    Node(&'a mut Annotated<C, A>),
 }
 
 /// The return value from a closure to `walk` the tree.
 ///
 /// Determines how the `BranchMut` is constructed
-pub enum StepMut<'a, C, S>
+pub enum StepMut<'a, C, A>
 where
-    C: Compound<S>,
-    S: Store,
+    C: Compound,
 {
     /// The correct leaf was found!
     Found(&'a mut C::Leaf),
     /// Step to the next child on this level
     Next,
     /// Traverse the branch deeper
-    Into(&'a mut Annotated<C, S>),
+    Into(&'a mut Annotated<C, A>),
 }
 
-enum LevelInnerMut<'a, C, S>
-where
-    C: Compound<S>,
-    S: Store,
-{
+enum LevelInnerMut<'a, C, A> {
     Borrowed(&'a mut C),
-    Owned(C, PhantomData<S>),
+    Owned(C, PhantomData<A>),
 }
 
 /// Represents a level in the branch.
 ///
 /// The offset is pointing at the child of the node stored behind the LevelInner
 /// pointer.
-pub struct LevelMut<'a, C, S>
-where
-    C: Compound<S>,
-    C::Annotation: Annotation<C, C::Leaf, S>,
-    S: Store,
-{
+pub struct LevelMut<'a, C, A> {
     offset: usize,
-    inner: LevelInnerMut<'a, C, S>,
+    inner: LevelInnerMut<'a, C, A>,
 }
 
-impl<'a, C, S> LevelMut<'a, C, S>
+impl<'a, C, A> LevelMut<'a, C, A>
 where
-    C: Compound<S>,
-    C::Annotation: Annotation<C, C::Leaf, S>,
-    S: Store,
+    C: Compound,
 {
     /// Returns the offset of the branch level
     pub fn offset(&self) -> usize {
@@ -91,15 +78,15 @@ where
         }
     }
 
-    fn level_child_mut(&mut self) -> ChildMut<C, S> {
+    fn level_child_mut(&mut self) -> ChildMut<C, A> {
         let ofs = self.offset();
         match self.inner {
             LevelInnerMut::Borrowed(ref mut n) => n.child_mut(ofs),
-            LevelInnerMut::Owned(ref mut n, _) => n.child_mut(ofs),
+            LevelInnerMut::Owned(ref mut n, PhantomData) => n.child_mut(ofs),
         }
     }
 
-    fn inner(&self) -> &LevelInnerMut<'a, C, S> {
+    fn inner(&self) -> &LevelInnerMut<'a, C, A> {
         &self.inner
     }
 
@@ -108,43 +95,28 @@ where
     }
 }
 
-impl<'a, C, S> Deref for LevelMut<'a, C, S>
-where
-    C: Compound<S>,
-    C::Annotation: Annotation<C, C::Leaf, S>,
-    S: Store,
-{
+impl<'a, C, A> Deref for LevelMut<'a, C, A> {
     type Target = C;
 
     fn deref(&self) -> &Self::Target {
-        match self.inner() {
+        match &self.inner {
             LevelInnerMut::Borrowed(b) => b,
             LevelInnerMut::Owned(c, _) => &c,
         }
     }
 }
 
-pub struct PartialBranchMut<'a, C, S>(LevelsMut<'a, C, S>)
-where
-    C: Compound<S>,
-    C::Annotation: Annotation<C, C::Leaf, S>,
-    S: Store;
+pub struct PartialBranchMut<'a, C, A>(LevelsMut<'a, C, A>);
 
-pub struct LevelsMut<'a, C, S>(Vec<LevelMut<'a, C, S>>)
-where
-    C: Compound<S>,
-    C::Annotation: Annotation<C, C::Leaf, S>,
-    S: Store;
+pub struct LevelsMut<'a, C, A>(Vec<LevelMut<'a, C, A>>);
 
-impl<'a, C, S> LevelsMut<'a, C, S>
+impl<'a, C, A> LevelsMut<'a, C, A>
 where
-    C: Compound<S>,
-
-    C::Annotation: Annotation<C, C::Leaf, S>,
-    S: Store,
+    C: Compound + Canon,
+    A: Annotation<C>,
 {
-    pub fn new(first: LevelMut<'a, C, S>) -> Self {
-        let mut levels: Vec<LevelMut<'a, C, S>> = Vec::new();
+    pub fn new(first: LevelMut<'a, C, A>) -> Self {
+        let mut levels = vec![];
         levels.push(first);
         LevelsMut(levels)
     }
@@ -153,11 +125,11 @@ where
         self.0.len()
     }
 
-    pub fn top(&self) -> &LevelMut<'a, C, S> {
+    pub fn top(&self) -> &LevelMut<'a, C, A> {
         self.0.last().expect("always > 0 len")
     }
 
-    pub fn top_mut(&mut self) -> &mut LevelMut<'a, C, S> {
+    pub fn top_mut(&mut self) -> &mut LevelMut<'a, C, A> {
         self.0.last_mut().expect("always > 0 len")
     }
 
@@ -187,14 +159,18 @@ where
     pub fn leaf(&self) -> Option<&C::Leaf> {
         let top_level = self.top();
         match top_level.inner() {
-            LevelInnerMut::Borrowed(c) => match c.child(top_level.offset()) {
-                Child::Leaf(l) => Some(l),
-                _ => None,
-            },
-            LevelInnerMut::Owned(c, _) => match c.child(top_level.offset()) {
-                Child::Leaf(l) => Some(l),
-                _ => None,
-            },
+            LevelInnerMut::Borrowed(c) => {
+                match c.child::<A>(top_level.offset()) {
+                    Child::Leaf(l) => Some(l),
+                    _ => None,
+                }
+            }
+            LevelInnerMut::Owned(c, _) => {
+                match c.child::<A>(top_level.offset()) {
+                    Child::Leaf(l) => Some(l),
+                    _ => None,
+                }
+            }
         }
     }
 
@@ -207,11 +183,10 @@ where
     }
 }
 
-impl<'a, C, S> PartialBranchMut<'a, C, S>
+impl<'a, C, A> PartialBranchMut<'a, C, A>
 where
-    C: Compound<S>,
-    C::Annotation: Annotation<C, C::Leaf, S>,
-    S: Store,
+    C: Compound + Canon,
+    A: Annotation<C>,
 {
     fn new(root: &'a mut C) -> Self {
         let levels = LevelsMut::new(LevelMut::new_borrowed(root));
@@ -230,10 +205,7 @@ where
         self.0.leaf_mut()
     }
 
-    pub fn pop(&mut self) -> Option<()>
-    where
-        C::Annotation: Annotation<C, C::Leaf, S>,
-    {
+    pub fn pop(&mut self) -> Option<()> {
         self.0.pop()
     }
 
@@ -241,10 +213,9 @@ where
         self.0.advance()
     }
 
-    fn walk<W>(&mut self, mut walker: W) -> Result<Option<()>, S::Error>
+    fn walk<W>(&mut self, mut walker: W) -> Result<Option<()>, CanonError>
     where
-        W: FnMut(WalkMut<C, S>) -> StepMut<C, S>,
-        C::Annotation: Annotation<C, C::Leaf, S>,
+        W: FnMut(WalkMut<C, A>) -> StepMut<C, A>,
     {
         enum State<C> {
             Init,
@@ -290,7 +261,7 @@ where
         }
     }
 
-    fn path<P>(&mut self, mut path: P) -> Result<Option<()>, S::Error>
+    fn path<P>(&mut self, mut path: P) -> Result<Option<()>, CanonError>
     where
         P: FnMut() -> usize,
     {
@@ -305,7 +276,7 @@ where
             let ofs = path();
             *top_level.offset_mut() = ofs;
 
-            match top_level.child(ofs) {
+            match top_level.child::<A>(ofs) {
                 Child::Leaf(_) => {
                     return Ok(Some(()));
                 }
@@ -321,23 +292,21 @@ where
     }
 }
 
-impl<'a, C, S> Drop for PartialBranchMut<'a, C, S>
+impl<'a, C, A> Drop for BranchMut<'a, C, A>
 where
-    C: Compound<S>,
-    C::Annotation: Annotation<C, C::Leaf, S>,
-    S: Store,
+    C: Compound + Canon,
+    A: Annotation<C>,
 {
     fn drop(&mut self) {
         // unwind when dropping
-        while self.pop().is_some() {}
+        while self.0.pop().is_some() {}
     }
 }
 
-impl<'a, C, S> BranchMut<'a, C, S>
+impl<'a, C, A> BranchMut<'a, C, A>
 where
-    C: Compound<S>,
-    C::Annotation: Annotation<C, C::Leaf, S>,
-    S: Store,
+    C: Compound + Canon,
+    A: Annotation<C>,
 {
     /// Returns the depth of the branch
     pub fn depth(&self) -> usize {
@@ -345,16 +314,16 @@ where
     }
 
     /// Returns a reference to the levels in the branch
-    pub fn levels(&self) -> &[LevelMut<C, S>] {
+    pub fn levels(&self) -> &[LevelMut<C, A>] {
         &((self.0).0).0[..]
     }
 
     /// Performs a tree walk, returning either a valid branch or None if the
     /// walk failed.
-    pub fn walk<W: FnMut(WalkMut<C, S>) -> StepMut<C, S>>(
+    pub fn walk<W: FnMut(WalkMut<C, A>) -> StepMut<C, A>>(
         root: &'a mut C,
         walker: W,
-    ) -> Result<Option<Self>, S::Error> {
+    ) -> Result<Option<Self>, CanonError> {
         let mut partial = PartialBranchMut::new(root);
         Ok(match partial.walk(walker)? {
             Some(()) => Some(BranchMut(partial)),
@@ -363,10 +332,9 @@ where
     }
 
     /// Construct a branch given a function returning child offsets
-    pub fn path<P>(root: &'a mut C, path: P) -> Result<Option<Self>, S::Error>
+    pub fn path<P>(root: &'a mut C, path: P) -> Result<Option<Self>, CanonError>
     where
         P: FnMut() -> usize,
-        C::Annotation: Annotation<C, C::Leaf, S>,
     {
         let mut partial = PartialBranchMut::new(root);
         Ok(match partial.path(path)? {
@@ -386,17 +354,15 @@ where
 /// to the pointed-at leaf.
 ///
 /// The const generic `N` represents the maximum depth of the branch.
-pub struct BranchMut<'a, C, S>(PartialBranchMut<'a, C, S>)
+pub struct BranchMut<'a, C, A>(PartialBranchMut<'a, C, A>)
 where
-    C: Compound<S>,
-    C::Annotation: Annotation<C, C::Leaf, S>,
-    S: Store;
+    C: Compound + Canon,
+    A: Annotation<C>;
 
-impl<'a, C, S> Deref for BranchMut<'a, C, S>
+impl<'a, C, A> Deref for BranchMut<'a, C, A>
 where
-    C: Compound<S>,
-    C::Annotation: Annotation<C, C::Leaf, S>,
-    S: Store,
+    C: Compound + Canon,
+    A: Annotation<C>,
 {
     type Target = C::Leaf;
 
@@ -405,11 +371,10 @@ where
     }
 }
 
-impl<'a, C, S> DerefMut for BranchMut<'a, C, S>
+impl<'a, C, A> DerefMut for BranchMut<'a, C, A>
 where
-    C: Compound<S>,
-    C::Annotation: Annotation<C, C::Leaf, S>,
-    S: Store,
+    C: Compound + Canon,
+    A: Annotation<C>,
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.0.leaf_mut().expect("Invalid branch")
