@@ -1,5 +1,5 @@
 /// Annotation to keep track of the largest element of a collection
-use crate::annotations::Annotation;
+// use crate::annotations::Annotation;
 use crate::{Child, Compound};
 use canonical::Canon;
 use canonical_derive::Canon;
@@ -14,42 +14,30 @@ pub enum Max<K> {
     Maximum(K),
 }
 
-// impl<K> PartialOrd<K> for Max<K>
+// impl<C, K> Annotation<C> for Max<K>
 // where
-//     K: PartialOrd + Eq,
+//     C: Compound,
+//     K: Ord + Clone,
+//     C::Leaf: Borrow<K>,
 // {
-//     fn partial_cmp(&self, k: &K) -> Option<Ordering> {
-//         match self {
-//             Max::NegativeInfinity => Some(Ordering::Less),
-//             Max::Maximum(k_p) => k_p.partial_cmp(k),
+//     fn identity() -> Self {
+//         Max::NegativeInfinity
+//     }
+
+//     fn from_leaf(leaf: &C::Leaf) -> Self {
+//         Max::Maximum(leaf.borrow().clone())
+//     }
+
+//     fn from_node(node: &C) -> Self {
+//         let max = Max::NegativeInfinity;
+//         for i in 0.. {
+//             match node.child::<Self>(i) {
+//                 Child::Leaf(_) => todo!(),
+//                 Child::Node(_) => todo!(),
+//                 Child::EndOfNode => return max,
+//                 Child::Empty => todo!(),
+//             }
 //         }
+//         unreachable!()
 //     }
 // }
-
-impl<C, K> Annotation<C> for Max<K>
-where
-    C: Compound,
-    K: Ord + Clone,
-    C::Leaf: Borrow<K>,
-{
-    fn identity() -> Self {
-        Max::NegativeInfinity
-    }
-
-    fn from_leaf(leaf: &C::Leaf) -> Self {
-        Max::Maximum(leaf.borrow().clone())
-    }
-
-    fn from_node(node: &C) -> Self {
-        let max = Max::NegativeInfinity;
-        for i in 0.. {
-            match node.child::<Self>(i) {
-                Child::Leaf(_) => todo!(),
-                Child::Node(_) => todo!(),
-                Child::EndOfNode => return max,
-                Child::Empty => todo!(),
-            }
-        }
-        unreachable!()
-    }
-}

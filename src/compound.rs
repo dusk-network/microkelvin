@@ -9,7 +9,7 @@ use crate::annotations::Annotated;
 /// The response of the `child` method on a `Compound` node.
 pub enum Child<'a, C, A>
 where
-    C: Compound,
+    C: Compound<A>,
 {
     /// Child is a leaf
     Leaf(&'a C::Leaf),
@@ -24,7 +24,7 @@ where
 /// The response of the `child_mut` method on a `Compound` node.
 pub enum ChildMut<'a, C, A>
 where
-    C: Compound,
+    C: Compound<A>,
 {
     /// Child is a leaf
     Leaf(&'a mut C::Leaf),
@@ -37,13 +37,13 @@ where
 }
 
 /// A type that can recursively contain itself and leaves.
-pub trait Compound: Sized {
+pub trait Compound<A>: Sized {
     /// The leaf type of the Compound collection
     type Leaf;
 
     /// Returns a reference to a possible child at specified offset
-    fn child<A>(&self, ofs: usize) -> Child<Self, A>;
+    fn child(&self, ofs: usize) -> Child<Self, A>;
 
     /// Returns a mutable reference to a possible child at specified offset
-    fn child_mut<A>(&mut self, ofs: usize) -> ChildMut<Self, A>;
+    fn child_mut(&mut self, ofs: usize) -> ChildMut<Self, A>;
 }

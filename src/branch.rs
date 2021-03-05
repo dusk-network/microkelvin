@@ -9,9 +9,9 @@ use core::ops::Deref;
 
 use alloc::vec::Vec;
 
-use canonical::{Canon, CanonError};
+use canonical::CanonError;
 
-use crate::annotations::{Annotated, Annotation};
+use crate::annotations::Annotated;
 use crate::compound::{Child, Compound};
 
 /// Represents a level in the branch.
@@ -78,7 +78,7 @@ pub struct Levels<'a, C, A>(Vec<Level<'a, C, A>>);
 
 impl<'a, C, A> Levels<'a, C, A>
 where
-    C: Compound,
+    C: Compound<A>,
 {
     pub fn new(node: &'a C) -> Self {
         let mut levels: Vec<Level<'a, C, A>> = Vec::new();
@@ -128,8 +128,7 @@ where
 
 impl<'a, C, A> PartialBranch<'a, C, A>
 where
-    C: Compound,
-    A: Annotation<C>,
+    C: Compound<A>,
 {
     fn new(root: &'a C) -> Self {
         let levels = Levels::new(root);
@@ -147,7 +146,6 @@ where
     fn walk<W>(&mut self, mut walker: W) -> Result<Option<()>, CanonError>
     where
         W: FnMut(Walk<C, A>) -> Step<C, A>,
-        C: Canon,
     {
         let mut push = None;
         loop {
@@ -187,7 +185,6 @@ where
     fn path<P>(&mut self, mut path: P) -> Result<Option<()>, CanonError>
     where
         P: FnMut() -> usize,
-        C: Canon,
     {
         let mut push = None;
         loop {
@@ -219,7 +216,7 @@ where
 /// The argument given to a closure to `walk` a `Branch`.
 pub enum Walk<'a, C, A>
 where
-    C: Compound,
+    C: Compound<A>,
 {
     /// Walk encountered a leaf
     Leaf(&'a C::Leaf),
@@ -234,7 +231,7 @@ where
 /// Determines how the `Branch` is constructed
 pub enum Step<'a, C, A>
 where
-    C: Compound,
+    C: Compound<A>,
 {
     /// The correct leaf was found!
     Found(&'a C::Leaf),
@@ -248,8 +245,7 @@ where
 
 impl<'a, C, A> Branch<'a, C, A>
 where
-    C: Compound,
-    A: Annotation<C>,
+    C: Compound<A>,
 {
     /// Returns the depth of the branch
     pub fn depth(&self) -> usize {
@@ -266,7 +262,6 @@ where
     pub fn walk<W>(root: &'a C, walker: W) -> Result<Option<Self>, CanonError>
     where
         W: FnMut(Walk<C, A>) -> Step<C, A>,
-        C: Canon,
     {
         let mut partial = PartialBranch::new(root);
         Ok(match partial.walk(walker)? {
@@ -279,7 +274,6 @@ where
     pub fn path<P>(root: &'a C, path: P) -> Result<Option<Self>, CanonError>
     where
         P: FnMut() -> usize,
-        C: Canon,
     {
         let mut partial = PartialBranch::new(root);
         Ok(match partial.path(path)? {
@@ -300,8 +294,7 @@ pub struct Branch<'a, C, A>(PartialBranch<'a, C, A>);
 
 impl<'a, C, A> Deref for Branch<'a, C, A>
 where
-    C: Compound,
-    A: Annotation<C>,
+    C: Compound<A>,
 {
     type Target = C::Leaf;
 
