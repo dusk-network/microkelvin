@@ -136,12 +136,12 @@ where
         *self.top_mut().offset_mut() += 1
     }
 
-    pub fn pop(&mut self) -> Option<()> {
+    fn pop(&mut self) -> Option<()> {
         if self.0.len() > 1 {
             let popped_node = self.0.pop().expect("length > 1");
             let top_node = self.top_mut();
             if let ChildMut::Node(top_child) = top_node.level_child_mut() {
-                *top_child = Annotated::new(popped_node.clone());
+                *top_child = Annotated::new(popped_node);
             } else {
                 unreachable!("Invalid parent structure")
             }
@@ -151,25 +151,21 @@ where
         }
     }
 
-    pub fn push(&mut self, node: C) {
+    fn push(&mut self, node: C) {
         self.0.push(LevelMut::new_owned(node))
     }
 
     pub fn leaf(&self) -> Option<&C::Leaf> {
         let top_level = self.top();
         match top_level.inner() {
-            LevelInnerMut::Borrowed(c) => {
-                match c.child::<A>(top_level.offset()) {
-                    Child::Leaf(l) => Some(l),
-                    _ => None,
-                }
-            }
-            LevelInnerMut::Owned(c, _) => {
-                match c.child::<A>(top_level.offset()) {
-                    Child::Leaf(l) => Some(l),
-                    _ => None,
-                }
-            }
+            LevelInnerMut::Borrowed(c) => match c.child(top_level.offset()) {
+                Child::Leaf(l) => Some(l),
+                _ => None,
+            },
+            LevelInnerMut::Owned(c, _) => match c.child(top_level.offset()) {
+                Child::Leaf(l) => Some(l),
+                _ => None,
+            },
         }
     }
 

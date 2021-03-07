@@ -6,7 +6,8 @@
 
 use core::ops::{Deref, DerefMut};
 
-use canonical::{Canon, CanonError, Repr, Sink, Source, ValMut};
+use canonical::{Canon, CanonError, Repr, ValMut};
+use canonical_derive::Canon;
 
 use crate::compound::Compound;
 
@@ -33,6 +34,7 @@ pub use max::Max;
 //     fn from_leaf(leaf: &C::Leaf) -> Self;
 // }
 
+#[derive(Clone)]
 /// A reference o a value carrying an annotation
 pub struct AnnRef<'a, C, A>
 where
@@ -40,18 +42,6 @@ where
 {
     annotation: &'a A,
     compound: Rc<C>,
-}
-
-impl<'a, C, A> Clone for AnnRef<'a, C, A>
-where
-    C: Compound<A>,
-{
-    fn clone(&self) -> Self {
-        AnnRef {
-            annotation: self.annotation.clone(),
-            compound: self.compound.clone(),
-        }
-    }
 }
 
 impl<'a, C, A> AnnRef<'a, C, A>
@@ -107,47 +97,23 @@ where
     C: Compound<A>,
 {
     fn drop(&mut self) {
-        *self.annotation = A::from_node(&*self.compound)
+        *self.annotation = C::annotate_node(&*self.compound)
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Canon)]
 /// A wrapper type that keeps the annotation of the Compound referenced cached
 pub struct Annotated<C, A>(Repr<C>, A)
 where
     C: Compound<A>;
-
-// Manual implementation to avoid restraining the type to `Canon` in the trait
-// which would be required by the derive macro
-impl<C, A> Canon for Annotated<C, A>
-where
-    C: Compound<A> + Canon,
-    A: Canon,
-{
-    fn write(&self, sink: &mut Sink) {
-        self.0.write(sink);
-        self.1.write(sink);
-    }
-
-    fn read(source: &mut Source) -> Result<Self, CanonError> {
-        Ok(Annotated(Repr::read(source)?, A::read(source)?))
-    }
-
-    fn encoded_len(&self) -> usize {
-        self.0.encoded_len() + self.1.encoded_len()
-    }
-}
 
 impl<C, A> Annotated<C, A>
 where
     C: Compound<A>,
 {
     /// Create a new annotated type
-    pub fn new(compound: C) -> Self
-    where
-        C: Canon,
-    {
-        let a = A::from_node(&compound);
+    pub fn new(compound: C) -> Self {
+        let a = C::annotate_node(&compound);
         Annotated(Repr::new(compound), a)
     }
 

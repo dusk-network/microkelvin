@@ -1,9 +1,9 @@
 /// Annotation to keep track of the largest element of a collection
 // use crate::annotations::Annotation;
-use crate::{Child, Compound};
+// use crate::{Child, Compound};
 use canonical::Canon;
 use canonical_derive::Canon;
-use core::borrow::Borrow;
+// use core::borrow::Borrow;
 
 /// The maximum value of a collection
 #[derive(Canon, PartialEq, Eq, Debug, Clone, Copy)]

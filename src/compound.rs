@@ -46,4 +46,12 @@ pub trait Compound<A>: Sized {
 
     /// Returns a mutable reference to a possible child at specified offset
     fn child_mut(&mut self, ofs: usize) -> ChildMut<Self, A>;
+
+    fn annotate_leaf(leaf: Self::Leaf) -> A {
+        todo!()
+    }
+
+    fn annotate_node(node: &Self) -> A {
+        todo!()
+    }
 }

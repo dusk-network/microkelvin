@@ -114,11 +114,11 @@ where
     pub fn leaf(&self) -> Option<&C::Leaf> {
         let level = self.top();
         match level.inner() {
-            LevelInner::Borrowed(c) => match c.child::<A>(level.offset()) {
+            LevelInner::Borrowed(c) => match c.child(level.offset()) {
                 Child::Leaf(l) => Some(l),
                 _ => None,
             },
-            LevelInner::Owned(c, _) => match c.child::<A>(level.offset()) {
+            LevelInner::Owned(c, _) => match c.child(level.offset()) {
                 Child::Leaf(l) => Some(l),
                 _ => None,
             },
@@ -176,7 +176,7 @@ where
                 }
                 Step::Abort => return Ok(None),
                 Step::Into(n) => {
-                    push = Some(n.val()?.clone());
+                    push = Some(*n.val()?);
                 }
             }
         }
@@ -197,11 +197,11 @@ where
             let ofs = path();
             *top_level.offset_mut() = ofs;
 
-            match top_level.child::<A>(ofs) {
+            match top_level.child(ofs) {
                 Child::Leaf(_) => {
                     return Ok(Some(()));
                 }
-                Child::Node(c) => push = Some(c.val()?.clone()),
+                Child::Node(c) => push = Some(*c.val()?),
                 Child::Empty => {
                     return Ok(None);
                 }
