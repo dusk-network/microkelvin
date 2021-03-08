@@ -4,7 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use crate::annotations::Annotated;
+use crate::annotations::{Ann, Annotated, Annotation};
 
 /// The response of the `child` method on a `Compound` node.
 pub enum Child<'a, C, A>
@@ -42,16 +42,33 @@ pub trait Compound<A>: Sized {
     type Leaf;
 
     /// Returns a reference to a possible child at specified offset
-    fn child(&self, ofs: usize) -> Child<Self, A>;
+    fn child(&self, ofs: usize) -> Child<Self, A>
+    where
+        A: Annotation<Self::Leaf>;
 
     /// Returns a mutable reference to a possible child at specified offset
-    fn child_mut(&mut self, ofs: usize) -> ChildMut<Self, A>;
+    fn child_mut(&mut self, ofs: usize) -> ChildMut<Self, A>
+    where
+        A: Annotation<Self::Leaf>;
 
-    fn annotate_leaf(leaf: Self::Leaf) -> A {
-        todo!()
-    }
+    /// Calculate the Compound annotation for a node
+    fn annotate_node(&self) -> A
+    where
+        A: Annotation<Self::Leaf>,
+    {
+        // default impl allocates, and could be optimized for individual
+        // compound types
 
-    fn annotate_node(node: &Self) -> A {
-        todo!()
+        let mut children = vec![];
+
+        for i in 0.. {
+            match self.child(i) {
+                Child::Leaf(l) => children.push(Ann::Owned(A::from_leaf(l))),
+                Child::Node(n) => children.push(Ann::Borrowed(n.annotation())),
+                Child::Empty => (),
+                Child::EndOfNode => break,
+            }
+        }
+        A::combine(&children[..])
     }
 }

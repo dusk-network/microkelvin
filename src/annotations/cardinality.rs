@@ -1,5 +1,6 @@
 /// Annotation to keep track of the cardinality,
-/// i.e. the amount of elements of a collection
+/// i.e. the amount of elements in a collection
+use crate::annotations::{Ann, Annotation};
 use crate::branch::{Branch, Step, Walk};
 use crate::branch_mut::{BranchMut, StepMut, WalkMut};
 use crate::Compound;
@@ -8,7 +9,7 @@ use canonical_derive::Canon;
 use core::borrow::Borrow;
 
 /// The cardinality of a compound collection
-#[derive(Canon, PartialEq, Debug, Clone)]
+#[derive(Canon, PartialEq, Debug, Clone, Default)]
 pub struct Cardinality(pub(crate) u64);
 
 impl Into<u64> for &Cardinality {
@@ -17,38 +18,26 @@ impl Into<u64> for &Cardinality {
     }
 }
 
-// impl<C> Annotation<C> for Cardinality
-// where
-//     C: Compound<A>,
-// {
-//     fn identity() -> Self {
-//         Cardinality(0)
-//     }
+impl<L> Annotation<L> for Cardinality {
+    fn from_leaf(_: &L) -> Self {
+        Cardinality(1)
+    }
 
-//     fn from_leaf(_: &C::Leaf) -> Self {
-//         Cardinality(1)
-//     }
-
-//     fn from_node(node: &C) -> Self {
-//         let mut c = 0;
-//         for i in 0.. {
-//             c += match node.child::<Self>(i) {
-//                 Child::Leaf(_) => 1,
-//                 Child::Node(n) => n.annotation().borrow().0,
-//                 Child::EndOfNode => return Cardinality(c),
-//                 Child::Empty => 0,
-//             }
-//         }
-//         unreachable!()
-//     }
-// }
+    fn combine(annotations: &[Ann<Self>]) -> Self {
+        let mut sum = 0;
+        for a in annotations {
+            sum += a.0
+        }
+        Cardinality(sum)
+    }
+}
 
 /// Find the nth element of any collection satisfying the given annotation
 /// constraints
 pub trait Nth<'a, A>
 where
     Self: Compound<A>,
-    A: Borrow<Cardinality>,
+    A: Annotation<Self::Leaf> + Borrow<Cardinality> + Clone,
 {
     /// Construct a `Branch` pointing to the `nth` element, if any
     fn nth(&'a self, n: u64)
@@ -63,8 +52,8 @@ where
 
 impl<'a, C, A> Nth<'a, A> for C
 where
-    C: Compound<A>,
-    A: Borrow<Cardinality>,
+    C: Compound<A> + Clone,
+    A: Annotation<Self::Leaf> + Borrow<Cardinality>,
 {
     fn nth(
         &'a self,

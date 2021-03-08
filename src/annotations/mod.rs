@@ -17,56 +17,36 @@ mod cardinality;
 mod max;
 mod unit;
 
+/// Custom smart pointer, like a lightweight `std::borrow::Cow` since it
+/// is not available in `core`
+pub enum Ann<'a, T> {
+    Owned(T),
+    Borrowed(&'a T),
+}
+
+impl<'a, T> Deref for Ann<'a, T> {
+    type Target = T;
+    fn deref(&self) -> &T {
+        match self {
+            Ann::Owned(ref t) => t,
+            Ann::Borrowed(t) => t,
+        }
+    }
+}
+
 // re-exports
 pub use cardinality::{Cardinality, Nth};
 pub use max::Max;
 
-/// The value is an annotation that can be derived from a leaf or a node
-// pub trait Annotation<C>
-// where
-//     C: Compound<A>,
-// {
-//     /// The identity value of the annotation
-//     fn identity() -> Self;
-//     /// Compute annotation from node
-//     fn from_node(node: &C) -> Self;
-//     /// Compute annotation from leaf
-//     fn from_leaf(leaf: &C::Leaf) -> Self;
-// }
-
-#[derive(Clone)]
-/// A reference o a value carrying an annotation
-pub struct AnnRef<'a, C, A>
-where
-    C: Compound<A>,
-{
-    annotation: &'a A,
-    compound: Rc<C>,
-}
-
-impl<'a, C, A> AnnRef<'a, C, A>
-where
-    C: Compound<A>,
-{
-    pub fn annotation(&self) -> &A {
-        self.annotation
-    }
-}
-
-impl<'a, C, A> Deref for AnnRef<'a, C, A>
-where
-    C: Compound<A>,
-{
-    type Target = C;
-
-    fn deref(&self) -> &Self::Target {
-        &*self.compound
-    }
+pub trait Annotation<Leaf>: Default + Clone {
+    fn from_leaf(leaf: &Leaf) -> Self;
+    fn combine(annotations: &[Ann<Self>]) -> Self;
 }
 
 pub struct AnnRefMut<'a, C, A>
 where
     C: Compound<A>,
+    A: Annotation<C::Leaf> + Clone,
 {
     annotation: &'a mut A,
     compound: ValMut<'a, C>,
@@ -75,6 +55,7 @@ where
 impl<'a, C, A> Deref for AnnRefMut<'a, C, A>
 where
     C: Compound<A>,
+    A: Annotation<C::Leaf> + Clone,
 {
     type Target = C;
 
@@ -86,6 +67,7 @@ where
 impl<'a, C, A> DerefMut for AnnRefMut<'a, C, A>
 where
     C: Compound<A>,
+    A: Annotation<C::Leaf> + Clone,
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.compound
@@ -95,26 +77,32 @@ where
 impl<'a, C, A> Drop for AnnRefMut<'a, C, A>
 where
     C: Compound<A>,
+    A: Annotation<C::Leaf> + Clone,
 {
     fn drop(&mut self) {
         *self.annotation = C::annotate_node(&*self.compound)
     }
 }
 
-#[derive(Clone, Debug, Canon)]
+#[derive(Debug, Canon)]
 /// A wrapper type that keeps the annotation of the Compound referenced cached
-pub struct Annotated<C, A>(Repr<C>, A)
-where
-    C: Compound<A>;
+pub struct Annotated<C, A>(Repr<C>, Rc<A>);
+
+impl<C, A> Clone for Annotated<C, A> {
+    fn clone(&self) -> Self {
+        Annotated(self.0.clone(), self.1.clone())
+    }
+}
 
 impl<C, A> Annotated<C, A>
 where
     C: Compound<A>,
+    A: Annotation<C::Leaf> + Clone,
 {
     /// Create a new annotated type
     pub fn new(compound: C) -> Self {
         let a = C::annotate_node(&compound);
-        Annotated(Repr::new(compound), a)
+        Annotated(Repr::new(compound), Rc::new(a))
     }
 
     /// Returns a reference to to the annotation stored
@@ -123,20 +111,17 @@ where
     }
 
     /// Returns an annotated reference to the underlying type
-    pub fn val(&self) -> Result<AnnRef<C, A>, CanonError> {
-        Ok(AnnRef {
-            annotation: &self.1,
-            compound: self.0.val()?,
-        })
+    pub fn val(&self) -> Result<Rc<C>, CanonError> {
+        self.0.val()
     }
 
     /// Returns a Mutable annotated reference to the underlying type
     pub fn val_mut(&mut self) -> Result<AnnRefMut<C, A>, CanonError>
     where
-        C: Canon,
+        A: Clone,
     {
         Ok(AnnRefMut {
-            annotation: &mut self.1,
+            annotation: Rc::make_mut(&mut self.1),
             compound: self.0.val_mut()?,
         })
     }
@@ -157,10 +142,10 @@ mod tests {
     #[derive(Clone, Canon)]
     struct Recepticle<T, A>(Vec<T>, PhantomData<A>);
 
-    impl<T, A> Compound for Recepticle<T, A> {
+    impl<T, A> Compound<A> for Recepticle<T, A> {
         type Leaf = T;
 
-        fn child<A2>(&self, ofs: usize) -> Child<Self, A2> {
+        fn child(&self, ofs: usize) -> Child<Self, A> {
             match self.0.get(ofs) {
                 Some(leaf) => Child::Leaf(leaf),
                 None => Child::EndOfNode,
@@ -168,7 +153,7 @@ mod tests {
         }
 
         /// Returns a mutable reference to a possible child at specified offset
-        fn child_mut<A2>(&mut self, ofs: usize) -> ChildMut<Self, A2> {
+        fn child_mut(&mut self, ofs: usize) -> ChildMut<Self, A> {
             match self.0.get_mut(ofs) {
                 Some(leaf) => ChildMut::Leaf(leaf),
                 None => ChildMut::EndOfNode,
