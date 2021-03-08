@@ -5,6 +5,7 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use crate::annotations::{Ann, Annotated, Annotation};
+use canonical::Canon;
 
 /// The response of the `child` method on a `Compound` node.
 pub enum Child<'a, C, A>
@@ -37,7 +38,7 @@ where
 }
 
 /// A type that can recursively contain itself and leaves.
-pub trait Compound<A>: Sized {
+pub trait Compound<A>: Sized + Canon {
     /// The leaf type of the Compound collection
     type Leaf;
 

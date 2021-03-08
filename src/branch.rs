@@ -6,10 +6,9 @@
 
 use core::ops::Deref;
 
-use alloc::rc::Rc;
 use alloc::vec::Vec;
 
-use canonical::CanonError;
+use canonical::{CanonError, Val};
 
 use crate::annotations::{Annotated, Annotation};
 use crate::compound::{Child, Compound};
@@ -48,7 +47,7 @@ pub struct PartialBranch<'a, C, A> {
 
 enum TopNode<'a, C> {
     Root(&'a C),
-    Rc(Rc<C>),
+    Val(Val<'a, C>),
 }
 
 impl<'a, C> Deref for TopNode<'a, C> {
@@ -57,7 +56,7 @@ impl<'a, C> Deref for TopNode<'a, C> {
     fn deref(&self) -> &Self::Target {
         match self {
             TopNode::Root(target) => target,
-            TopNode::Rc(rc) => &*rc,
+            TopNode::Val(rc) => &*rc,
         }
     }
 }
@@ -100,16 +99,31 @@ where
     where
         W: FnMut(Walk<C, A>) -> Step<C, A>,
     {
-        let mut push = None;
+        enum State<C> {
+            Init,
+            Push(C),
+            Pop,
+            Advance,
+        }
+
+        let mut state = State::Init;
         loop {
-            if let Some(push) = push.take() {
-                self.levels.push(push);
+            match core::mem::replace(&mut state, State::Init) {
+                State::Init => (),
+                State::Push(push) => self.levels.push(push),
+                State::Pop => match self.levels.pop() {
+                    Some(_) => {
+                        self.advance();
+                    }
+                    None => return Ok(None),
+                },
+                State::Advance => self.advance(),
             }
 
             let (node, ofs) = match self.levels.last() {
                 Some(top_level) => {
                     let ofs = top_level.offset();
-                    (TopNode::Rc(top_level.node().val()?), ofs)
+                    (TopNode::Val(top_level.node().val()?), ofs)
                 }
                 None => (TopNode::Root(self.root), self.root_offset),
             };
@@ -119,12 +133,8 @@ where
                 Child::Node(c) => walker(Walk::Node(c)),
                 Child::Empty => todo!(),
                 Child::EndOfNode => {
-                    if self.levels.pop().is_none() {
-                        // last level
-                        return Ok(None);
-                    } else {
-                        Step::Next
-                    }
+                    state = State::Pop;
+                    continue;
                 }
             };
 
@@ -132,10 +142,14 @@ where
                 Step::Found(_) => {
                     return Ok(Some(()));
                 }
-                Step::Next => self.advance(),
-                Step::Abort => return Ok(None),
+                Step::Next => {
+                    state = State::Advance;
+                }
                 Step::Into(n) => {
-                    push = Some(Level::new(n.clone()));
+                    state = State::Push(Level::new(n.clone()));
+                }
+                Step::Abort => {
+                    return Ok(None);
                 }
             }
         }
@@ -184,8 +198,6 @@ where
     Leaf(&'a C::Leaf),
     /// Walk encountered an annotated node
     Node(&'a Annotated<C, A>),
-    /// Abort search
-    Abort,
 }
 
 /// The return value from a closure to `walk` the tree.
@@ -213,6 +225,18 @@ where
     /// Returns the depth of the branch
     pub fn depth(&self) -> usize {
         self.0.depth()
+    }
+
+    /// Returns a branch that maps the leaf to a specific value.
+    /// Used in maps for example, to get easy access to the value of the KV-pair
+    pub fn map_leaf<M>(
+        self,
+        closure: for<'b> fn(&'b C::Leaf) -> &'b M,
+    ) -> MappedBranch<'a, C, A, M> {
+        MappedBranch {
+            inner: self,
+            closure,
+        }
     }
 
     /// Performs a tree walk, returning either a valid branch or None if the
@@ -259,5 +283,26 @@ where
 
     fn deref(&self) -> &Self::Target {
         self.0.leaf().expect("Invalid branch")
+    }
+}
+
+pub struct MappedBranch<'a, C, A, M>
+where
+    C: Compound<A>,
+    A: Annotation<C::Leaf>,
+{
+    inner: Branch<'a, C, A>,
+    closure: for<'b> fn(&'b C::Leaf) -> &'b M,
+}
+
+impl<'a, C, A, M> Deref for MappedBranch<'a, C, A, M>
+where
+    C: Compound<A>,
+    A: Annotation<C::Leaf>,
+{
+    type Target = M;
+
+    fn deref(&self) -> &M {
+        (self.closure)(&*self.inner)
     }
 }

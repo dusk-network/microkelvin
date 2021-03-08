@@ -6,7 +6,7 @@
 
 use core::ops::{Deref, DerefMut};
 
-use canonical::{Canon, CanonError, Repr, ValMut};
+use canonical::{CanonError, Repr, Val, ValMut};
 use canonical_derive::Canon;
 
 use crate::compound::Compound;
@@ -38,15 +38,19 @@ impl<'a, T> Deref for Ann<'a, T> {
 pub use cardinality::{Cardinality, Nth};
 pub use max::Max;
 
+/// The trait defining an annotation type over a leaf
 pub trait Annotation<Leaf>: Default + Clone {
+    /// Creates an annotation from the leaf type
     fn from_leaf(leaf: &Leaf) -> Self;
+    /// Combines multiple annotations in an associative way
     fn combine(annotations: &[Ann<Self>]) -> Self;
 }
 
+/// Smart pointer that automatically updates its annotation on drop
 pub struct AnnRefMut<'a, C, A>
 where
     C: Compound<A>,
-    A: Annotation<C::Leaf> + Clone,
+    A: Annotation<C::Leaf>,
 {
     annotation: &'a mut A,
     compound: ValMut<'a, C>,
@@ -55,7 +59,7 @@ where
 impl<'a, C, A> Deref for AnnRefMut<'a, C, A>
 where
     C: Compound<A>,
-    A: Annotation<C::Leaf> + Clone,
+    A: Annotation<C::Leaf>,
 {
     type Target = C;
 
@@ -67,7 +71,7 @@ where
 impl<'a, C, A> DerefMut for AnnRefMut<'a, C, A>
 where
     C: Compound<A>,
-    A: Annotation<C::Leaf> + Clone,
+    A: Annotation<C::Leaf>,
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.compound
@@ -77,7 +81,7 @@ where
 impl<'a, C, A> Drop for AnnRefMut<'a, C, A>
 where
     C: Compound<A>,
-    A: Annotation<C::Leaf> + Clone,
+    A: Annotation<C::Leaf>,
 {
     fn drop(&mut self) {
         *self.annotation = C::annotate_node(&*self.compound)
@@ -97,7 +101,7 @@ impl<C, A> Clone for Annotated<C, A> {
 impl<C, A> Annotated<C, A>
 where
     C: Compound<A>,
-    A: Annotation<C::Leaf> + Clone,
+    A: Annotation<C::Leaf>,
 {
     /// Create a new annotated type
     pub fn new(compound: C) -> Self {
@@ -111,15 +115,12 @@ where
     }
 
     /// Returns an annotated reference to the underlying type
-    pub fn val(&self) -> Result<Rc<C>, CanonError> {
+    pub fn val(&self) -> Result<Val<C>, CanonError> {
         self.0.val()
     }
 
     /// Returns a Mutable annotated reference to the underlying type
-    pub fn val_mut(&mut self) -> Result<AnnRefMut<C, A>, CanonError>
-    where
-        A: Clone,
-    {
+    pub fn val_mut(&mut self) -> Result<AnnRefMut<C, A>, CanonError> {
         Ok(AnnRefMut {
             annotation: Rc::make_mut(&mut self.1),
             compound: self.0.val_mut()?,
@@ -142,7 +143,11 @@ mod tests {
     #[derive(Clone, Canon)]
     struct Recepticle<T, A>(Vec<T>, PhantomData<A>);
 
-    impl<T, A> Compound<A> for Recepticle<T, A> {
+    impl<T, A> Compound<A> for Recepticle<T, A>
+    where
+        T: Canon,
+        A: Canon,
+    {
         type Leaf = T;
 
         fn child(&self, ofs: usize) -> Child<Self, A> {
@@ -171,14 +176,6 @@ mod tests {
 
         fn push(&mut self, t: T) {
             self.0.push(t)
-        }
-
-        fn get(&self, i: usize) -> Option<&T> {
-            self.0.get(i)
-        }
-
-        fn get_mut(&mut self, i: usize) -> Option<&mut T> {
-            self.0.get_mut(i)
         }
     }
 
@@ -221,13 +218,4 @@ mod tests {
 
         Ok(())
     }
-
-    // #[test]
-    // fn ordering() {
-    //     const N_INF: Max<i32> = Max::NegativeInfinity;
-
-    //     assert!(Max::Maximum(0) > Max::Maximum(-1));
-    //     assert!(Max::Maximum(-1234) > Max::NegativeInfinity);
-    //     assert!(N_INF < Max::Maximum(-1234));
-    // }
 }

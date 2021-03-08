@@ -4,7 +4,7 @@ use crate::annotations::{Ann, Annotation};
 use crate::branch::{Branch, Step, Walk};
 use crate::branch_mut::{BranchMut, StepMut, WalkMut};
 use crate::Compound;
-use canonical::{Canon, CanonError};
+use canonical::CanonError;
 use canonical_derive::Canon;
 use core::borrow::Borrow;
 
@@ -77,7 +77,6 @@ where
                     Step::Into(n)
                 }
             }
-            Walk::Abort => Step::Abort,
         })
     }
 

@@ -23,7 +23,7 @@ mod branch;
 mod branch_mut;
 mod compound;
 
-pub use annotations::{Annotated, Cardinality, Max, Nth};
+pub use annotations::{Annotated, Annotation, Cardinality, Max, Nth};
 pub use branch::{Branch, Step, Walk};
 pub use branch_mut::{BranchMut, LevelMut, StepMut, WalkMut};
 pub use compound::{Child, ChildMut, Compound};
