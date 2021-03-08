@@ -165,25 +165,30 @@ where
                 self.levels.push(push);
             }
 
-            match self.levels.last_mut() {
-                Some(top_level) => {
-                    let ofs = path();
-                    *top_level.offset_mut() = ofs;
+            let ofs = path();
 
-                    match top_level.node().val()?.child(ofs) {
-                        Child::Leaf(_) => {
-                            return Ok(Some(()));
-                        }
-                        Child::Node(c) => push = Some(Level::new(c.clone())),
-                        Child::Empty => {
-                            return Ok(None);
-                        }
-                        Child::EndOfNode => {
-                            return Ok(None);
-                        }
-                    }
+            let node = match self.levels.last_mut() {
+                Some(top_level) => {
+                    *top_level.offset_mut() = ofs;
+                    TopNode::Val(top_level.node().val()?)
                 }
-                None => todo!(),
+                None => {
+                    self.root_offset = ofs;
+                    TopNode::Root(self.root)
+                }
+            };
+
+            match node.child(ofs) {
+                Child::Leaf(_) => {
+                    return Ok(Some(()));
+                }
+                Child::Node(c) => push = Some(Level::new(c.clone())),
+                Child::Empty => {
+                    return Ok(None);
+                }
+                Child::EndOfNode => {
+                    return Ok(None);
+                }
             }
         }
     }

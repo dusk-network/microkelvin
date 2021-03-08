@@ -74,10 +74,6 @@ where
         LevelMut { offset: 0, node }
     }
 
-    fn node(&self) -> &Annotated<C, A> {
-        &self.node
-    }
-
     fn node_mut(&mut self) -> &mut Annotated<C, A> {
         &mut self.node
     }
@@ -268,25 +264,31 @@ where
                 self.levels.push(push);
             }
 
-            match self.levels.last_mut() {
+            let ofs = path();
+
+            let node = match self.levels.last_mut() {
                 Some(top_level) => {
-                    let ofs = path();
                     *top_level.offset_mut() = ofs;
 
-                    match top_level.node().val()?.child(ofs) {
-                        Child::Leaf(_) => {
-                            return Ok(Some(()));
-                        }
-                        Child::Node(c) => push = Some(LevelMut::new(c.clone())),
-                        Child::Empty => {
-                            return Ok(None);
-                        }
-                        Child::EndOfNode => {
-                            return Ok(None);
-                        }
-                    }
+                    TopNodeMut::Val(top_level.node_mut().val_mut()?)
                 }
-                None => todo!(),
+                None => {
+                    self.root_offset = ofs;
+                    TopNodeMut::Root(self.root)
+                }
+            };
+
+            match node.child(ofs) {
+                Child::Leaf(_) => {
+                    return Ok(Some(()));
+                }
+                Child::Node(c) => push = Some(LevelMut::new(c.clone())),
+                Child::Empty => {
+                    return Ok(None);
+                }
+                Child::EndOfNode => {
+                    return Ok(None);
+                }
             }
         }
     }
