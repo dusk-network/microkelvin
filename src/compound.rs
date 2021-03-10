@@ -69,6 +69,12 @@ pub trait Compound<A>: Sized + Canon {
                 Child::Empty => (),
                 Child::EndOfNode => break,
             }
+            let n = 1024;
+            debug_assert!(
+                i < n,
+                "Annotation threshold exceeded after {} iterations.",
+                n
+            );
         }
         A::combine(&children[..])
     }

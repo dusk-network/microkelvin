@@ -13,79 +13,10 @@ use canonical::CanonError;
 
 use crate::annotations::{AnnRefMut, Annotated, Annotation};
 use crate::compound::{Child, ChildMut, Compound};
+use crate::walk::{Step, Walk};
 
-/// The argument given to a closure to `walk` a `BranchMut`.
-pub enum WalkMut<'a, C, A>
-where
-    C: Compound<A>,
-{
-    /// Walk encountered a leaf
-    Leaf(&'a mut C::Leaf),
-    /// Walk encountered a node
-    Node(&'a mut Annotated<C, A>),
-}
-
-/// The return value from a closure to `walk` the tree.
-///
-/// Determines how the `BranchMut` is constructed
-pub enum StepMut<'a, C, A>
-where
-    C: Compound<A>,
-{
-    /// The correct leaf was found!
-    Found(&'a mut C::Leaf),
-    /// Step to the next child on this level
-    Next,
-    /// Traverse the branch deeper
-    Into(&'a mut Annotated<C, A>),
-    /// Abort the search
-    Abort,
-}
-
-/// Represents a level in the branch.
-///
-/// The offset is pointing at the child of the node stored behind the LevelInner
-/// pointer.
-pub struct LevelMut<C, A> {
-    offset: usize,
-    node: Annotated<C, A>,
-}
-
-impl<C, A> Into<Annotated<C, A>> for LevelMut<C, A> {
-    fn into(self) -> Annotated<C, A> {
-        self.node
-    }
-}
-
-impl<C, A> LevelMut<C, A>
-where
-    C: Compound<A>,
-{
-    /// Returns the offset of the branch level
-    pub fn offset(&self) -> usize {
-        self.offset
-    }
-
-    fn offset_mut(&mut self) -> &mut usize {
-        &mut self.offset
-    }
-
-    fn new(node: Annotated<C, A>) -> Self {
-        LevelMut { offset: 0, node }
-    }
-
-    fn node_mut(&mut self) -> &mut Annotated<C, A> {
-        &mut self.node
-    }
-}
-
-pub struct PartialBranchMut<'a, C, A> {
-    root: &'a mut C,
-    root_offset: usize,
-    levels: Vec<LevelMut<C, A>>,
-}
-
-enum TopNodeMut<'a, C, A>
+#[derive(Debug)]
+enum LevelNodeMut<'a, C, A>
 where
     C: Compound<A>,
     A: Annotation<C::Leaf>,
@@ -94,7 +25,7 @@ where
     Val(AnnRefMut<'a, C, A>),
 }
 
-impl<'a, C, A> Deref for TopNodeMut<'a, C, A>
+impl<'a, C, A> Deref for LevelNodeMut<'a, C, A>
 where
     C: Compound<A>,
     A: Annotation<C::Leaf>,
@@ -103,24 +34,90 @@ where
 
     fn deref(&self) -> &Self::Target {
         match self {
-            TopNodeMut::Root(target) => target,
-            TopNodeMut::Val(rc) => &*rc,
+            LevelNodeMut::Root(target) => target,
+            LevelNodeMut::Val(val) => &**val,
         }
     }
 }
 
-impl<'a, C, A> DerefMut for TopNodeMut<'a, C, A>
+impl<'a, C, A> DerefMut for LevelNodeMut<'a, C, A>
 where
     C: Compound<A>,
     A: Annotation<C::Leaf>,
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
         match self {
-            TopNodeMut::Root(target) => target,
-            TopNodeMut::Val(val) => val,
+            LevelNodeMut::Root(target) => target,
+            LevelNodeMut::Val(val) => &mut **val,
         }
     }
 }
+
+#[derive(Debug)]
+pub struct LevelMut<'a, C, A>
+where
+    C: Compound<A>,
+    A: Annotation<C::Leaf>,
+{
+    offset: usize,
+    node: LevelNodeMut<'a, C, A>,
+}
+
+impl<'a, C, A> Deref for LevelMut<'a, C, A>
+where
+    C: Compound<A>,
+    A: Annotation<C::Leaf>,
+{
+    type Target = C;
+
+    fn deref(&self) -> &Self::Target {
+        &*self.node
+    }
+}
+
+impl<'a, C, A> DerefMut for LevelMut<'a, C, A>
+where
+    C: Compound<A>,
+    A: Annotation<C::Leaf>,
+{
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut *self.node
+    }
+}
+
+impl<'a, C, A> LevelMut<'a, C, A>
+where
+    C: Compound<A>,
+    A: Annotation<C::Leaf>,
+{
+    fn new_root(root: &'a mut C) -> LevelMut<'a, C, A> {
+        LevelMut {
+            offset: 0,
+            node: LevelNodeMut::Root(root),
+        }
+    }
+
+    fn new_val(ann: AnnRefMut<'a, C, A>) -> LevelMut<'a, C, A> {
+        LevelMut {
+            offset: 0,
+            node: LevelNodeMut::Val(ann),
+        }
+    }
+
+    /// Returns the offset of the branch level
+    pub fn offset(&self) -> usize {
+        self.offset
+    }
+
+    fn offset_mut(&mut self) -> &mut usize {
+        &mut self.offset
+    }
+}
+
+pub struct PartialBranchMut<'a, C, A>(Vec<LevelMut<'a, C, A>>)
+where
+    C: Compound<A>,
+    A: Annotation<C::Leaf>;
 
 impl<'a, C, A> PartialBranchMut<'a, C, A>
 where
@@ -128,76 +125,73 @@ where
     A: Annotation<C::Leaf>,
 {
     fn new(root: &'a mut C) -> Self {
-        PartialBranchMut {
-            root,
-            root_offset: 0,
-            levels: vec![],
-        }
+        PartialBranchMut(vec![LevelMut::new_root(root)])
     }
 
     pub fn depth(&self) -> usize {
-        1 + self.levels.len()
+        self.0.len()
     }
 
-    fn leaf(&self) -> Option<&C::Leaf> {
-        match self.levels.last() {
-            Some(_last) => todo!(),
-            None => match self.root.child(self.root_offset) {
-                Child::Leaf(leaf) => Some(leaf),
-                _ => None,
-            },
+    fn top(&self) -> &LevelMut<C, A> {
+        self.0.last().expect("Never empty")
+    }
+
+    fn top_mut(&mut self) -> &mut LevelMut<'a, C, A> {
+        self.0.last_mut().expect("Never empty")
+    }
+
+    fn leaf(&'a self) -> Option<&'a C::Leaf> {
+        let top = self.top();
+        let ofs = top.offset();
+
+        match top.child(ofs) {
+            Child::Leaf(l) => Some(l),
+            _ => None,
         }
     }
 
-    fn leaf_mut(&mut self) -> Option<&mut C::Leaf> {
-        match self.levels.last_mut() {
-            Some(_last) => todo!(),
-            None => match self.root.child_mut(self.root_offset) {
-                ChildMut::Leaf(leaf) => Some(leaf),
-                _ => None,
-            },
+    fn leaf_mut(&mut self) -> Option<&'a mut C::Leaf> {
+        let top: &mut LevelMut<'_, C, A> = self.top_mut();
+        let top_ext: &mut LevelMut<'a, C, A> =
+            unsafe { core::mem::transmute(top) };
+
+        let ofs = top_ext.offset();
+
+        match top_ext.child_mut(ofs) {
+            ChildMut::Leaf(l) => Some(l),
+            _ => None,
         }
     }
 
     fn advance(&mut self) {
-        match self.levels.last_mut() {
-            Some(last) => *last.offset_mut() += 1,
-            None => self.root_offset += 1,
-        }
+        *self.top_mut().offset_mut() += 1
     }
 
     fn pop(&mut self) -> Option<()> {
-        // We can safely assume that all calls to "val_mut" here succeeds,
-        // since the nodes must already be in memory from when building up the
-        // branch.
+        // Never pop the root level
+        if self.0.len() > 2 {
+            self.0.pop().map(|popped| {
+                let top = self.top_mut();
+                let ofs = top.offset();
+                if let ChildMut::Node(to_update) = top.child_mut(ofs) {
+                    // we need to update the new top child and replace it with
+                    // the node we just popped off the
+                    // branch
 
-        // Therefore we can forego the Error handling.
-        // This is neccesary to be able to call this method from a Drop
-        // implementation.
-
-        self.levels
-            .pop()
-            .map(|popped| match self.levels.last_mut() {
-                Some(top_level) => {
-                    let ofs = top_level.offset();
-                    if let ChildMut::Node(to_update) = top_level
-                        .node_mut()
-                        .val_mut()
-                        .expect("See comment above")
-                        .child_mut(ofs)
-                    {
-                        *to_update = popped.into()
-                    } else {
-                        unreachable!("Invalid parent structure")
-                    }
+                    let ann = Annotated::new(popped.clone());
+                    *to_update = ann;
+                } else {
+                    unreachable!("Invalid parent structure")
                 }
-                None => todo!(),
             })
+        } else {
+            None
+        }
     }
 
     fn walk<W>(&mut self, mut walker: W) -> Result<Option<()>, CanonError>
     where
-        W: FnMut(WalkMut<C, A>) -> StepMut<C, A>,
+        W: FnMut(Walk<C, A>) -> Step,
     {
         enum State<C> {
             Init,
@@ -210,8 +204,8 @@ where
         loop {
             match mem::replace(&mut state, State::Init) {
                 State::Init => (),
-                State::Push(push) => self.levels.push(push),
-                State::Pop => match self.levels.pop() {
+                State::Push(push) => self.0.push(push),
+                State::Pop => match self.0.pop() {
                     Some(_) => {
                         self.advance();
                     }
@@ -220,17 +214,13 @@ where
                 State::Advance => self.advance(),
             }
 
-            let (mut node, ofs) = match self.levels.last_mut() {
-                Some(top_level) => {
-                    let ofs = top_level.offset();
-                    (TopNodeMut::Val(top_level.node_mut().val_mut()?), ofs)
-                }
-                None => (TopNodeMut::Root(self.root), self.root_offset),
-            };
+            let top = self.top_mut();
+            let ofs = top.offset();
+            let top_child = top.child_mut(ofs);
 
-            let step = match node.child_mut(ofs) {
-                ChildMut::Leaf(l) => walker(WalkMut::Leaf(l)),
-                ChildMut::Node(c) => walker(WalkMut::Node(c)),
+            let step = match top_child {
+                ChildMut::Leaf(ref l) => walker(Walk::Leaf(*l)),
+                ChildMut::Node(ref c) => walker(Walk::Node(c.val()?)),
                 ChildMut::Empty => todo!(),
                 ChildMut::EndOfNode => {
                     state = State::Pop;
@@ -239,17 +229,26 @@ where
             };
 
             match step {
-                StepMut::Found(_) => {
+                Step::Found => {
                     return Ok(Some(()));
                 }
-                StepMut::Next => {
+                Step::Next => {
                     state = State::Advance;
                 }
-                StepMut::Into(n) => {
-                    state = State::Push(LevelMut::new(n.clone()));
+                Step::Into => {
+                    if let ChildMut::Node(n) = top_child {
+                        let level: LevelMut<'_, C, A> =
+                            LevelMut::new_val(n.val_mut()?);
+                        // extend the lifetime of the Level.
+                        let extended: LevelMut<'a, C, A> =
+                            unsafe { core::mem::transmute(level) };
+                        state = State::Push(extended);
+                    } else {
+                        panic!("Attempted descent into non-node")
+                    }
                 }
 
-                StepMut::Abort => return Ok(None),
+                Step::Abort => return Ok(None),
             }
         }
     }
@@ -261,32 +260,29 @@ where
         let mut push = None;
         loop {
             if let Some(push) = push.take() {
-                self.levels.push(push);
+                self.0.push(push);
             }
 
             let ofs = path();
+            let top = self.top_mut();
+            *top.offset_mut() = ofs;
 
-            let node = match self.levels.last_mut() {
-                Some(top_level) => {
-                    *top_level.offset_mut() = ofs;
-
-                    TopNodeMut::Val(top_level.node_mut().val_mut()?)
-                }
-                None => {
-                    self.root_offset = ofs;
-                    TopNodeMut::Root(self.root)
-                }
-            };
-
-            match node.child(ofs) {
-                Child::Leaf(_) => {
+            match top.child_mut(ofs) {
+                ChildMut::Leaf(_) => {
                     return Ok(Some(()));
                 }
-                Child::Node(c) => push = Some(LevelMut::new(c.clone())),
-                Child::Empty => {
+                ChildMut::Node(n) => {
+                    let level: LevelMut<'_, C, A> =
+                        LevelMut::new_val(n.val_mut()?);
+                    // extend the lifetime of the Level.
+                    let extended: LevelMut<'a, C, A> =
+                        unsafe { core::mem::transmute(level) };
+                    push = Some(extended);
+                }
+                ChildMut::Empty => {
                     return Ok(None);
                 }
-                Child::EndOfNode => {
+                ChildMut::EndOfNode => {
                     return Ok(None);
                 }
             }
@@ -346,7 +342,7 @@ where
         walker: W,
     ) -> Result<Option<Self>, CanonError>
     where
-        W: FnMut(WalkMut<C, A>) -> StepMut<C, A>,
+        W: FnMut(Walk<C, A>) -> Step,
     {
         let mut partial = PartialBranchMut::new(root);
         Ok(match partial.walk(walker)? {

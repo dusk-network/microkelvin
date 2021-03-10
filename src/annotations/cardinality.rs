@@ -1,8 +1,9 @@
 /// Annotation to keep track of the cardinality,
 /// i.e. the amount of elements in a collection
 use crate::annotations::{Ann, Annotation};
-use crate::branch::{Branch, Step, Walk};
-use crate::branch_mut::{BranchMut, StepMut, WalkMut};
+use crate::branch::Branch;
+use crate::branch_mut::BranchMut;
+use crate::walk::{Step, Walk};
 use crate::Compound;
 use canonical::CanonError;
 use canonical_derive::Canon;
@@ -50,6 +51,32 @@ where
     ) -> Result<Option<BranchMut<'a, Self, A>>, CanonError>;
 }
 
+fn nth<C, A>(walk: Walk<C, A>, index: &mut u64) -> Step
+where
+    C: Compound<A>,
+    A: Annotation<C::Leaf> + Borrow<Cardinality> + Clone,
+{
+    match walk {
+        Walk::Leaf(_) => {
+            if *index == 0 {
+                Step::Found
+            } else {
+                *index -= 1;
+                Step::Next
+            }
+        }
+        Walk::Node(n) => {
+            let &Cardinality(card) = n.annotation().borrow();
+            if card <= *index {
+                *index -= card;
+                Step::Next
+            } else {
+                Step::Into
+            }
+        }
+    }
+}
+
 impl<'a, C, A> Nth<'a, A> for C
 where
     C: Compound<A> + Clone,
@@ -59,49 +86,13 @@ where
         &'a self,
         mut index: u64,
     ) -> Result<Option<Branch<'a, Self, A>>, CanonError> {
-        Branch::<_, A>::walk(self, |f| match f {
-            Walk::Leaf(l) => {
-                if index == 0 {
-                    Step::Found(l)
-                } else {
-                    index -= 1;
-                    Step::Next
-                }
-            }
-            Walk::Node(n) => {
-                let &Cardinality(card) = n.annotation().borrow();
-                if card <= index {
-                    index -= card;
-                    Step::Next
-                } else {
-                    Step::Into(n)
-                }
-            }
-        })
+        Branch::<_, A>::walk(self, |w| nth(w, &mut index))
     }
 
     fn nth_mut(
         &'a mut self,
         mut index: u64,
     ) -> Result<Option<BranchMut<'a, Self, A>>, CanonError> {
-        BranchMut::<_, A>::walk(self, |f| match f {
-            WalkMut::Leaf(l) => {
-                if index == 0 {
-                    StepMut::Found(l)
-                } else {
-                    index -= 1;
-                    StepMut::Next
-                }
-            }
-            WalkMut::Node(n) => {
-                let &Cardinality(card) = n.annotation().borrow();
-                if card <= index {
-                    index -= card;
-                    StepMut::Next
-                } else {
-                    StepMut::Into(n)
-                }
-            }
-        })
+        BranchMut::<_, A>::walk(self, |w| nth(w, &mut index))
     }
 }

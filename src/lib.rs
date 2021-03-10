@@ -22,8 +22,10 @@ mod annotations;
 mod branch;
 mod branch_mut;
 mod compound;
+mod walk;
 
-pub use annotations::{Annotated, Annotation, Cardinality, Max, Nth};
-pub use branch::{Branch, Step, Walk};
-pub use branch_mut::{BranchMut, LevelMut, StepMut, WalkMut};
+pub use annotations::{Ann, Annotated, Annotation, Cardinality, Max, Nth};
+pub use branch::Branch;
+pub use branch_mut::BranchMut;
 pub use compound::{Child, ChildMut, Compound};
+pub use walk::{Step, Walk};
