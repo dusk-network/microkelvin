@@ -8,55 +8,75 @@ use core::ops::Deref;
 
 use alloc::vec::Vec;
 
-use canonical::{CanonError, Val};
+use canonical::CanonError;
 
-use crate::annotations::{Annotated, Annotation};
+use crate::annotations::{AnnRef, Annotation};
 use crate::compound::{Child, Compound};
+use crate::walk::{Step, Walk};
 
 #[derive(Debug)]
-struct Level<A, C> {
-    offset: usize,
-    node: Annotated<A, C>,
+enum LevelNode<'a, C, A> {
+    Root(&'a C),
+    Val(AnnRef<'a, C, A>),
 }
 
-impl<'a, C, A> Level<C, A> {
+#[derive(Debug)]
+struct Level<'a, C, A> {
+    offset: usize,
+    node: LevelNode<'a, C, A>,
+}
+
+impl<'a, C, A> Deref for Level<'a, C, A>
+where
+    C: Compound<A>,
+    A: Annotation<C::Leaf>,
+{
+    type Target = C;
+
+    fn deref(&self) -> &Self::Target {
+        &*self.node
+    }
+}
+
+impl<'a, C, A> Level<'a, C, A> {
+    pub fn new_root(root: &'a C) -> Level<'a, C, A> {
+        Level {
+            offset: 0,
+            node: LevelNode::Root(root),
+        }
+    }
+
+    pub fn new_val(ann: AnnRef<'a, C, A>) -> Level<'a, C, A> {
+        Level {
+            offset: 0,
+            node: LevelNode::Val(ann),
+        }
+    }
+
     /// Returns the offset of the branch level
     pub fn offset(&self) -> usize {
         self.offset
     }
 
-    fn new(node: Annotated<C, A>) -> Self {
-        Level { offset: 0, node }
-    }
-
     fn offset_mut(&mut self) -> &mut usize {
         &mut self.offset
-    }
-
-    fn node(&self) -> &Annotated<C, A> {
-        &self.node
     }
 }
 
 #[derive(Debug)]
-pub struct PartialBranch<'a, C, A> {
-    root: &'a C,
-    root_offset: usize,
-    levels: Vec<Level<C, A>>,
-}
+pub struct PartialBranch<'a, C, A>(Vec<Level<'a, C, A>>);
 
-enum TopNode<'a, C> {
-    Root(&'a C),
-    Val(Val<'a, C>),
-}
-
-impl<'a, C> Deref for TopNode<'a, C> {
+impl<'a, C, A> Deref for LevelNode<'a, C, A>
+where
+    C: Compound<A>,
+    A: Annotation<C::Leaf>,
+{
     type Target = C;
 
     fn deref(&self) -> &Self::Target {
         match self {
-            TopNode::Root(target) => target,
-            TopNode::Val(rc) => &*rc,
+            LevelNode::Root(target) => target,
+            LevelNode::Val(val) => &**val,
         }
     }
 }
@@ -67,41 +87,58 @@ where
     A: Annotation<C::Leaf>,
 {
     fn new(root: &'a C) -> Self {
-        PartialBranch {
-            root,
-            root_offset: 0,
-            levels: vec![],
-        }
+        let mut vec = Vec::new();
+        vec.push(Level::new_root(root));
+        PartialBranch(vec)
     }
 
     pub fn depth(&self) -> usize {
-        1 + self.levels.len()
+        self.0.len()
     }
 
-    fn leaf(&self) -> Option<&C::Leaf> {
-        match self.levels.last() {
-            Some(_last) => todo!(),
-            None => match self.root.child(self.root_offset) {
-                Child::Leaf(ref leaf) => Some(leaf),
-                _ => None,
-            },
+    fn leaf(&self) -> Option<&'a C::Leaf> {
+        let top = self.top();
+        let ofs = top.offset();
+
+        match top.child(ofs) {
+            Child::Leaf(l) => {
+                let l: &C::Leaf = l;
+                let l_extended: &'a C::Leaf =
+                    unsafe { core::mem::transmute(l) };
+                Some(l_extended)
+            }
+            _ => None,
         }
     }
 
+    fn top(&self) -> &Level<C, A> {
+        self.0.last().expect("Never empty")
+    }
+
+    fn top_mut(&mut self) -> &mut Level<'a, C, A> {
+        self.0.last_mut().expect("Never empty")
+    }
+
     fn advance(&mut self) {
-        match self.levels.last_mut() {
-            Some(last) => *last.offset_mut() += 1,
-            None => self.root_offset += 1,
+        *self.top_mut().offset_mut() += 1;
+    }
+
+    fn pop(&mut self) -> Option<Level<'a, C, A>> {
+        // We never pop the root
+        if self.0.len() > 1 {
+            self.0.pop()
+        } else {
+            None
         }
     }
 
     fn walk<W>(&mut self, mut walker: W) -> Result<Option<()>, CanonError>
     where
-        W: FnMut(Walk<C, A>) -> Step<C, A>,
+        W: FnMut(Walk<C, A>) -> Step,
     {
-        enum State<C> {
+        enum State<'a, C, A> {
             Init,
-            Push(C),
+            Push(Level<'a, C, A>),
             Pop,
             Advance,
         }
@@ -110,8 +147,8 @@ where
         loop {
             match core::mem::replace(&mut state, State::Init) {
                 State::Init => (),
-                State::Push(push) => self.levels.push(push),
-                State::Pop => match self.levels.pop() {
+                State::Push(push) => self.0.push(push),
+                State::Pop => match self.pop() {
                     Some(_) => {
                         self.advance();
                     }
@@ -120,18 +157,17 @@ where
                 State::Advance => self.advance(),
             }
 
-            let (node, ofs) = match self.levels.last() {
-                Some(top_level) => {
-                    let ofs = top_level.offset();
-                    (TopNode::Val(top_level.node().val()?), ofs)
-                }
-                None => (TopNode::Root(self.root), self.root_offset),
-            };
+            let top = self.top();
+            let ofs = top.offset();
+            let top_child = top.child(ofs);
 
-            let step = match node.child(ofs) {
+            let step = match top_child {
                 Child::Leaf(l) => walker(Walk::Leaf(l)),
-                Child::Node(c) => walker(Walk::Node(c)),
-                Child::Empty => todo!(),
+                Child::Node(n) => walker(Walk::Ann(n.annotation())),
+                Child::Empty => {
+                    state = State::Advance;
+                    continue;
+                }
                 Child::EndOfNode => {
                     state = State::Pop;
                     continue;
@@ -139,14 +175,22 @@ where
             };
 
             match step {
-                Step::Found(_) => {
+                Step::Found => {
                     return Ok(Some(()));
                 }
                 Step::Next => {
                     state = State::Advance;
                 }
-                Step::Into(n) => {
-                    state = State::Push(Level::new(n.clone()));
+                Step::Into => {
+                    if let Child::Node(n) = top_child {
+                        let level: Level<'_, C, A> = Level::new_val(n.val()?);
+                        // extend the lifetime of the Level.
+                        let extended: Level<'a, C, A> =
+                            unsafe { core::mem::transmute(level) };
+                        state = State::Push(extended);
+                    } else {
+                        panic!("Attempted descent into non-node")
+                    }
                 }
                 Step::Abort => {
                     return Ok(None);
@@ -162,27 +206,24 @@ where
         let mut push = None;
         loop {
             if let Some(push) = push.take() {
-                self.levels.push(push);
+                self.0.push(push);
             }
 
             let ofs = path();
+            let top = self.top_mut();
+            *top.offset_mut() = ofs;
 
-            let node = match self.levels.last_mut() {
-                Some(top_level) => {
-                    *top_level.offset_mut() = ofs;
-                    TopNode::Val(top_level.node().val()?)
-                }
-                None => {
-                    self.root_offset = ofs;
-                    TopNode::Root(self.root)
-                }
-            };
-
-            match node.child(ofs) {
+            match top.child(ofs) {
                 Child::Leaf(_) => {
                     return Ok(Some(()));
                 }
-                Child::Node(c) => push = Some(Level::new(c.clone())),
+                Child::Node(n) => {
+                    let level: Level<'_, C, A> = Level::new_val(n.val()?);
+                    // extend the lifetime of the Level.
+                    let extended: Level<'a, C, A> =
+                        unsafe { core::mem::transmute(level) };
+                    push = Some(extended);
+                }
                 Child::Empty => {
                     return Ok(None);
                 }
@@ -192,34 +233,6 @@ where
             }
         }
     }
-}
-
-/// The argument given to a closure to `walk` a `Branch`.
-pub enum Walk<'a, C, A>
-where
-    C: Compound<A>,
-{
-    /// Walk encountered a leaf
-    Leaf(&'a C::Leaf),
-    /// Walk encountered an annotated node
-    Node(&'a Annotated<C, A>),
-}
-
-/// The return value from a closure to `walk` the tree.
-///
-/// Determines how the `Branch` is constructed
-pub enum Step<'a, C, A>
-where
-    C: Compound<A>,
-{
-    /// The correct leaf was found!
-    Found(&'a C::Leaf),
-    /// Step to the next child on this level
-    Next,
-    /// Abort search
-    Abort,
-    /// Traverse the branch deeper
-    Into(&'a Annotated<C, A>),
 }
 
 impl<'a, C, A> Branch<'a, C, A>
@@ -248,7 +261,7 @@ where
     /// walk failed.
     pub fn walk<W>(root: &'a C, walker: W) -> Result<Option<Self>, CanonError>
     where
-        W: FnMut(Walk<C, A>) -> Step<C, A>,
+        W: FnMut(Walk<C, A>) -> Step,
     {
         let mut partial = PartialBranch::new(root);
         Ok(match partial.walk(walker)? {
@@ -303,6 +316,7 @@ where
 impl<'a, C, A, M> Deref for MappedBranch<'a, C, A, M>
 where
     C: Compound<A>,
+    C::Leaf: 'a,
     A: Annotation<C::Leaf>,
 {
     type Target = M;

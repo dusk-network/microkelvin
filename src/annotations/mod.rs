@@ -17,10 +17,13 @@ mod cardinality;
 mod max;
 mod unit;
 
+#[derive(Debug)]
 /// Custom smart pointer, like a lightweight `std::borrow::Cow` since it
 /// is not available in `core`
 pub enum Ann<'a, T> {
+    /// The annotation is owned
     Owned(T),
+    /// The annotation is a reference
     Borrowed(&'a T),
 }
 
@@ -36,7 +39,7 @@ impl<'a, T> Deref for Ann<'a, T> {
 
 // re-exports
 pub use cardinality::{Cardinality, Nth};
-pub use max::Max;
+pub use max::{Keyed, Max};
 
 /// The trait defining an annotation type over a leaf
 pub trait Annotation<Leaf>: Default + Clone {
@@ -46,6 +49,26 @@ pub trait Annotation<Leaf>: Default + Clone {
     fn combine(annotations: &[Ann<Self>]) -> Self;
 }
 
+#[derive(Debug)]
+/// Reference to an annotated value, along with it annotation
+pub struct AnnRef<'a, C, A> {
+    annotation: &'a A,
+    val: Val<'a, C>,
+}
+
+impl<'a, C, A> Deref for AnnRef<'a, C, A>
+where
+    C: Compound<A>,
+    A: Annotation<C::Leaf>,
+{
+    type Target = C;
+
+    fn deref(&self) -> &Self::Target {
+        &*self.val
+    }
+}
+
+#[derive(Debug)]
 /// Smart pointer that automatically updates its annotation on drop
 pub struct AnnRefMut<'a, C, A>
 where
@@ -53,7 +76,17 @@ where
     A: Annotation<C::Leaf>,
 {
     annotation: &'a mut A,
-    compound: ValMut<'a, C>,
+    val: ValMut<'a, C>,
+}
+
+impl<'a, C, A> AnnRefMut<'a, C, A>
+where
+    C: Compound<A>,
+    A: Annotation<C::Leaf>,
+{
+    pub fn annotation(&self) -> &A {
+        self.annotation
+    }
 }
 
 impl<'a, C, A> Deref for AnnRefMut<'a, C, A>
@@ -64,7 +97,7 @@ where
     type Target = C;
 
     fn deref(&self) -> &Self::Target {
-        &*self.compound
+        &*self.val
     }
 }
 
@@ -74,7 +107,7 @@ where
     A: Annotation<C::Leaf>,
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.compound
+        &mut self.val
     }
 }
 
@@ -84,7 +117,7 @@ where
     A: Annotation<C::Leaf>,
 {
     fn drop(&mut self) {
-        *self.annotation = C::annotate_node(&*self.compound)
+        *self.annotation = C::annotate_node(&*self.val)
     }
 }
 
@@ -115,15 +148,18 @@ where
     }
 
     /// Returns an annotated reference to the underlying type
-    pub fn val(&self) -> Result<Val<C>, CanonError> {
-        self.0.val()
+    pub fn val(&self) -> Result<AnnRef<C, A>, CanonError> {
+        Ok(AnnRef {
+            val: self.0.val()?,
+            annotation: &self.1,
+        })
     }
 
     /// Returns a Mutable annotated reference to the underlying type
     pub fn val_mut(&mut self) -> Result<AnnRefMut<C, A>, CanonError> {
         Ok(AnnRefMut {
             annotation: Rc::make_mut(&mut self.1),
-            compound: self.0.val_mut()?,
+            val: self.0.val_mut()?,
         })
     }
 }
@@ -181,7 +217,7 @@ mod tests {
 
     #[test]
     fn nth() -> Result<(), CanonError> {
-        const N: usize = 16;
+        const N: usize = 1024;
         let n = N as u64;
 
         let mut hello: Recepticle<u64, Cardinality> = Recepticle::new();
@@ -199,7 +235,7 @@ mod tests {
 
     #[test]
     fn nth_mut() -> Result<(), CanonError> {
-        const N: usize = 16;
+        const N: usize = 1024;
         let n = N as u64;
 
         let mut hello: Recepticle<_, Cardinality> = Recepticle::new();
