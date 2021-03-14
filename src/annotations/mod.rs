@@ -39,7 +39,7 @@ impl<'a, T> Deref for Ann<'a, T> {
 
 // re-exports
 pub use cardinality::{Cardinality, Nth};
-pub use max::Max;
+pub use max::{Keyed, Max};
 
 /// The trait defining an annotation type over a leaf
 pub trait Annotation<Leaf>: Default + Clone {
@@ -54,16 +54,6 @@ pub trait Annotation<Leaf>: Default + Clone {
 pub struct AnnRef<'a, C, A> {
     annotation: &'a A,
     val: Val<'a, C>,
-}
-
-impl<'a, C, A> AnnRef<'a, C, A>
-where
-    C: Compound<A>,
-    A: Annotation<C::Leaf>,
-{
-    fn annotation(&self) -> &A {
-        self.annotation
-    }
 }
 
 impl<'a, C, A> Deref for AnnRef<'a, C, A>
@@ -227,7 +217,7 @@ mod tests {
 
     #[test]
     fn nth() -> Result<(), CanonError> {
-        const N: usize = 16;
+        const N: usize = 1024;
         let n = N as u64;
 
         let mut hello: Recepticle<u64, Cardinality> = Recepticle::new();
@@ -245,7 +235,7 @@ mod tests {
 
     #[test]
     fn nth_mut() -> Result<(), CanonError> {
-        const N: usize = 16;
+        const N: usize = 1024;
         let n = N as u64;
 
         let mut hello: Recepticle<_, Cardinality> = Recepticle::new();

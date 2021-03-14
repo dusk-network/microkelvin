@@ -1,4 +1,4 @@
-use crate::annotations::{AnnRef, Annotation};
+use crate::annotations::Annotation;
 use crate::compound::Compound;
 
 /// The argument given to a closure to `walk` a `Branch`.
@@ -10,7 +10,7 @@ where
     /// Walk encountered a leaf
     Leaf(&'a C::Leaf),
     /// Walk encountered an annotated node
-    Node(AnnRef<'a, C, A>),
+    Ann(&'a A),
 }
 
 /// The return value from a closure to `walk` the tree.

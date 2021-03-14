@@ -11,7 +11,7 @@ use alloc::vec::Vec;
 
 use canonical::CanonError;
 
-use crate::annotations::{AnnRefMut, Annotated, Annotation};
+use crate::annotations::{AnnRefMut, Annotation};
 use crate::compound::{Child, ChildMut, Compound};
 use crate::walk::{Step, Walk};
 
@@ -140,25 +140,30 @@ where
         self.0.last_mut().expect("Never empty")
     }
 
-    fn leaf(&'a self) -> Option<&'a C::Leaf> {
+    fn leaf(&self) -> Option<&'a C::Leaf> {
         let top = self.top();
         let ofs = top.offset();
 
         match top.child(ofs) {
-            Child::Leaf(l) => Some(l),
+            Child::Leaf(l) => {
+                let l: &C::Leaf = l;
+                let l_extended: &'a C::Leaf =
+                    unsafe { core::mem::transmute(l) };
+                Some(l_extended)
+            }
             _ => None,
         }
     }
 
     fn leaf_mut(&mut self) -> Option<&'a mut C::Leaf> {
-        let top: &mut LevelMut<'_, C, A> = self.top_mut();
-        let top_ext: &mut LevelMut<'a, C, A> =
-            unsafe { core::mem::transmute(top) };
+        let top = self.top_mut();
+        let ofs = top.offset();
 
-        let ofs = top_ext.offset();
-
-        match top_ext.child_mut(ofs) {
-            ChildMut::Leaf(l) => Some(l),
+        match top.child_mut(ofs) {
+            ChildMut::Leaf(l) => {
+                let l: &'a mut C::Leaf = unsafe { core::mem::transmute(l) };
+                Some(l)
+            }
             _ => None,
         }
     }
@@ -168,25 +173,7 @@ where
     }
 
     fn pop(&mut self) -> Option<()> {
-        // Never pop the root level
-        if self.0.len() > 2 {
-            self.0.pop().map(|popped| {
-                let top = self.top_mut();
-                let ofs = top.offset();
-                if let ChildMut::Node(to_update) = top.child_mut(ofs) {
-                    // we need to update the new top child and replace it with
-                    // the node we just popped off the
-                    // branch
-
-                    let ann = Annotated::new(popped.clone());
-                    *to_update = ann;
-                } else {
-                    unreachable!("Invalid parent structure")
-                }
-            })
-        } else {
-            None
-        }
+        self.0.pop().map(|_| ())
     }
 
     fn walk<W>(&mut self, mut walker: W) -> Result<Option<()>, CanonError>
@@ -218,9 +205,9 @@ where
             let ofs = top.offset();
             let top_child = top.child_mut(ofs);
 
-            let step = match top_child {
-                ChildMut::Leaf(ref l) => walker(Walk::Leaf(*l)),
-                ChildMut::Node(ref c) => walker(Walk::Node(c.val()?)),
+            let step = match &top_child {
+                ChildMut::Leaf(l) => walker(Walk::Leaf(*l)),
+                ChildMut::Node(c) => walker(Walk::Ann(c.annotation())),
                 ChildMut::Empty => todo!(),
                 ChildMut::EndOfNode => {
                     state = State::Pop;

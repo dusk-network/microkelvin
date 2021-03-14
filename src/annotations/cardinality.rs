@@ -65,8 +65,8 @@ where
                 Step::Next
             }
         }
-        Walk::Node(n) => {
-            let &Cardinality(card) = n.annotation().borrow();
+        Walk::Ann(ann) => {
+            let &Cardinality(card) = ann.borrow();
             if card <= *index {
                 *index -= card;
                 Step::Next

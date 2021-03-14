@@ -103,11 +103,10 @@ fn insert_mut() {
     }
 
     for i in 0..n {
-        println!("mutating position {}", i);
-        *list.nth_mut(i).unwrap().unwrap() += 1;
+        *list.nth_mut(i).unwrap().unwrap() += 1
     }
 
     for i in 0..n {
-        assert_eq!(*list.nth(i).unwrap().unwrap(), n - i - 1)
+        assert_eq!(*list.nth(i).unwrap().unwrap(), n - i)
     }
 }

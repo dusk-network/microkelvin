@@ -94,12 +94,17 @@ where
         self.0.len()
     }
 
-    fn leaf(&'a self) -> Option<&'a C::Leaf> {
+    fn leaf(&self) -> Option<&'a C::Leaf> {
         let top = self.top();
         let ofs = top.offset();
 
         match top.child(ofs) {
-            Child::Leaf(l) => Some(l),
+            Child::Leaf(l) => {
+                let l: &C::Leaf = l;
+                let l_extended: &'a C::Leaf =
+                    unsafe { core::mem::transmute(l) };
+                Some(l_extended)
+            }
             _ => None,
         }
     }
@@ -156,8 +161,11 @@ where
 
             let step = match top_child {
                 Child::Leaf(l) => walker(Walk::Leaf(l)),
-                Child::Node(n) => walker(Walk::Node(n.val()?)),
-                Child::Empty => todo!(),
+                Child::Node(n) => walker(Walk::Ann(n.annotation())),
+                Child::Empty => {
+                    state = State::Advance;
+                    continue;
+                }
                 Child::EndOfNode => {
                     state = State::Pop;
                     continue;

@@ -15,6 +15,7 @@ pub enum Max<K> {
 
 /// Trait for getting the key from a leaf value
 pub trait Keyed<K> {
+    /// Return a reference to the key of the leaf type
     fn key(&self) -> &K;
 }
 
