@@ -11,11 +11,3 @@ readme = "README.md"
 [dependencies]
 canonical = { path = "../canonical/canon" }
 canonical_derive = { path = "../canonical/canon_derive" }
-
-[dev-dependencies]
-canonical_host = { path = "../canonical/canon_host" }
-
-[patch.crates-io]
-canonical = { path = "../canonical/canon" }
-canonical_host = { path = "../canonical/canon_host" }
-canonical_derive = { path = "../canonical/canon_derive" }

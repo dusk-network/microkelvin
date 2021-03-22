@@ -125,7 +125,9 @@ where
     A: Annotation<C::Leaf>,
 {
     fn new(root: &'a mut C) -> Self {
-        PartialBranchMut(vec![LevelMut::new_root(root)])
+        let mut vec = Vec::new();
+        vec.push(LevelMut::new_root(root));
+        PartialBranchMut(vec)
     }
 
     pub fn depth(&self) -> usize {

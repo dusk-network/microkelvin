@@ -5,6 +5,7 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use crate::annotations::{Ann, Annotated, Annotation};
+use alloc::vec::Vec;
 use canonical::Canon;
 
 /// The response of the `child` method on a `Compound` node.
@@ -60,7 +61,7 @@ pub trait Compound<A>: Sized + Canon {
         // default impl allocates, and could be optimized for individual
         // compound types
 
-        let mut children = vec![];
+        let mut children = Vec::new();
 
         for i in 0.. {
             match self.child(i) {
