@@ -9,11 +9,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.6.0] - 2021-01-25
 
+### Changed
+
+- Change the library to use `alloc::vec` instead of `const-arrayvec`
+
+### Removed
+
+- Remove `const-arrayvec` as a dependency
+- Remove `CanonArrayVec` type
+
 ## [0.5.8] - 2021-01-21
+
+### Added
+
+- Add `no_std` crate-level annotation
 
 ## [0.5.7] - 2021-01-21
 
+### Added
+
+- Add `Annotation` implementation for `()`
+
 ## [0.5.6] - 2021-01-19
+
+### Removed
+
+- Remove unused `no_std` and `feature(min_const_generics)`
 
 ## [0.5.5] - 2020-12-03
 ### Changed
@@ -42,11 +63,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.4.0] - 2020-10-26
 
+### Added
+
+- Add documentation for all public exports
+- Add pub exports for various types
+
 ## [0.3.0] - 2020-10-26
+
+### Added
+
+- Add CI infrastructure
+- Add branch introspection via `levels` method
+
+### Changed
+
+- Changed `Branch::len` to `Branch::depth`
+- Changed the library to be no_std compatible
+
+### Removed
+
+- Remove `Associative` helper trait
 
 ## [0.2.0] - 2020-10-21
 
+### Changed
+
+- Change the `Annotation::op` method to take self by value
+
+### Added
+- Add LICENSE and copyright notices
+- Add `Nth` trait for trees
+- Add capacity to search through trees by walking
+- Add `Branch` and `BranchMut`
+
 ## [0.1.0] - 2020-10-16
+
+Initial
 
 [Unreleased]: https://github.com/dusk-network/microkelvin/compare/canonical-0.6.0...HEAD
 [0.6.0]: https://github.com/dusk-network/microkelvin/compare/v0.5.8...v0.6.0
