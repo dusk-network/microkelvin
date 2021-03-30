@@ -116,3 +116,24 @@ fn insert_mut() {
         assert_eq!(*list.nth(i).unwrap().unwrap(), n - i)
     }
 }
+
+#[test]
+fn iterate() {
+    let n: u64 = 1024;
+
+    use microkelvin::{Cardinality, Nth};
+
+    let mut list = LinkedList::<_, Cardinality>::new();
+
+    for i in 0..n {
+        list.insert(i)
+    }
+
+    // branch from first element
+    let branch = list.nth(0).unwrap().unwrap();
+
+    for res_leaf in branch {
+        let leaf = res_leaf.unwrap();
+        println!("leaf {:?}", leaf);
+    }
+}

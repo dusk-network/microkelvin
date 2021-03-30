@@ -348,3 +348,22 @@ where
         (self.closure)(&*self.inner)
     }
 }
+
+struct BranchIterator<'a, C, A, W> {
+    branch: PartialBranch<'a, C, A>,
+    walker: W,
+}
+
+// iterators
+impl<'a, C, A, W> Iterator for BranchIterator<'a, C, A, W>
+where
+    C: Compound<A>,
+    A: Annotation<C::Leaf>,
+    W: FnMut(Walk<C, A>) -> Step,
+{
+    type Item = Result<&'a C::Leaf, CanonError>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.branch.walk(self.walker).transpose()
+    }
+}
