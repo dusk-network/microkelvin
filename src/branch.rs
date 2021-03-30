@@ -87,26 +87,19 @@ where
     A: Annotation<C::Leaf>,
 {
     fn new(root: &'a C) -> Self {
-        let mut vec = Vec::new();
-        vec.push(Level::new_root(root));
-        PartialBranch(vec)
+        PartialBranch(vec![Level::new_root(root)])
     }
 
     pub fn depth(&self) -> usize {
         self.0.len()
     }
 
-    fn leaf(&self) -> Option<&'a C::Leaf> {
+    fn leaf(&'a self) -> Option<&'a C::Leaf> {
         let top = self.top();
         let ofs = top.offset();
 
         match top.child(ofs) {
-            Child::Leaf(l) => {
-                let l: &C::Leaf = l;
-                let l_extended: &'a C::Leaf =
-                    unsafe { core::mem::transmute(l) };
-                Some(l_extended)
-            }
+            Child::Leaf(l) => Some(l),
             _ => None,
         }
     }
@@ -264,10 +257,7 @@ where
         W: FnMut(Walk<C, A>) -> Step,
     {
         let mut partial = PartialBranch::new(root);
-        Ok(match partial.walk(walker)? {
-            Some(()) => Some(Branch(partial)),
-            None => None,
-        })
+        Ok(partial.walk(walker)?.map(|()| Branch(partial)))
     }
 
     /// Construct a branch given a function returning child offsets
@@ -276,10 +266,7 @@ where
         P: FnMut() -> usize,
     {
         let mut partial = PartialBranch::new(root);
-        Ok(match partial.path(path)? {
-            Some(()) => Some(Branch(partial)),
-            None => None,
-        })
+        Ok(partial.path(path)?.map(|()| Branch(partial)))
     }
 }
 
@@ -287,8 +274,6 @@ where
 ///
 /// Branche are always guaranteed to point at a leaf, and can be dereferenced
 /// to the pointed-at leaf.
-///
-/// The const generic `N` represents the maximum depth of the branch.
 #[derive(Debug)]
 pub struct Branch<'a, C, A>(PartialBranch<'a, C, A>);
 

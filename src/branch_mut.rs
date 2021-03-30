@@ -125,9 +125,7 @@ where
     A: Annotation<C::Leaf>,
 {
     fn new(root: &'a mut C) -> Self {
-        let mut vec = Vec::new();
-        vec.push(LevelMut::new_root(root));
-        PartialBranchMut(vec)
+        PartialBranchMut(vec![LevelMut::new_root(root)])
     }
 
     pub fn depth(&self) -> usize {
@@ -334,10 +332,7 @@ where
         W: FnMut(Walk<C, A>) -> Step,
     {
         let mut partial = PartialBranchMut::new(root);
-        Ok(match partial.walk(walker)? {
-            Some(()) => Some(BranchMut(partial)),
-            None => None,
-        })
+        Ok(partial.walk(walker)?.map(|()| BranchMut(partial)))
     }
 
     /// Construct a branch given a function returning child offsets
@@ -346,10 +341,7 @@ where
         P: FnMut() -> usize,
     {
         let mut partial = PartialBranchMut::new(root);
-        Ok(match partial.path(path)? {
-            Some(()) => Some(BranchMut(partial)),
-            None => None,
-        })
+        Ok(partial.path(path)?.map(|()| BranchMut(partial)))
     }
 }
 
@@ -361,8 +353,6 @@ where
 ///
 /// Branches are always guaranteed to point at a leaf, and can be dereferenced
 /// to the pointed-at leaf.
-///
-/// The const generic `N` represents the maximum depth of the branch.
 pub struct BranchMut<'a, C, A>(PartialBranchMut<'a, C, A>)
 where
     C: Compound<A>,
