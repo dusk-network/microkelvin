@@ -9,5 +9,5 @@ license = "MPL-2.0"
 readme = "README.md"
 
 [dependencies]
-canonical = { path = "../canonical/canon" }
-canonical_derive = { path = "../canonical/canon_derive" }
+canonical = "0.6"
+canonical_derive = "0.6"
