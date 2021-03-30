@@ -57,26 +57,36 @@ where
     ) -> Result<Option<BranchMut<'a, Self, A>>, CanonError>;
 }
 
-fn nth<C, A>(walk: Walk<C, A>, index: &mut u64) -> Step
+fn nth<C, A>(walk: Walk<C, A>, remainder: &mut u64) -> Step
 where
     C: Compound<A>,
     A: Annotation<C::Leaf> + Borrow<Cardinality> + Clone,
 {
     match walk {
         Walk::Leaf(_) => {
-            if *index == 0 {
+            // Walk found a leaf!
+            if *remainder == 0 {
+                // if we're already at our destination, we're done!
                 Step::Found
             } else {
-                *index -= 1;
+                // else, we subtract one and try again
+                *remainder -= 1;
                 Step::Next
             }
         }
         Walk::Ann(ann) => {
+            // Walk found an annotated subtree, let's borrow it's annotation as
+            // `Cardinality` as per the generic bounds on `A`
             let &Cardinality(card) = ann.borrow();
-            if card <= *index {
-                *index -= card;
+
+            if card <= *remainder {
+                // The subtree is smaller than our remainder, subtract and
+                // continue
+                *remainder -= card;
                 Step::Next
             } else {
+                // The subtree is larger than our remainder, descend into
+                // it
                 Step::Into
             }
         }
@@ -90,15 +100,17 @@ where
 {
     fn nth(
         &'a self,
-        mut index: u64,
+        mut remainder: u64,
     ) -> Result<Option<Branch<'a, Self, A>>, CanonError> {
-        Branch::<_, A>::walk(self, |w| nth(w, &mut index))
+        // Return the first that satisfies the walk
+        Branch::<_, A>::walk(self, |w| nth(w, &mut remainder))
     }
 
     fn nth_mut(
         &'a mut self,
-        mut index: u64,
+        mut remainder: u64,
     ) -> Result<Option<BranchMut<'a, Self, A>>, CanonError> {
-        BranchMut::<_, A>::walk(self, |w| nth(w, &mut index))
+        // Return the first mutable branch that satisfies the walk
+        BranchMut::<_, A>::walk(self, |w| nth(w, &mut remainder))
     }
 }

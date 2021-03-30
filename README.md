@@ -7,70 +7,106 @@ Built on the [`canonical`](http://github.com/dusk-network/canonical) serializati
 # Compound trait
 
 ```rust
-/// Trait for compound datastructures
-pub trait Compound<S>
-where
-    Self: Canon<S>,
-    S: Store,
-{
-    /// The leaf type of the collection
+/// A type that can recursively contain itself and leaves.
+pub trait Compound<A>: Sized + Canon {
+    /// The leaf type of the Compound collection
     type Leaf;
 
-    /// The annotation type of the connection
-    type Annotation;
-
     /// Returns a reference to a possible child at specified offset
-    fn child(&self, ofs: usize) -> Child<Self, S>;
+    fn child(&self, ofs: usize) -> Child<Self, A>
+    where
+        A: Annotation<Self::Leaf>;
 
     /// Returns a mutable reference to a possible child at specified offset
-    fn child_mut(&mut self, ofs: usize) -> ChildMut<Self, S>;
-}
+    fn child_mut(&mut self, ofs: usize) -> ChildMut<Self, A>
+    where
+        A: Annotation<Self::Leaf>;
+
+    /// Calculate the Compound annotation for a node
+    fn annotate_node(&self) -> A
+    where
+        A: Annotation<Self::Leaf>;
 ```
 
 The Compound trait defines a type as a collection type. This means that it can be searched and have branches constructed pointing to its elements.
 
 # Annotation trait
 
-The annotation trait keeps annotations of subtrees, for example total leaf amount (`Cardinality` in reference implementation), or which leaf compares the greatest (`Max` in reference implementation)
+```rust
+/// The trait defining an annotation type over a leaf
+pub trait Annotation<Leaf>: Default + Clone {
+    /// Creates an annotation from the leaf type
+    fn from_leaf(leaf: &Leaf) -> Self;
+    /// Combines multiple annotations in an associative way
+    fn combine(annotations: &[Ann<Self>]) -> Self;
+}
+```
+
+The annotation trait keeps an automatically updated annotation of subtrees, for example total leaf amount (`Cardinality` in reference implementation), or which leaf compares the greatest (`Max` in reference implementation)
 
 # Branch walking
 
-This is ane example of walking a recursive structure to yieald a branch pointing at a specific leaf.
+This is ane example of walking a recursive structure to yield a branch pointing at the nth leaf of the collection, if any.
 
-It i implemented on any type implementing `Compound` whose annotation can be borrowed as `Cardinality`. Giving this capability to any such structure.
+It is automatically implemented on all types implementing `Compound` whose annotation can be borrowed as `Cardinality`. Giving this capability to any such structure.
 
 ```rust
-impl<'a, C, S> Nth<'a, S> for C
+fn nth<C, A>(walk: Walk<C, A>, remainder: &mut u64) -> Step
 where
-    C: Compound<S>,
-    C::Annotation: Annotation<C, S> + Borrow<Cardinality>,
-    S: Store,
+    C: Compound<A>,
+    A: Annotation<C::Leaf> + Borrow<Cardinality> + Clone,
 {
-    fn nth<const N: usize>(
-        &'a self,
-        mut index: u64,
-    ) -> Result<Option<Branch<'a, Self, S, N>>, S::Error> {
-        Branch::walk(self, |f| match f {
-            Walk::Leaf(l) => {
-                if index == 0 {
-                    Step::Found(l)
-                } else {
-                    index -= 1;
-                    Step::Next
-                }
+    match walk {
+        Walk::Leaf(_) => {
+            // Walk found a leaf!
+            if *remainder == 0 {
+                // if we're already at our destination, we're done!
+                Step::Found
+            } else {
+                // else, we subtract one and try again
+                *remainder -= 1;
+                Step::Next
             }
-            Walk::Node(n) => {
-                let &Cardinality(card) = n.annotation().borrow();
-                if card <= index {
-                    index -= card;
-                    Step::Next
-                } else {
-                    Step::Into(n)
-                }
+        }
+        Walk::Ann(ann) => {
+            // Walk found an annotated subtree, let's borrow it's annotation as
+            // `Cardinality` as per the generic bounds on `A`
+            let &Cardinality(card) = ann.borrow();
+
+            if card <= *remainder {
+                // The subtree is smaller than our remainder, subtract and
+                // continue
+                *remainder -= card;
+                Step::Next
+            } else {
+                // The subtree is larger than our remainder, descend into
+                // it
+                Step::Into
             }
-        })
+        }
     }
-		// [ ... ]
+}
+
+impl<'a, C, A> Nth<'a, A> for C
+where
+    C: Compound<A> + Clone,
+    A: Annotation<Self::Leaf> + Borrow<Cardinality>,
+{
+    fn nth(
+        &'a self,
+        mut remainder: u64,
+    ) -> Result<Option<Branch<'a, Self, A>>, CanonError> {
+        // Return the first that satisfies the walk
+        Branch::<_, A>::walk(self, |w| nth(w, &mut remainder))
+    }
+
+    fn nth_mut(
+        &'a mut self,
+        mut remainder: u64,
+    ) -> Result<Option<BranchMut<'a, Self, A>>, CanonError> {
+        // Return the first mutable branch that satisfies the walk
+        BranchMut::<_, A>::walk(self, |w| nth(w, &mut remainder))
+    }
 }
 ```
 # usage
