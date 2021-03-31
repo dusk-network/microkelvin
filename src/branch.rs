@@ -12,7 +12,7 @@ use canonical::CanonError;
 
 use crate::annotations::{AnnRef, Annotation};
 use crate::compound::{Child, Compound};
-use crate::walk::{Step, Walk};
+use crate::walk::{AllLeaves, Step, Walk, Walker};
 
 #[derive(Debug)]
 enum LevelNode<'a, C, A> {
@@ -125,15 +125,14 @@ where
         }
     }
 
-    fn walk<W>(&mut self, mut walker: W) -> Result<Option<()>, CanonError>
+    fn walk<W>(&mut self, walker: &mut W) -> Result<Option<()>, CanonError>
     where
-        W: FnMut(Walk<C, A>) -> Step,
+        W: Walker<C, A>,
     {
         enum State<'a, C, A> {
             Init,
             Push(Level<'a, C, A>),
             Pop,
-            Advance,
         }
 
         let mut state = State::Init;
@@ -147,34 +146,20 @@ where
                     }
                     None => return Ok(None),
                 },
-                State::Advance => self.advance(),
             }
 
-            let top = self.top();
-            let ofs = top.offset();
-            let top_child = top.child(ofs);
-
-            let step = match top_child {
-                Child::Leaf(l) => walker(Walk::Leaf(l)),
-                Child::Node(n) => walker(Walk::Ann(n.annotation())),
-                Child::Empty => {
-                    state = State::Advance;
-                    continue;
-                }
-                Child::EndOfNode => {
-                    state = State::Pop;
-                    continue;
-                }
-            };
+            let top = self.top_mut();
+            let step = walker.walk(Walk::new(&**top, top.offset()));
 
             match step {
-                Step::Found => {
+                Step::Found(walk_ofs) => {
+                    *top.offset_mut() += walk_ofs;
                     return Ok(Some(()));
                 }
-                Step::Next => {
-                    state = State::Advance;
-                }
-                Step::Into => {
+                Step::Into(walk_ofs) => {
+                    *top.offset_mut() += walk_ofs;
+                    let ofs = top.offset();
+                    let top_child = top.child(ofs);
                     if let Child::Node(n) = top_child {
                         let level: Level<'_, C, A> = Level::new_val(n.val()?);
                         // Extend the lifetime of the Level.
@@ -222,6 +207,7 @@ where
                         panic!("Attempted descent into non-node")
                     }
                 }
+                Step::Advance => state = State::Pop,
                 Step::Abort => {
                     return Ok(None);
                 }
@@ -290,12 +276,15 @@ where
 
     /// Performs a tree walk, returning either a valid branch or None if the
     /// walk failed.
-    pub fn walk<W>(root: &'a C, walker: W) -> Result<Option<Self>, CanonError>
+    pub fn walk<W>(
+        root: &'a C,
+        mut walker: W,
+    ) -> Result<Option<Self>, CanonError>
     where
-        W: FnMut(Walk<C, A>) -> Step,
+        W: Walker<C, A>,
     {
         let mut partial = PartialBranch::new(root);
-        Ok(partial.walk(walker)?.map(|()| Branch(partial)))
+        Ok(partial.walk(&mut walker)?.map(|()| Branch(partial)))
     }
 
     /// Construct a branch given a function returning child offsets
@@ -349,9 +338,25 @@ where
     }
 }
 
-struct BranchIterator<'a, C, A, W> {
-    branch: PartialBranch<'a, C, A>,
-    walker: W,
+pub enum BranchIterator<'a, C, A, W> {
+    Initial(Branch<'a, C, A>, W),
+    Intermediate(Branch<'a, C, A>, W),
+    Exhausted,
+}
+
+// iterators
+impl<'a, C, A> IntoIterator for Branch<'a, C, A>
+where
+    C: Compound<A>,
+    A: Annotation<C::Leaf>,
+{
+    type Item = Result<&'a C::Leaf, CanonError>;
+
+    type IntoIter = BranchIterator<'a, C, A, AllLeaves>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        BranchIterator::Initial(self, AllLeaves)
+    }
 }
 
 // iterators
@@ -359,11 +364,44 @@ impl<'a, C, A, W> Iterator for BranchIterator<'a, C, A, W>
 where
     C: Compound<A>,
     A: Annotation<C::Leaf>,
-    W: FnMut(Walk<C, A>) -> Step,
+    W: Walker<C, A>,
 {
     type Item = Result<&'a C::Leaf, CanonError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.branch.walk(self.walker).transpose()
+        match core::mem::replace(self, BranchIterator::Exhausted) {
+            BranchIterator::Initial(branch, walker) => {
+                *self = BranchIterator::Intermediate(branch, walker);
+            }
+            BranchIterator::Intermediate(mut branch, mut walker) => {
+                branch.0.advance();
+                // access partialbranch
+                match branch.0.walk(&mut walker) {
+                    Ok(None) => {
+                        *self = BranchIterator::Exhausted;
+                        return None;
+                    }
+                    Ok(Some(..)) => {
+                        *self = BranchIterator::Intermediate(branch, walker);
+                    }
+                    Err(e) => {
+                        return Some(Err(e));
+                    }
+                }
+            }
+            BranchIterator::Exhausted => {
+                return None;
+            }
+        }
+
+        match self {
+            BranchIterator::Intermediate(branch, _) => {
+                let leaf: &C::Leaf = &*branch;
+                let leaf_extended: &'a C::Leaf =
+                    unsafe { core::mem::transmute(leaf) };
+                Some(Ok(leaf_extended))
+            }
+            _ => unreachable!(),
+        }
     }
 }

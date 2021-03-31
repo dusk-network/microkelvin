@@ -13,7 +13,7 @@ use canonical::CanonError;
 
 use crate::annotations::{AnnRefMut, Annotation};
 use crate::compound::{Child, ChildMut, Compound};
-use crate::walk::{Step, Walk};
+use crate::walk::{AllLeaves, Step, Walk, Walker};
 
 #[derive(Debug)]
 enum LevelNodeMut<'a, C, A>
@@ -164,19 +164,23 @@ where
         *self.top_mut().offset_mut() += 1
     }
 
-    fn pop(&mut self) -> Option<()> {
-        self.0.pop().map(|_| ())
+    fn pop(&mut self) -> Option<LevelMut<'a, C, A>> {
+        // We never pop the root
+        if self.0.len() > 1 {
+            self.0.pop()
+        } else {
+            None
+        }
     }
 
-    fn walk<W>(&mut self, mut walker: W) -> Result<Option<()>, CanonError>
+    fn walk<W>(&mut self, walker: &mut W) -> Result<Option<()>, CanonError>
     where
-        W: FnMut(Walk<C, A>) -> Step,
+        W: Walker<C, A>,
     {
         enum State<C> {
             Init,
             Push(C),
             Pop,
-            Advance,
         }
 
         let mut state = State::Init;
@@ -184,37 +188,26 @@ where
             match mem::replace(&mut state, State::Init) {
                 State::Init => (),
                 State::Push(push) => self.0.push(push),
-                State::Pop => match self.0.pop() {
+                State::Pop => match self.pop() {
                     Some(_) => {
                         self.advance();
                     }
                     None => return Ok(None),
                 },
-                State::Advance => self.advance(),
             }
 
             let top = self.top_mut();
-            let ofs = top.offset();
-            let top_child = top.child_mut(ofs);
-
-            let step = match &top_child {
-                ChildMut::Leaf(l) => walker(Walk::Leaf(*l)),
-                ChildMut::Node(c) => walker(Walk::Ann(c.annotation())),
-                ChildMut::Empty => todo!(),
-                ChildMut::EndOfNode => {
-                    state = State::Pop;
-                    continue;
-                }
-            };
+            let step = walker.walk(Walk::new(&**top, top.offset()));
 
             match step {
-                Step::Found => {
+                Step::Found(walk_ofs) => {
+                    *top.offset_mut() += walk_ofs;
                     return Ok(Some(()));
                 }
-                Step::Next => {
-                    state = State::Advance;
-                }
-                Step::Into => {
+                Step::Into(walk_ofs) => {
+                    *top.offset_mut() += walk_ofs;
+                    let ofs = top.offset();
+                    let top_child = top.child_mut(ofs);
                     if let ChildMut::Node(n) = top_child {
                         let level: LevelMut<'_, C, A> =
                             LevelMut::new_val(n.val_mut()?);
@@ -228,7 +221,7 @@ where
                         panic!("Attempted descent into non-node")
                     }
                 }
-
+                Step::Advance => state = State::Pop,
                 Step::Abort => return Ok(None),
             }
         }
@@ -321,13 +314,13 @@ where
     /// walk failed.
     pub fn walk<W>(
         root: &'a mut C,
-        walker: W,
+        mut walker: W,
     ) -> Result<Option<Self>, CanonError>
     where
-        W: FnMut(Walk<C, A>) -> Step,
+        W: Walker<C, A>,
     {
         let mut partial = PartialBranchMut::new(root);
-        Ok(partial.walk(walker)?.map(|()| BranchMut(partial)))
+        Ok(partial.walk(&mut walker)?.map(|()| BranchMut(partial)))
     }
 
     /// Construct a branch given a function returning child offsets
@@ -415,10 +408,10 @@ where
     type Target = M;
 
     fn deref(&self) -> &M {
-        todo!(
-            "FIXME? Due to limitations in rust generics over mutable or shared
-references, please use map_leaf when a immutable borrow is needed"
-        )
+        // FIXME, could we just transmute &self to &mut self here, since we're
+        // turning it back to a & reference again directly?
+
+        todo!()
     }
 }
 
@@ -429,5 +422,77 @@ where
 {
     fn deref_mut(&mut self) -> &mut M {
         (self.closure)(&mut *self.inner)
+    }
+}
+
+pub enum BranchMutIterator<'a, C, A, W>
+where
+    C: Compound<A>,
+    A: Annotation<C::Leaf>,
+{
+    Initial(BranchMut<'a, C, A>, W),
+    Intermediate(BranchMut<'a, C, A>, W),
+    Exhausted,
+}
+
+// iterators
+impl<'a, C, A> IntoIterator for BranchMut<'a, C, A>
+where
+    C: Compound<A>,
+    A: Annotation<C::Leaf>,
+{
+    type Item = Result<&'a mut C::Leaf, CanonError>;
+
+    type IntoIter = BranchMutIterator<'a, C, A, AllLeaves>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        BranchMutIterator::Initial(self, AllLeaves)
+    }
+}
+
+// iterators
+impl<'a, C, A, W> Iterator for BranchMutIterator<'a, C, A, W>
+where
+    C: Compound<A>,
+    A: Annotation<C::Leaf>,
+    W: Walker<C, A>,
+{
+    type Item = Result<&'a mut C::Leaf, CanonError>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match core::mem::replace(self, BranchMutIterator::Exhausted) {
+            BranchMutIterator::Initial(branch, walker) => {
+                *self = BranchMutIterator::Intermediate(branch, walker);
+            }
+            BranchMutIterator::Intermediate(mut branch, mut walker) => {
+                branch.0.advance();
+                // access partialbranch
+                match branch.0.walk(&mut walker) {
+                    Ok(None) => {
+                        *self = BranchMutIterator::Exhausted;
+                        return None;
+                    }
+                    Ok(Some(..)) => {
+                        *self = BranchMutIterator::Intermediate(branch, walker);
+                    }
+                    Err(e) => {
+                        return Some(Err(e));
+                    }
+                }
+            }
+            BranchMutIterator::Exhausted => {
+                return None;
+            }
+        }
+
+        match self {
+            BranchMutIterator::Intermediate(branch, _) => {
+                let leaf: &mut C::Leaf = &mut *branch;
+                let leaf_extended: &'a mut C::Leaf =
+                    unsafe { core::mem::transmute(leaf) };
+                Some(Ok(leaf_extended))
+            }
+            _ => unreachable!(),
+        }
     }
 }

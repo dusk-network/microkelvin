@@ -13,7 +13,7 @@
 //! `Branch` and `BranchMut`, types for representing branches in tree-formed
 //! data as well as methods of search.
 
-#![no_std]
+// #![no_std]
 #![deny(missing_docs)]
 
 #[macro_use]
@@ -26,9 +26,9 @@ mod compound;
 mod walk;
 
 pub use annotations::{
-    Ann, Annotated, Annotation, Cardinality, Keyed, Max, Nth,
+    Ann, Annotated, Annotation, Cardinality, GetMaxKey, Keyed, MaxKey, Nth,
 };
 pub use branch::Branch;
 pub use branch_mut::BranchMut;
-pub use compound::{Child, ChildMut, Compound};
+pub use compound::{Child, ChildMut, Compound, MutableLeaves};
 pub use walk::{Step, Walk};

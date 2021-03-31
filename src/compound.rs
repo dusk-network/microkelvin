@@ -80,3 +80,14 @@ pub trait Compound<A>: Sized + Canon {
         A::combine(&children[..])
     }
 }
+
+/// Marker trait to signal that a datastructre can allow mutable access to its
+/// leaves.
+///
+/// For example, a `Vec`-like structure can allow editing of its leaves without
+/// issue, whereas editing the (Key, Value) pair of a map could make the map
+/// logically invalid.
+///
+/// Note that this is safe to implement, since it still cannot cause undefined
+/// behaviour, only logical errors
+pub trait MutableLeaves {}

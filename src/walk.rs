@@ -4,31 +4,76 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use crate::annotations::Annotation;
-use crate::compound::Compound;
+use core::marker::PhantomData;
 
-/// The argument given to a closure to `walk` a `Branch`.
-pub enum Walk<'a, C, A>
-where
-    C: Compound<A>,
-    A: Annotation<C::Leaf>,
-{
-    /// Walk encountered a leaf
-    Leaf(&'a C::Leaf),
-    /// Walk encountered an annotated node
-    Ann(&'a A),
-}
+use crate::annotations::Annotation;
+use crate::compound::{Child, Compound};
 
 /// The return value from a closure to `walk` the tree.
 ///
 /// Determines how the `Branch` is constructed
 pub enum Step {
     /// The correct leaf was found!
-    Found,
-    /// Step to the next child on this level
-    Next,
+    Found(usize),
     /// Traverse the branch deeper
-    Into,
+    Into(usize),
+    /// Advance search
+    Advance,
     /// Abort search
     Abort,
+}
+
+/// The argument given to a `Walker` to traverse through nodes.
+pub struct Walk<'a, C, A> {
+    ofs: usize,
+    compound: &'a C,
+    _marker: PhantomData<A>,
+}
+
+impl<'a, C, A> Walk<'a, C, A>
+where
+    C: Compound<A>,
+    A: Annotation<C::Leaf>,
+{
+    pub(crate) fn new(compound: &'a C, ofs: usize) -> Self {
+        Walk {
+            ofs,
+            compound,
+            _marker: PhantomData,
+        }
+    }
+
+    /// Returns the child at specific offset relative to the branch offset
+    pub fn child(&self, ofs: usize) -> Child<'a, C, A> {
+        self.compound.child(ofs + self.ofs)
+    }
+}
+
+pub trait Walker<C, A>
+where
+    C: Compound<A>,
+    A: Annotation<C::Leaf>,
+{
+    fn walk(&mut self, walk: Walk<C, A>) -> Step;
+}
+
+/// Walker that visits all leaves
+pub struct AllLeaves;
+
+impl<C, A> Walker<C, A> for AllLeaves
+where
+    C: Compound<A>,
+    A: Annotation<C::Leaf>,
+{
+    fn walk(&mut self, walk: Walk<C, A>) -> Step {
+        for i in 0.. {
+            match walk.child(i) {
+                Child::Leaf(_) => return Step::Found(i),
+                Child::Node(_) => return Step::Into(i),
+                Child::Empty => (),
+                Child::EndOfNode => return Step::Advance,
+            }
+        }
+        unreachable!()
+    }
 }

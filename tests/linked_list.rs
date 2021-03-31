@@ -6,10 +6,12 @@
 
 use canonical::Canon;
 use canonical_derive::Canon;
-use microkelvin::{Annotated, Annotation, Child, ChildMut, Compound};
+use microkelvin::{
+    Annotated, Annotation, Child, ChildMut, Compound, MutableLeaves,
+};
 
 #[derive(Clone, Canon, Debug)]
-enum LinkedList<T, A> {
+pub enum LinkedList<T, A> {
     Empty,
     Node { val: T, next: Annotated<Self, A> },
 }
@@ -52,16 +54,18 @@ where
     }
 }
 
+impl<T, A> MutableLeaves for LinkedList<T, A> {}
+
 impl<T, A> LinkedList<T, A>
 where
     Self: Compound<A>,
     A: Annotation<<Self as Compound<A>>::Leaf>,
 {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Default::default()
     }
 
-    fn insert(&mut self, t: T) {
+    pub fn insert(&mut self, t: T) {
         match core::mem::take(self) {
             LinkedList::Empty => {
                 *self = LinkedList::Node {
@@ -118,8 +122,8 @@ fn insert_mut() {
 }
 
 #[test]
-fn iterate() {
-    let n: u64 = 1024;
+fn iterate_immutable() {
+    let n: u64 = 4;
 
     use microkelvin::{Cardinality, Nth};
 
@@ -132,8 +136,78 @@ fn iterate() {
     // branch from first element
     let branch = list.nth(0).unwrap().unwrap();
 
+    let mut count = n;
+
     for res_leaf in branch {
         let leaf = res_leaf.unwrap();
-        println!("leaf {:?}", leaf);
+
+        println!("found leaf {:?}", leaf);
+
+        count -= 1;
+
+        assert_eq!(*leaf, count);
+    }
+
+    // branch from 8th element
+    let branch = list.nth(2).unwrap().unwrap();
+
+    println!("branh {:?}", branch);
+
+    let mut count = n - 2;
+
+    for res_leaf in branch {
+        let leaf = res_leaf.unwrap();
+
+        println!("2nd found leaf {:?}", leaf);
+
+        count -= 1;
+
+        assert_eq!(*leaf, count);
+    }
+}
+
+#[test]
+fn iterate_mutable() {
+    let n: u64 = 32;
+
+    use microkelvin::{Cardinality, Nth};
+
+    let mut list = LinkedList::<_, Cardinality>::new();
+
+    for i in 0..n {
+        list.insert(i)
+    }
+
+    // branch from first element
+    let branch_mut = list.nth_mut(0).unwrap().unwrap();
+
+    let mut count = n;
+
+    for res_leaf in branch_mut {
+        *res_leaf.unwrap() += 1;
+    }
+
+    // branch from first element
+    let branch = list.nth(0).unwrap().unwrap();
+
+    for res_leaf in branch {
+        let leaf = res_leaf.unwrap();
+
+        assert_eq!(*leaf, count);
+
+        count -= 1;
+    }
+
+    // branch from 8th element
+    let branch = list.nth(7).unwrap().unwrap();
+
+    let mut count = n - 7;
+
+    for res_leaf in branch {
+        let leaf = res_leaf.unwrap();
+
+        assert_eq!(*leaf, count);
+
+        count -= 1;
     }
 }

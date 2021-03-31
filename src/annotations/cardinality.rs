@@ -6,14 +6,15 @@
 
 /// Annotation to keep track of the cardinality,
 /// i.e. the amount of elements in a collection
-use crate::annotations::{Ann, Annotation};
-use crate::branch::Branch;
-use crate::branch_mut::BranchMut;
-use crate::walk::{Step, Walk};
-use crate::Compound;
 use canonical::CanonError;
 use canonical_derive::Canon;
 use core::borrow::Borrow;
+
+use crate::annotations::{Ann, Annotation};
+use crate::branch::Branch;
+use crate::branch_mut::BranchMut;
+use crate::compound::{Child, Compound, MutableLeaves};
+use crate::walk::{Step, Walk, Walker};
 
 /// The cardinality of a compound collection
 #[derive(Canon, PartialEq, Debug, Clone, Default)]
@@ -21,6 +22,12 @@ pub struct Cardinality(pub(crate) u64);
 
 impl From<Cardinality> for u64 {
     fn from(c: Cardinality) -> Self {
+        c.0
+    }
+}
+
+impl<'a> From<&'a Cardinality> for u64 {
+    fn from(c: &'a Cardinality) -> Self {
         c.0
     }
 }
@@ -39,8 +46,43 @@ impl<L> Annotation<L> for Cardinality {
     }
 }
 
-/// Find the nth element of any collection satisfying the given annotation
-/// constraints
+/// Walker method to find the nth element of a compound collection
+pub struct Offset(u64);
+
+impl<C, A> Walker<C, A> for Offset
+where
+    C: Compound<A>,
+    A: Annotation<C::Leaf> + Borrow<Cardinality>,
+{
+    fn walk(&mut self, walk: Walk<C, A>) -> Step {
+        for i in 0.. {
+            match walk.child(i) {
+                Child::Leaf(_) => {
+                    if self.0 == 0 {
+                        return Step::Found(i);
+                    } else {
+                        self.0 -= 1
+                    }
+                }
+                Child::Node(node) => {
+                    let card: u64 = node.annotation().borrow().into();
+
+                    if card <= self.0 {
+                        self.0 -= card;
+                    } else {
+                        return Step::Into(i);
+                    }
+                }
+                Child::Empty => (),
+                Child::EndOfNode => return Step::Abort,
+            }
+        }
+        unreachable!()
+    }
+}
+
+/// Trait that provides a nth() method to any Compound with a Cardinality
+/// annotation
 pub trait Nth<'a, A>
 where
     Self: Compound<A>,
@@ -54,43 +96,9 @@ where
     fn nth_mut(
         &'a mut self,
         n: u64,
-    ) -> Result<Option<BranchMut<'a, Self, A>>, CanonError>;
-}
-
-fn nth<C, A>(walk: Walk<C, A>, remainder: &mut u64) -> Step
-where
-    C: Compound<A>,
-    A: Annotation<C::Leaf> + Borrow<Cardinality> + Clone,
-{
-    match walk {
-        Walk::Leaf(_) => {
-            // Walk found a leaf!
-            if *remainder == 0 {
-                // if we're already at our destination, we're done!
-                Step::Found
-            } else {
-                // else, we subtract one and try again
-                *remainder -= 1;
-                Step::Next
-            }
-        }
-        Walk::Ann(ann) => {
-            // Walk found an annotated subtree, let's borrow it's annotation as
-            // `Cardinality` as per the generic bounds on `A`
-            let &Cardinality(card) = ann.borrow();
-
-            if card <= *remainder {
-                // The subtree is smaller than our remainder, subtract and
-                // continue
-                *remainder -= card;
-                Step::Next
-            } else {
-                // The subtree is larger than our remainder, descend into
-                // it
-                Step::Into
-            }
-        }
-    }
+    ) -> Result<Option<BranchMut<'a, Self, A>>, CanonError>
+    where
+        Self: MutableLeaves;
 }
 
 impl<'a, C, A> Nth<'a, A> for C
@@ -100,17 +108,20 @@ where
 {
     fn nth(
         &'a self,
-        mut remainder: u64,
+        ofs: u64,
     ) -> Result<Option<Branch<'a, Self, A>>, CanonError> {
         // Return the first that satisfies the walk
-        Branch::<_, A>::walk(self, |w| nth(w, &mut remainder))
+        Branch::<_, A>::walk(self, Offset(ofs))
     }
 
     fn nth_mut(
         &'a mut self,
-        mut remainder: u64,
-    ) -> Result<Option<BranchMut<'a, Self, A>>, CanonError> {
+        ofs: u64,
+    ) -> Result<Option<BranchMut<'a, Self, A>>, CanonError>
+    where
+        C: MutableLeaves,
+    {
         // Return the first mutable branch that satisfies the walk
-        BranchMut::<_, A>::walk(self, |w| nth(w, &mut remainder))
+        BranchMut::<_, A>::walk(self, Offset(ofs))
     }
 }

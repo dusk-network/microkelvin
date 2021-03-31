@@ -14,7 +14,7 @@ use crate::compound::Compound;
 use alloc::rc::Rc;
 
 mod cardinality;
-mod max;
+mod max_key;
 mod unit;
 
 #[derive(Debug)]
@@ -39,7 +39,7 @@ impl<'a, T> Deref for Ann<'a, T> {
 
 // re-exports
 pub use cardinality::{Cardinality, Nth};
-pub use max::{Keyed, Max};
+pub use max_key::{GetMaxKey, Keyed, MaxKey};
 
 /// The trait defining an annotation type over a leaf
 pub trait Annotation<Leaf>: Default + Clone {
@@ -161,97 +161,5 @@ where
             annotation: Rc::make_mut(&mut self.1),
             val: self.0.val_mut()?,
         })
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    use alloc::vec::Vec;
-    use core::marker::PhantomData;
-
-    use crate::annotations::Nth;
-    use crate::compound::{Child, ChildMut};
-    use canonical::Canon;
-    use canonical_derive::Canon;
-
-    #[derive(Clone, Canon)]
-    struct Recepticle<T, A>(Vec<T>, PhantomData<A>);
-
-    impl<T, A> Compound<A> for Recepticle<T, A>
-    where
-        T: Canon,
-        A: Canon,
-    {
-        type Leaf = T;
-
-        fn child(&self, ofs: usize) -> Child<Self, A> {
-            match self.0.get(ofs) {
-                Some(leaf) => Child::Leaf(leaf),
-                None => Child::EndOfNode,
-            }
-        }
-
-        /// Returns a mutable reference to a possible child at specified offset
-        fn child_mut(&mut self, ofs: usize) -> ChildMut<Self, A> {
-            match self.0.get_mut(ofs) {
-                Some(leaf) => ChildMut::Leaf(leaf),
-                None => ChildMut::EndOfNode,
-            }
-        }
-    }
-
-    impl<T> Recepticle<T, Cardinality>
-    where
-        T: Canon,
-    {
-        fn new() -> Self {
-            Recepticle(Vec::new(), PhantomData)
-        }
-
-        fn push(&mut self, t: T) {
-            self.0.push(t)
-        }
-    }
-
-    #[test]
-    fn nth() -> Result<(), CanonError> {
-        const N: usize = 1024;
-        let n = N as u64;
-
-        let mut hello: Recepticle<u64, Cardinality> = Recepticle::new();
-
-        for i in 0..n {
-            hello.push(i);
-        }
-
-        for i in 0..n {
-            assert_eq!(*hello.nth(i)?.unwrap(), i)
-        }
-
-        Ok(())
-    }
-
-    #[test]
-    fn nth_mut() -> Result<(), CanonError> {
-        const N: usize = 1024;
-        let n = N as u64;
-
-        let mut hello: Recepticle<_, Cardinality> = Recepticle::new();
-
-        for i in 0..n {
-            hello.push(i);
-        }
-
-        for i in 0..n {
-            *hello.nth_mut(i)?.expect("Some") += 1;
-        }
-
-        for i in 0..n {
-            assert_eq!(*hello.nth(i)?.unwrap(), i + 1)
-        }
-
-        Ok(())
     }
 }
