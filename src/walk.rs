@@ -32,3 +32,27 @@ pub enum Step {
     /// Abort search
     Abort,
 }
+
+pub trait Walker<C, A>
+where
+    C: Compound<A>,
+    A: Annotation<C::Leaf>,
+{
+    fn walk(&mut self, walk: Walk<C, A>) -> Step;
+}
+
+/// Walker that visits all leaves
+pub struct AllLeaves;
+
+impl<C, A> Walker<C, A> for AllLeaves
+where
+    C: Compound<A>,
+    A: Annotation<C::Leaf>,
+{
+    fn walk(&mut self, walk: Walk<C, A>) -> Step {
+        match walk {
+            Walk::Leaf(_) => Step::Found,
+            Walk::Ann(_) => Step::Into,
+        }
+    }
+}

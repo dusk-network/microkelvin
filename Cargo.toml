@@ -8,10 +8,6 @@ description = "A library for tree traversal over annotated datastructures"
 license = "MPL-2.0"
 readme = "README.md"
 
+[dependencies]
 canonical = "0.6"
 canonical_derive = "0.6"
-
-[dev-dependencies]
-dusk-hamt = { path = "../dusk-hamt" }
-nstack = { path = "../nstack" }
-

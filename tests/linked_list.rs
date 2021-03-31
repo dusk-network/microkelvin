@@ -6,7 +6,9 @@
 
 use canonical::Canon;
 use canonical_derive::Canon;
-use microkelvin::{Annotated, Annotation, Child, ChildMut, Compound};
+use microkelvin::{
+    Annotated, Annotation, Child, ChildMut, Compound, MutableLeaves,
+};
 
 #[derive(Clone, Canon, Debug)]
 enum LinkedList<T, A> {
@@ -51,6 +53,8 @@ where
         }
     }
 }
+
+impl<T, A> MutableLeaves for LinkedList<T, A> {}
 
 impl<T, A> LinkedList<T, A>
 where
@@ -119,7 +123,7 @@ fn insert_mut() {
 
 #[test]
 fn iterate() {
-    let n: u64 = 1024;
+    let n: u64 = 32;
 
     use microkelvin::{Cardinality, Nth};
 
@@ -132,8 +136,72 @@ fn iterate() {
     // branch from first element
     let branch = list.nth(0).unwrap().unwrap();
 
+    let mut count = n;
+
     for res_leaf in branch {
         let leaf = res_leaf.unwrap();
-        println!("leaf {:?}", leaf);
+
+        count -= 1;
+
+        assert_eq!(*leaf, count);
+    }
+
+    // branch from 8th element
+    let branch = list.nth(7).unwrap().unwrap();
+
+    let mut count = n - 7;
+
+    for res_leaf in branch {
+        let leaf = res_leaf.unwrap();
+
+        count -= 1;
+
+        assert_eq!(*leaf, count);
+    }
+}
+
+#[test]
+fn iterate_mutable() {
+    let n: u64 = 32;
+
+    use microkelvin::{Cardinality, Nth};
+
+    let mut list = LinkedList::<_, Cardinality>::new();
+
+    for i in 0..n {
+        list.insert(i)
+    }
+
+    // branch from first element
+    let branch_mut = list.nth_mut(0).unwrap().unwrap();
+
+    let mut count = n;
+
+    for res_leaf in branch_mut {
+        *res_leaf.unwrap() += 1;
+    }
+
+    // branch from first element
+    let branch = list.nth(0).unwrap().unwrap();
+
+    for res_leaf in branch {
+        let leaf = res_leaf.unwrap();
+
+        assert_eq!(*leaf, count);
+
+        count -= 1;
+    }
+
+    // branch from 8th element
+    let branch = list.nth(7).unwrap().unwrap();
+
+    let mut count = n - 7;
+
+    for res_leaf in branch {
+        let leaf = res_leaf.unwrap();
+
+        assert_eq!(*leaf, count);
+
+        count -= 1;
     }
 }
