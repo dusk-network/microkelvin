@@ -353,8 +353,6 @@ where
 ///
 /// Branches are always guaranteed to point at a leaf, and can be dereferenced
 /// to the pointed-at leaf.
-///
-/// The const generic `N` represents the maximum depth of the branch.
 pub struct BranchMut<'a, C, A>(PartialBranchMut<'a, C, A>)
 where
     C: Compound<A>,

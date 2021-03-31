@@ -274,8 +274,6 @@ where
 ///
 /// Branche are always guaranteed to point at a leaf, and can be dereferenced
 /// to the pointed-at leaf.
-///
-/// The const generic `N` represents the maximum depth of the branch.
 #[derive(Debug)]
 pub struct Branch<'a, C, A>(PartialBranch<'a, C, A>);
 
