@@ -94,7 +94,7 @@ where
         self.0.len()
     }
 
-    fn leaf(&'a self) -> Option<&'a C::Leaf> {
+    fn leaf(&self) -> Option<&C::Leaf> {
         let top = self.top();
         let ofs = top.offset();
 
@@ -177,7 +177,44 @@ where
                 Step::Into => {
                     if let Child::Node(n) = top_child {
                         let level: Level<'_, C, A> = Level::new_val(n.val()?);
-                        // extend the lifetime of the Level.
+                        // Extend the lifetime of the Level.
+                        //
+                        // JUSTIFICATION
+                        //
+                        // The `Vec<Level<'a, C, A>>` used here cannot be
+                        // expressed in safe rust, since it relies on the
+                        // elements of the `Vec` refering to prior elements in
+                        // the same `Vec`.
+                        //
+                        // This vec from the start contains one single `Level`
+                        // of variant in turn containing a `LevelNode::Root(&'a
+                        // C)`
+                        //
+                        // The first step `Into` will add a `Level` with the
+                        // following reference structure
+                        // `LevelNode::Val(AnnRef<'a, C, A>)` -> `Val<'a, C>` ->
+                        // ReprInner (from canonical) which in turns contains
+                        // the value of the next node behind an `Rc<C>`.
+                        //
+                        // The address of the pointed-to `C` thus remains
+                        // unchanged, even if the `Vec` in `PartialBranch`
+                        // re-allocates.
+                        //
+                        // The same is true of `LevelNode::Root` since it is a
+                        // reference that just gets copied over to the new
+                        // allocation.
+                        //
+                        // Additionally, the `Vec` is only ever changed at its
+                        // end, either pushed or popped, so any reference "Up"
+                        // the branch will always remain valid.
+                        //
+                        // Since `'a` controls the whole lifetime of the access
+                        // to the tree, there is also no
+                        // way for the tree to change in
+                        // the meantime, thus invalidating the pointers is
+                        // not possible, and this extension of the lifetime of
+                        // the level is safe.
+
                         let extended: Level<'a, C, A> =
                             unsafe { core::mem::transmute(level) };
                         state = State::Push(extended);
@@ -212,7 +249,8 @@ where
                 }
                 Child::Node(n) => {
                     let level: Level<'_, C, A> = Level::new_val(n.val()?);
-                    // extend the lifetime of the Level.
+                    // Extend the lifetime of the Level.
+                    // See comment in `Branch::walk` for justification.
                     let extended: Level<'a, C, A> =
                         unsafe { core::mem::transmute(level) };
                     push = Some(extended);
