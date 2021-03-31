@@ -140,30 +140,22 @@ where
         self.0.last_mut().expect("Never empty")
     }
 
-    fn leaf(&self) -> Option<&'a C::Leaf> {
+    fn leaf(&self) -> Option<&C::Leaf> {
         let top = self.top();
         let ofs = top.offset();
 
         match top.child(ofs) {
-            Child::Leaf(l) => {
-                let l: &C::Leaf = l;
-                let l_extended: &'a C::Leaf =
-                    unsafe { core::mem::transmute(l) };
-                Some(l_extended)
-            }
+            Child::Leaf(l) => Some(l),
             _ => None,
         }
     }
 
-    fn leaf_mut(&mut self) -> Option<&'a mut C::Leaf> {
+    fn leaf_mut(&mut self) -> Option<&mut C::Leaf> {
         let top = self.top_mut();
         let ofs = top.offset();
 
         match top.child_mut(ofs) {
-            ChildMut::Leaf(l) => {
-                let l: &'a mut C::Leaf = unsafe { core::mem::transmute(l) };
-                Some(l)
-            }
+            ChildMut::Leaf(l) => Some(l),
             _ => None,
         }
     }
@@ -226,7 +218,9 @@ where
                     if let ChildMut::Node(n) = top_child {
                         let level: LevelMut<'_, C, A> =
                             LevelMut::new_val(n.val_mut()?);
-                        // extend the lifetime of the Level.
+
+                        // Extend the lifetime of the Level.
+                        // See comment in `Branch::walk` for justification.
                         let extended: LevelMut<'a, C, A> =
                             unsafe { core::mem::transmute(level) };
                         state = State::Push(extended);
@@ -261,7 +255,8 @@ where
                 ChildMut::Node(n) => {
                     let level: LevelMut<'_, C, A> =
                         LevelMut::new_val(n.val_mut()?);
-                    // extend the lifetime of the Level.
+                    // Extend the lifetime of the Level.
+                    // See comment in `Branch::walk` for justification.
                     let extended: LevelMut<'a, C, A> =
                         unsafe { core::mem::transmute(level) };
                     push = Some(extended);
