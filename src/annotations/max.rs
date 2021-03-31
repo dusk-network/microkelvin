@@ -80,7 +80,7 @@ where
     fn combine(annotations: &[Ann<Self>]) -> Self {
         let mut max = Max::NegativeInfinity;
         for a in annotations {
-            if &**a > &max {
+            if **a > max {
                 max = (*a).clone()
             }
         }

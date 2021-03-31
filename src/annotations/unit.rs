@@ -4,6 +4,8 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+#![allow(clippy::unused_unit)]
+
 use super::{Ann, Annotation};
 
 impl<L> Annotation<L> for () {
