@@ -14,7 +14,7 @@ use core::marker::PhantomData;
 
 use crate::branch::Branch;
 use crate::branch_mut::BranchMut;
-use crate::compound::{Compound, MutableLeaves};
+use crate::compound::{Child, Compound, MutableLeaves};
 use crate::walk::{Step, Walk, Walker};
 
 /// The maximum value of a collection
@@ -54,8 +54,8 @@ where
             (MaxKey::NegativeInfinity, MaxKey::NegativeInfinity) => {
                 Some(Ordering::Equal)
             }
-            (_, MaxKey::NegativeInfinity) => Some(Ordering::Less),
-            (MaxKey::NegativeInfinity, _) => Some(Ordering::Greater),
+            (_, MaxKey::NegativeInfinity) => Some(Ordering::Greater),
+            (MaxKey::NegativeInfinity, _) => Some(Ordering::Less),
             (MaxKey::Maximum(a), MaxKey::Maximum(b)) => a.partial_cmp(b),
         }
     }
@@ -70,8 +70,8 @@ where
             (MaxKey::NegativeInfinity, MaxKey::NegativeInfinity) => {
                 Ordering::Equal
             }
-            (_, MaxKey::NegativeInfinity) => Ordering::Less,
-            (MaxKey::NegativeInfinity, _) => Ordering::Greater,
+            (_, MaxKey::NegativeInfinity) => Ordering::Greater,
+            (MaxKey::NegativeInfinity, _) => Ordering::Less,
             (MaxKey::Maximum(a), MaxKey::Maximum(b)) => a.cmp(b),
         }
     }
@@ -109,10 +109,36 @@ impl<K> Default for FindMaxKey<K> {
 impl<C, A, K> Walker<C, A> for FindMaxKey<K>
 where
     C: Compound<A>,
+    C::Leaf: Keyed<K>,
     A: Annotation<C::Leaf> + Borrow<MaxKey<K>>,
+    K: Ord + Clone + core::fmt::Debug,
 {
     fn walk(&mut self, walk: Walk<C, A>) -> Step {
-        todo!()
+        let mut current_max: MaxKey<K> = MaxKey::NegativeInfinity;
+        let mut current_step = Step::Abort;
+
+        for i in 0.. {
+            match walk.child(i) {
+                Child::Leaf(l) => {
+                    let leaf_max: MaxKey<K> = MaxKey::Maximum(l.key().clone());
+
+                    if leaf_max > current_max {
+                        current_max = leaf_max;
+                        current_step = Step::Found(i);
+                    }
+                }
+                Child::Node(n) => {
+                    let node_max = n.annotation().borrow().clone();
+                    if node_max > current_max {
+                        current_max = node_max;
+                        current_step = Step::Into(i);
+                    }
+                }
+                Child::Empty => (),
+                Child::EndOfNode => return current_step,
+            }
+        }
+        unreachable!()
     }
 }
 
@@ -120,8 +146,10 @@ where
 /// annotation
 pub trait GetMaxKey<'a, A, K>
 where
-    Self: Compound<A> + Keyed<K>,
+    Self: Compound<A>,
+    Self::Leaf: Keyed<K>,
     A: Annotation<Self::Leaf> + Borrow<MaxKey<K>> + Clone,
+    K: Ord,
 {
     /// Construct a `Branch` pointing to the element with the largest key
     fn max_key(&'a self) -> Result<Option<Branch<'a, Self, A>>, CanonError>;
@@ -136,8 +164,10 @@ where
 
 impl<'a, C, A, K> GetMaxKey<'a, A, K> for C
 where
-    C: Compound<A> + Clone + Keyed<K>,
+    C: Compound<A> + Clone,
+    C::Leaf: Keyed<K>,
     A: Annotation<Self::Leaf> + Borrow<MaxKey<K>>,
+    K: Ord + Clone + core::fmt::Debug,
 {
     fn max_key(&'a self) -> Result<Option<Branch<'a, Self, A>>, CanonError> {
         // Return the first that satisfies the walk

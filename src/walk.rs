@@ -17,6 +17,8 @@ pub enum Step {
     Found(usize),
     /// Traverse the branch deeper
     Into(usize),
+    /// Advance search
+    Advance,
     /// Abort search
     Abort,
 }
@@ -69,7 +71,7 @@ where
                 Child::Leaf(_) => return Step::Found(i),
                 Child::Node(_) => return Step::Into(i),
                 Child::Empty => (),
-                Child::EndOfNode => return Step::Abort,
+                Child::EndOfNode => return Step::Advance,
             }
         }
         unreachable!()

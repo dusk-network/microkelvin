@@ -133,7 +133,6 @@ where
             Init,
             Push(Level<'a, C, A>),
             Pop,
-            Advance,
         }
 
         let mut state = State::Init;
@@ -147,13 +146,10 @@ where
                     }
                     None => return Ok(None),
                 },
-                State::Advance => self.advance(),
             }
 
             let top = self.top_mut();
-            let ofs = top.offset();
-
-            let step = walker.walk(Walk::new(&**top, ofs));
+            let step = walker.walk(Walk::new(&**top, top.offset()));
 
             match step {
                 Step::Found(walk_ofs) => {
@@ -161,7 +157,9 @@ where
                     return Ok(Some(()));
                 }
                 Step::Into(walk_ofs) => {
-                    let top_child = top.child(ofs + walk_ofs);
+                    *top.offset_mut() += walk_ofs;
+                    let ofs = top.offset();
+                    let top_child = top.child(ofs);
                     if let Child::Node(n) = top_child {
                         let level: Level<'_, C, A> = Level::new_val(n.val()?);
                         // Extend the lifetime of the Level.
@@ -209,6 +207,7 @@ where
                         panic!("Attempted descent into non-node")
                     }
                 }
+                Step::Advance => state = State::Pop,
                 Step::Abort => {
                     return Ok(None);
                 }

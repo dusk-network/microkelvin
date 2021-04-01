@@ -181,7 +181,6 @@ where
             Init,
             Push(C),
             Pop,
-            Advance,
         }
 
         let mut state = State::Init;
@@ -189,19 +188,16 @@ where
             match mem::replace(&mut state, State::Init) {
                 State::Init => (),
                 State::Push(push) => self.0.push(push),
-                State::Pop => match self.0.pop() {
+                State::Pop => match self.pop() {
                     Some(_) => {
                         self.advance();
                     }
                     None => return Ok(None),
                 },
-                State::Advance => self.advance(),
             }
 
             let top = self.top_mut();
-            let ofs = top.offset();
-
-            let step = walker.walk(Walk::new(&**top, ofs));
+            let step = walker.walk(Walk::new(&**top, top.offset()));
 
             match step {
                 Step::Found(walk_ofs) => {
@@ -209,7 +205,9 @@ where
                     return Ok(Some(()));
                 }
                 Step::Into(walk_ofs) => {
-                    let top_child = top.child_mut(ofs + walk_ofs);
+                    *top.offset_mut() += walk_ofs;
+                    let ofs = top.offset();
+                    let top_child = top.child_mut(ofs);
                     if let ChildMut::Node(n) = top_child {
                         let level: LevelMut<'_, C, A> =
                             LevelMut::new_val(n.val_mut()?);
@@ -223,7 +221,7 @@ where
                         panic!("Attempted descent into non-node")
                     }
                 }
-
+                Step::Advance => state = State::Pop,
                 Step::Abort => return Ok(None),
             }
         }

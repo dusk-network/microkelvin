@@ -1,46 +1,54 @@
-// use rand::{prelude::SliceRandom, thread_rng};
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+//
+// Copyright (c) DUSK NETWORK. All rights reserved.
 
-// mod linked_list;
-// use linked_list::LinkedList;
+use rand::{prelude::SliceRandom, thread_rng};
 
-// use canonical_derive::Canon;
-// use microkelvin::{GetMaxKey, Keyed, MaxKey};
+mod linked_list;
+use linked_list::LinkedList;
 
-// #[derive(PartialEq, Clone, Canon, Debug)]
-// struct TestLeaf {
-//     key: u64,
-//     other: (),
-// }
+use canonical_derive::Canon;
+use microkelvin::{GetMaxKey, Keyed, MaxKey};
 
-// impl Keyed<u64> for TestLeaf {
-//     fn key(&self) -> &u64 {
-//         &self.key
-//     }
-// }
+#[derive(PartialEq, Clone, Canon, Debug)]
+struct TestLeaf {
+    key: u64,
+    other: (),
+}
 
-// #[test]
-// fn maximum() {
-//     let n: u64 = 1024;
+impl Keyed<u64> for TestLeaf {
+    fn key(&self) -> &u64 {
+        &self.key
+    }
+}
 
-//     let mut keys = vec![];
+#[test]
+fn maximum() {
+    let n: u64 = 1024;
 
-//     for i in 0..n {
-//         keys.push(i)
-//     }
+    let mut keys = vec![];
 
-//     keys.shuffle(&mut thread_rng());
+    for i in 0..n {
+        keys.push(i)
+    }
 
-//     let mut list = LinkedList::<_, MaxKey<u64>>::new();
+    keys.shuffle(&mut thread_rng());
 
-//     for key in keys {
-//         list.insert(TestLeaf { key, other: () });
-//     }
+    let mut list = LinkedList::<_, MaxKey<u64>>::new();
 
-//     assert_eq!(
-//         *list.max_key().unwrap().unwrap(),
-//         TestLeaf {
-//             key: 1023,
-//             other: ()
-//         }
-//     )
-// }
+    for key in keys {
+        list.insert(TestLeaf { key, other: () });
+    }
+
+    let max = list.max_key().unwrap().unwrap();
+
+    assert_eq!(
+        *max,
+        TestLeaf {
+            key: 1023,
+            other: ()
+        }
+    )
+}

@@ -122,8 +122,8 @@ fn insert_mut() {
 }
 
 #[test]
-fn iterate() {
-    let n: u64 = 32;
+fn iterate_immutable() {
+    let n: u64 = 4;
 
     use microkelvin::{Cardinality, Nth};
 
@@ -141,18 +141,24 @@ fn iterate() {
     for res_leaf in branch {
         let leaf = res_leaf.unwrap();
 
+        println!("found leaf {:?}", leaf);
+
         count -= 1;
 
         assert_eq!(*leaf, count);
     }
 
     // branch from 8th element
-    let branch = list.nth(7).unwrap().unwrap();
+    let branch = list.nth(2).unwrap().unwrap();
 
-    let mut count = n - 7;
+    println!("branh {:?}", branch);
+
+    let mut count = n - 2;
 
     for res_leaf in branch {
         let leaf = res_leaf.unwrap();
+
+        println!("2nd found leaf {:?}", leaf);
 
         count -= 1;
 
