@@ -150,31 +150,18 @@ where
                 State::Advance => self.advance(),
             }
 
-            let top = self.top();
+            let top = self.top_mut();
             let ofs = top.offset();
-            let top_child = top.child(ofs);
 
-            let step = match top_child {
-                Child::Leaf(l) => walker.walk(Walk::Leaf(l)),
-                Child::Node(n) => walker.walk(Walk::Ann(n.annotation())),
-                Child::Empty => {
-                    state = State::Advance;
-                    continue;
-                }
-                Child::EndOfNode => {
-                    state = State::Pop;
-                    continue;
-                }
-            };
+            let step = walker.walk(Walk::new(&**top, ofs));
 
             match step {
-                Step::Found => {
+                Step::Found(walk_ofs) => {
+                    *top.offset_mut() += walk_ofs;
                     return Ok(Some(()));
                 }
-                Step::Next => {
-                    state = State::Advance;
-                }
-                Step::Into => {
+                Step::Into(walk_ofs) => {
+                    let top_child = top.child(ofs + walk_ofs);
                     if let Child::Node(n) = top_child {
                         let level: Level<'_, C, A> = Level::new_val(n.val()?);
                         // Extend the lifetime of the Level.

@@ -14,7 +14,7 @@ use crate::compound::Compound;
 use alloc::rc::Rc;
 
 mod cardinality;
-mod max;
+mod max_key;
 mod unit;
 
 #[derive(Debug)]
@@ -39,7 +39,7 @@ impl<'a, T> Deref for Ann<'a, T> {
 
 // re-exports
 pub use cardinality::{Cardinality, Nth};
-pub use max::{Keyed, Max};
+pub use max_key::{GetMaxKey, Keyed, MaxKey};
 
 /// The trait defining an annotation type over a leaf
 pub trait Annotation<Leaf>: Default + Clone {

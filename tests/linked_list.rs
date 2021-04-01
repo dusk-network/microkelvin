@@ -11,7 +11,7 @@ use microkelvin::{
 };
 
 #[derive(Clone, Canon, Debug)]
-enum LinkedList<T, A> {
+pub enum LinkedList<T, A> {
     Empty,
     Node { val: T, next: Annotated<Self, A> },
 }
@@ -61,11 +61,11 @@ where
     Self: Compound<A>,
     A: Annotation<<Self as Compound<A>>::Leaf>,
 {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Default::default()
     }
 
-    fn insert(&mut self, t: T) {
+    pub fn insert(&mut self, t: T) {
         match core::mem::take(self) {
             LinkedList::Empty => {
                 *self = LinkedList::Node {

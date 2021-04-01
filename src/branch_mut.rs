@@ -189,7 +189,7 @@ where
             match mem::replace(&mut state, State::Init) {
                 State::Init => (),
                 State::Push(push) => self.0.push(push),
-                State::Pop => match self.pop() {
+                State::Pop => match self.0.pop() {
                     Some(_) => {
                         self.advance();
                     }
@@ -200,26 +200,16 @@ where
 
             let top = self.top_mut();
             let ofs = top.offset();
-            let top_child = top.child_mut(ofs);
 
-            let step = match &top_child {
-                ChildMut::Leaf(l) => walker.walk(Walk::Leaf(*l)),
-                ChildMut::Node(c) => walker.walk(Walk::Ann(c.annotation())),
-                ChildMut::Empty => todo!(),
-                ChildMut::EndOfNode => {
-                    state = State::Pop;
-                    continue;
-                }
-            };
+            let step = walker.walk(Walk::new(&**top, ofs));
 
             match step {
-                Step::Found => {
+                Step::Found(walk_ofs) => {
+                    *top.offset_mut() += walk_ofs;
                     return Ok(Some(()));
                 }
-                Step::Next => {
-                    state = State::Advance;
-                }
-                Step::Into => {
+                Step::Into(walk_ofs) => {
+                    let top_child = top.child_mut(ofs + walk_ofs);
                     if let ChildMut::Node(n) = top_child {
                         let level: LevelMut<'_, C, A> =
                             LevelMut::new_val(n.val_mut()?);

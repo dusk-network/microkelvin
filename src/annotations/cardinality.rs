@@ -13,7 +13,7 @@ use core::borrow::Borrow;
 use crate::annotations::{Ann, Annotation};
 use crate::branch::Branch;
 use crate::branch_mut::BranchMut;
-use crate::compound::{Compound, MutableLeaves};
+use crate::compound::{Child, Compound, MutableLeaves};
 use crate::walk::{Step, Walk, Walker};
 
 /// The cardinality of a compound collection
@@ -22,6 +22,12 @@ pub struct Cardinality(pub(crate) u64);
 
 impl From<Cardinality> for u64 {
     fn from(c: Cardinality) -> Self {
+        c.0
+    }
+}
+
+impl<'a> From<&'a Cardinality> for u64 {
+    fn from(c: &'a Cardinality) -> Self {
         c.0
     }
 }
@@ -49,36 +55,29 @@ where
     A: Annotation<C::Leaf> + Borrow<Cardinality>,
 {
     fn walk(&mut self, walk: Walk<C, A>) -> Step {
-        match walk {
-            Walk::Leaf(_) => {
-                // Walk found a leaf!
-                if self.0 == 0 {
-                    // if we're already at our destination, we're done!
-                    Step::Found
-                } else {
-                    // else, we subtract one and try again
-                    self.0 -= 1;
-                    Step::Next
+        for i in 0.. {
+            match walk.child(i) {
+                Child::Leaf(_) => {
+                    if self.0 == 0 {
+                        return Step::Found(i);
+                    } else {
+                        self.0 -= 1
+                    }
                 }
-            }
-            Walk::Ann(ann) => {
-                // Walk found an annotated subtree, let's borrow it's annotation
-                // as `Cardinality` as per the generic bounds on
-                // `A`
-                let &Cardinality(card) = ann.borrow();
+                Child::Node(node) => {
+                    let card: u64 = node.annotation().borrow().into();
 
-                if card <= self.0 {
-                    // The subtree is smaller than our remainder, subtract and
-                    // continue
-                    self.0 -= card;
-                    Step::Next
-                } else {
-                    // The subtree is larger than our remainder, descend into
-                    // it
-                    Step::Into
+                    if card <= self.0 {
+                        self.0 -= card;
+                    } else {
+                        return Step::Into(i);
+                    }
                 }
+                Child::Empty => (),
+                Child::EndOfNode => return Step::Abort,
             }
         }
+        unreachable!()
     }
 }
 

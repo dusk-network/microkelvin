@@ -1,0 +1,24 @@
+[package]
+name = "canonical_derive"
+version = "0.6.0"
+authors = ["Kristoffer Ström <kristoffer@dusk.network>"]
+edition = "2018"
+readme = "README.md"
+repository = "https://github.com/dusk-network/canonical/canon_derive"
+keywords = ["canon", "serialisation", "no_std", "ffi", "database"]
+description = "The automatic derivation of Canon for structs, and enums."
+license = "MPL-2.0"
+
+[dependencies]
+proc-macro2 = "1.0"
+quote = "1.0"
+syn = { version = "1.0" }
+canonical = { path = "../canon", version = "0.6" }
+lazy_static = "1.4.0"
+
+[dev-dependencies]
+arbitrary = { version = "0.3", features = ["derive"] }
+canonical_fuzz = { path = "../canon_fuzz" }
+
+[lib]
+proc-macro = true
