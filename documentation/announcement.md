@@ -2,7 +2,7 @@
 
 Microkelvin is a toolkit for making advanced custom datastructures easy to implement for use in smart contracts.
 
-Microkelvin is an attempt att streamlining the creation of merkle tree datastructures, with modular and flexible indexing and lookup behaviours.
+The library is also an attempt at streamlining the creation of merkle tree datastructures, with modular and flexible indexing and lookup behaviours.
 
 ## Background
 
@@ -10,9 +10,17 @@ Bitcoin made the Merkle Tree construction famous around technology enthusiasts, 
 
 However, each project, be it Bitcoin, Ethereum, etc implements their own versions of these datastructures.
 
+Additionally, if you're writing an ethereum contract, you are limited to using the key-value patricia trie provided by the contract storage mechanisms of ethereum.
+
+There are ways around this, and people have been constructing other datastructures _on top_ of the key-value store, for example this [linked list implementation in solidity](https://github.com/vittominacori/solidity-linked-list).
+
+As the saying goes, every problem in computer science can be solved with an additional layer of indirection, except the problem of too many layers of indirection.
+
+Our goal with this library is to remove one layer of indirection and allow users to create their own datastructures as first-class citizens of the environment.
+
 ## Examples
 
-Let's make a merkle powered linked list!
+Let's make our own merkle powered linked list!
 
 ```rust
 #[derive(Clone, Canon, Debug)]
@@ -45,6 +53,8 @@ Yep, just set the current node to a node with the provided value, and the `next`
 So far so good, we have a linked list that we can insert things into.
 
 Soo, how do we look at what we got in there? We could implement it ourselves, but the whole point of `microkelvin` is to make common operations just work out of the box for any datastructure.
+
+Here is the [full implementation of a linked list](https://github.com/dusk-network/microkelvin/blob/walker_refactor/tests/linked_list.rs), from the test suite.
 
 ## Compound trait
 
