@@ -1,4 +1,4 @@
-# Announcing microkelvin 0.7-rc0
+# Announcing microkelvin 0.7-rc.0
 
 Microkelvin is a toolkit for making advanced custom datastructures easy to implement for use in smart contracts.
 
