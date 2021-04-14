@@ -3,9 +3,9 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
+use core::marker::PhantomData;
 
-use crate::annotations::{Ann, Annotated, Annotation};
-use alloc::vec::Vec;
+use crate::annotations::{Annotated, Annotation, Combine, WrappedAnnotation};
 use canonical::Canon;
 
 /// The response of the `child` method on a `Compound` node.
@@ -53,31 +53,66 @@ pub trait Compound<A>: Sized + Canon {
     where
         A: Annotation<Self::Leaf>;
 
-    /// Calculate the Compound annotation for a node
-    fn annotate_node(&self) -> A
-    where
-        A: Annotation<Self::Leaf>,
-    {
-        // default impl allocates, and could be optimized for individual
-        // compound types
-
-        let mut children = Vec::new();
-
-        for i in 0.. {
-            match self.child(i) {
-                Child::Leaf(l) => children.push(Ann::Owned(A::from_leaf(l))),
-                Child::Node(n) => children.push(Ann::Borrowed(n.annotation())),
-                Child::Empty => (),
-                Child::EndOfNode => break,
-            }
-            let n = 1024;
-            debug_assert!(
-                i < n,
-                "Annotation threshold exceeded after {} iterations.",
-                n
-            );
+    /// Returns an iterator over the children of the Compound node.
+    fn children(&self) -> ChildIterator<Self, A> {
+        ChildIterator {
+            node: self,
+            ofs: 0,
+            _marker: PhantomData,
         }
-        A::combine(&children[..])
+    }
+}
+
+pub enum IterChild<'a, C, A>
+where
+    C: Compound<A>,
+{
+    Leaf(&'a C::Leaf),
+    Node(&'a Annotated<C, A>),
+}
+
+impl<'a, C, A> IterChild<'a, C, A>
+where
+    A: Annotation<C::Leaf>,
+    C: Compound<A>,
+{
+    pub fn annotation(&self) -> WrappedAnnotation<A> {
+        match self {
+            IterChild::Leaf(l) => WrappedAnnotation::Owned(A::from_leaf(l)),
+            IterChild::Node(a) => WrappedAnnotation::Borrowed(a.annotation()),
+        }
+    }
+}
+
+pub struct ChildIterator<'a, C, A> {
+    node: &'a C,
+    ofs: usize,
+    _marker: PhantomData<A>,
+}
+
+impl<'a, C, A> Iterator for ChildIterator<'a, C, A>
+where
+    C: Compound<A>,
+    C::Leaf: 'a,
+    A: Annotation<C::Leaf> + 'a,
+{
+    type Item = IterChild<'a, C, A>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            match self.node.child(self.ofs) {
+                Child::Empty => self.ofs += 1,
+                Child::EndOfNode => return None,
+                Child::Leaf(l) => {
+                    self.ofs += 1;
+                    return Some(IterChild::Leaf(l));
+                }
+                Child::Node(a) => {
+                    self.ofs += 1;
+                    return Some(IterChild::Node(a));
+                }
+            }
+        }
     }
 }
 
@@ -88,6 +123,6 @@ pub trait Compound<A>: Sized + Canon {
 /// issue, whereas editing the (Key, Value) pair of a map could make the map
 /// logically invalid.
 ///
-/// Note that this is safe to implement, since it still cannot cause undefined
-/// behaviour, only logical errors
+/// Note that this is still safe to implement, since it can only cause logical
+/// errors, not undefined behaviour,
 pub trait MutableLeaves {}

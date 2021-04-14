@@ -7,7 +7,7 @@
 use canonical::Canon;
 use canonical_derive::Canon;
 use microkelvin::{
-    Annotated, Annotation, Child, ChildMut, Compound, MutableLeaves,
+    Annotated, Annotation, Child, ChildMut, Combine, Compound, MutableLeaves,
 };
 
 #[derive(Clone, Canon, Debug)]
@@ -59,7 +59,7 @@ impl<T, A> MutableLeaves for LinkedList<T, A> {}
 impl<T, A> LinkedList<T, A>
 where
     Self: Compound<A>,
-    A: Annotation<<Self as Compound<A>>::Leaf>,
+    A: Combine<Self, A>,
 {
     pub fn new() -> Self {
         Default::default()
@@ -80,6 +80,30 @@ where
                 };
             }
         }
+    }
+}
+
+#[test]
+fn insert() {
+    let n: u64 = 1024;
+
+    let mut list = LinkedList::<_, ()>::new();
+
+    for i in 0..n {
+        list.insert(i)
+    }
+}
+
+#[test]
+fn insert_cardinality() {
+    let n: u64 = 1024;
+
+    use microkelvin::Cardinality;
+
+    let mut list = LinkedList::<_, Cardinality>::new();
+
+    for i in 0..n {
+        list.insert(i)
     }
 }
 
@@ -141,8 +165,6 @@ fn iterate_immutable() {
     for res_leaf in branch {
         let leaf = res_leaf.unwrap();
 
-        println!("found leaf {:?}", leaf);
-
         count -= 1;
 
         assert_eq!(*leaf, count);
@@ -151,14 +173,10 @@ fn iterate_immutable() {
     // branch from 8th element
     let branch = list.nth(2).unwrap().unwrap();
 
-    println!("branh {:?}", branch);
-
     let mut count = n - 2;
 
     for res_leaf in branch {
         let leaf = res_leaf.unwrap();
-
-        println!("2nd found leaf {:?}", leaf);
 
         count -= 1;
 

@@ -5,13 +5,14 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 /// Annotation to keep track of the largest element of a collection
-use super::{Ann, Annotation};
-use canonical::{Canon, CanonError};
-use canonical_derive::Canon;
 use core::borrow::Borrow;
 use core::cmp::Ordering;
 use core::marker::PhantomData;
 
+use canonical::{Canon, CanonError};
+use canonical_derive::Canon;
+
+use crate::annotations::{Annotation, Combine};
 use crate::branch::Branch;
 use crate::branch_mut::BranchMut;
 use crate::compound::{Child, Compound, MutableLeaves};
@@ -80,17 +81,29 @@ where
 impl<K, L> Annotation<L> for MaxKey<K>
 where
     L: Keyed<K>,
-    K: Ord + Clone,
+    K: Clone,
 {
     fn from_leaf(leaf: &L) -> Self {
         MaxKey::Maximum(leaf.key().clone())
     }
+}
 
-    fn combine(annotations: &[Ann<Self>]) -> Self {
+impl<C, A, K> Combine<C, A> for MaxKey<K>
+where
+    C: Compound<A>,
+    C::Leaf: Keyed<K>,
+    A: Annotation<C::Leaf> + Borrow<Self>,
+    K: Ord + Clone,
+{
+    fn combine(node: &C) -> Self {
         let mut max = MaxKey::NegativeInfinity;
-        for a in annotations {
-            if **a > max {
-                max = (*a).clone()
+
+        for child in node.children() {
+            let ann = &*child.annotation();
+            let m = ann.borrow();
+
+            if *m > max {
+                max = m.clone()
             }
         }
         max
@@ -110,7 +123,7 @@ impl<C, A, K> Walker<C, A> for FindMaxKey<K>
 where
     C: Compound<A>,
     C::Leaf: Keyed<K>,
-    A: Annotation<C::Leaf> + Borrow<MaxKey<K>>,
+    A: Combine<C, A> + Borrow<MaxKey<K>>,
     K: Ord + Clone + core::fmt::Debug,
 {
     fn walk(&mut self, walk: Walk<C, A>) -> Step {
@@ -148,7 +161,7 @@ pub trait GetMaxKey<'a, A, K>
 where
     Self: Compound<A>,
     Self::Leaf: Keyed<K>,
-    A: Annotation<Self::Leaf> + Borrow<MaxKey<K>> + Clone,
+    A: Combine<Self, A> + Borrow<MaxKey<K>> + Clone,
     K: Ord,
 {
     /// Construct a `Branch` pointing to the element with the largest key
@@ -159,6 +172,7 @@ where
         &'a mut self,
     ) -> Result<Option<BranchMut<'a, Self, A>>, CanonError>
     where
+        A: Combine<Self, A>,
         Self: MutableLeaves;
 }
 
@@ -166,7 +180,7 @@ impl<'a, C, A, K> GetMaxKey<'a, A, K> for C
 where
     C: Compound<A> + Clone,
     C::Leaf: Keyed<K>,
-    A: Annotation<Self::Leaf> + Borrow<MaxKey<K>>,
+    A: Combine<C, A> + Borrow<MaxKey<K>>,
     K: Ord + Clone + core::fmt::Debug,
 {
     fn max_key(&'a self) -> Result<Option<Branch<'a, Self, A>>, CanonError> {
@@ -178,6 +192,7 @@ where
         &'a mut self,
     ) -> Result<Option<BranchMut<'a, Self, A>>, CanonError>
     where
+        A: Combine<Self, A>,
         C: MutableLeaves,
     {
         // Return the first mutable branch that satisfies the walk
