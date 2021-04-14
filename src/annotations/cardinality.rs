@@ -6,11 +6,12 @@
 
 /// Annotation to keep track of the cardinality,
 /// i.e. the amount of elements in a collection
-use canonical::CanonError;
-use canonical_derive::Canon;
 use core::borrow::Borrow;
 
-use crate::annotations::{Ann, Annotation};
+use canonical::CanonError;
+use canonical_derive::Canon;
+
+use crate::annotations::{Annotation, Combine};
 use crate::branch::Branch;
 use crate::branch_mut::BranchMut;
 use crate::compound::{Child, Compound, MutableLeaves};
@@ -36,11 +37,19 @@ impl<L> Annotation<L> for Cardinality {
     fn from_leaf(_: &L) -> Self {
         Cardinality(1)
     }
+}
 
-    fn combine(annotations: &[Ann<Self>]) -> Self {
+impl<C, A> Combine<C, A> for Cardinality
+where
+    C: Compound<A>,
+    A: Annotation<C::Leaf> + Borrow<Self>,
+{
+    fn combine(node: &C) -> Self {
         let mut sum = 0;
-        for a in annotations {
-            sum += a.0
+        for child in node.children() {
+            let ann = &*child.annotation();
+            let card = ann.borrow();
+            sum += card.0
         }
         Cardinality(sum)
     }
@@ -52,7 +61,7 @@ pub struct Offset(u64);
 impl<C, A> Walker<C, A> for Offset
 where
     C: Compound<A>,
-    A: Annotation<C::Leaf> + Borrow<Cardinality>,
+    A: Combine<C, A> + Borrow<Cardinality>,
 {
     fn walk(&mut self, walk: Walk<C, A>) -> Step {
         for i in 0.. {
@@ -86,7 +95,7 @@ where
 pub trait Nth<'a, A>
 where
     Self: Compound<A>,
-    A: Annotation<Self::Leaf> + Borrow<Cardinality> + Clone,
+    A: Combine<Self, A> + Borrow<Cardinality>,
 {
     /// Construct a `Branch` pointing to the `nth` element, if any
     fn nth(&'a self, n: u64)
@@ -104,7 +113,7 @@ where
 impl<'a, C, A> Nth<'a, A> for C
 where
     C: Compound<A> + Clone,
-    A: Annotation<Self::Leaf> + Borrow<Cardinality>,
+    A: Combine<C, A> + Borrow<Cardinality>,
 {
     fn nth(
         &'a self,
@@ -119,6 +128,7 @@ where
         ofs: u64,
     ) -> Result<Option<BranchMut<'a, Self, A>>, CanonError>
     where
+        A: Combine<Self, A>,
         C: MutableLeaves,
     {
         // Return the first mutable branch that satisfies the walk

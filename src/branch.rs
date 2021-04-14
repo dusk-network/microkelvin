@@ -10,7 +10,7 @@ use alloc::vec::Vec;
 
 use canonical::CanonError;
 
-use crate::annotations::{AnnRef, Annotation};
+use crate::annotations::{AnnRef, Combine};
 use crate::compound::{Child, Compound};
 use crate::walk::{AllLeaves, Step, Walk, Walker};
 
@@ -29,7 +29,7 @@ struct Level<'a, C, A> {
 impl<'a, C, A> Deref for Level<'a, C, A>
 where
     C: Compound<A>,
-    A: Annotation<C::Leaf>,
+    A: Combine<C, A>,
 {
     type Target = C;
 
@@ -69,7 +69,7 @@ pub struct PartialBranch<'a, C, A>(Vec<Level<'a, C, A>>);
 impl<'a, C, A> Deref for LevelNode<'a, C, A>
 where
     C: Compound<A>,
-    A: Annotation<C::Leaf>,
+    A: Combine<C, A>,
 {
     type Target = C;
 
@@ -84,7 +84,7 @@ where
 impl<'a, C, A> PartialBranch<'a, C, A>
 where
     C: Compound<A>,
-    A: Annotation<C::Leaf>,
+    A: Combine<C, A>,
 {
     fn new(root: &'a C) -> Self {
         PartialBranch(vec![Level::new_root(root)])
@@ -255,7 +255,7 @@ where
 impl<'a, C, A> Branch<'a, C, A>
 where
     C: Compound<A>,
-    A: Annotation<C::Leaf>,
+    A: Combine<C, A>,
 {
     /// Returns the depth of the branch
     pub fn depth(&self) -> usize {
@@ -307,7 +307,7 @@ pub struct Branch<'a, C, A>(PartialBranch<'a, C, A>);
 impl<'a, C, A> Deref for Branch<'a, C, A>
 where
     C: Compound<A>,
-    A: Annotation<C::Leaf>,
+    A: Combine<C, A>,
 {
     type Target = C::Leaf;
 
@@ -319,7 +319,7 @@ where
 pub struct MappedBranch<'a, C, A, M>
 where
     C: Compound<A>,
-    A: Annotation<C::Leaf>,
+    A: Combine<C, A>,
 {
     inner: Branch<'a, C, A>,
     closure: for<'b> fn(&'b C::Leaf) -> &'b M,
@@ -329,7 +329,7 @@ impl<'a, C, A, M> Deref for MappedBranch<'a, C, A, M>
 where
     C: Compound<A>,
     C::Leaf: 'a,
-    A: Annotation<C::Leaf>,
+    A: Combine<C, A>,
 {
     type Target = M;
 
@@ -348,7 +348,7 @@ pub enum BranchIterator<'a, C, A, W> {
 impl<'a, C, A> IntoIterator for Branch<'a, C, A>
 where
     C: Compound<A>,
-    A: Annotation<C::Leaf>,
+    A: Combine<C, A>,
 {
     type Item = Result<&'a C::Leaf, CanonError>;
 
@@ -363,7 +363,7 @@ where
 impl<'a, C, A, W> Iterator for BranchIterator<'a, C, A, W>
 where
     C: Compound<A>,
-    A: Annotation<C::Leaf>,
+    A: Combine<C, A>,
     W: Walker<C, A>,
 {
     type Item = Result<&'a C::Leaf, CanonError>;

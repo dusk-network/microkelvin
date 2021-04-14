@@ -6,14 +6,20 @@
 
 #![allow(clippy::unused_unit)]
 
-use super::{Ann, Annotation};
+use crate::annotations::{Annotation, Combine};
+use crate::compound::Compound;
 
 impl<L> Annotation<L> for () {
     fn from_leaf(_: &L) -> Self {
         ()
     }
+}
 
-    fn combine(_: &[Ann<Self>]) -> Self {
+impl<C, A> Combine<C, A> for ()
+where
+    C: Compound<A>,
+{
+    fn combine(_: &C) -> Self {
         ()
     }
 }

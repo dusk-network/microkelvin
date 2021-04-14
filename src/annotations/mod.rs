@@ -17,26 +17,6 @@ mod cardinality;
 mod max_key;
 mod unit;
 
-#[derive(Debug)]
-/// Custom smart pointer, like a lightweight `std::borrow::Cow` since it
-/// is not available in `core`
-pub enum Ann<'a, T> {
-    /// The annotation is owned
-    Owned(T),
-    /// The annotation is a reference
-    Borrowed(&'a T),
-}
-
-impl<'a, T> Deref for Ann<'a, T> {
-    type Target = T;
-    fn deref(&self) -> &T {
-        match self {
-            Ann::Owned(ref t) => t,
-            Ann::Borrowed(t) => t,
-        }
-    }
-}
-
 // re-exports
 pub use cardinality::{Cardinality, Nth};
 pub use max_key::{GetMaxKey, Keyed, MaxKey};
@@ -45,8 +25,15 @@ pub use max_key::{GetMaxKey, Keyed, MaxKey};
 pub trait Annotation<Leaf>: Default + Clone {
     /// Creates an annotation from the leaf type
     fn from_leaf(leaf: &Leaf) -> Self;
-    /// Combines multiple annotations in an associative way
-    fn combine(annotations: &[Ann<Self>]) -> Self;
+}
+
+/// Trait for defining how to combine Annotations
+pub trait Combine<C, A>: Annotation<C::Leaf>
+where
+    C: Compound<A>,
+{
+    /// Combines multiple annotations
+    fn combine(node: &C) -> Self;
 }
 
 #[derive(Debug)]
@@ -59,7 +46,7 @@ pub struct AnnRef<'a, C, A> {
 impl<'a, C, A> Deref for AnnRef<'a, C, A>
 where
     C: Compound<A>,
-    A: Annotation<C::Leaf>,
+    A: Combine<C, A>,
 {
     type Target = C;
 
@@ -69,11 +56,32 @@ where
 }
 
 #[derive(Debug)]
+/// Custom pointer type, like a lightweight `std::borrow::Cow` since it
+/// is not available in `core`
+pub enum WrappedAnnotation<'a, A> {
+    /// The annotation is owned
+    Owned(A),
+    /// The annotation is a reference
+    Borrowed(&'a A),
+}
+
+impl<'a, A> Deref for WrappedAnnotation<'a, A> {
+    type Target = A;
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            WrappedAnnotation::Owned(ref a) => a,
+            WrappedAnnotation::Borrowed(a) => a,
+        }
+    }
+}
+
+#[derive(Debug)]
 /// Smart pointer that automatically updates its annotation on drop
 pub struct AnnRefMut<'a, C, A>
 where
     C: Compound<A>,
-    A: Annotation<C::Leaf>,
+    A: Combine<C, A>,
 {
     annotation: &'a mut A,
     val: ValMut<'a, C>,
@@ -82,7 +90,7 @@ where
 impl<'a, C, A> AnnRefMut<'a, C, A>
 where
     C: Compound<A>,
-    A: Annotation<C::Leaf>,
+    A: Combine<C, A>,
 {
     pub fn annotation(&self) -> &A {
         self.annotation
@@ -92,7 +100,7 @@ where
 impl<'a, C, A> Deref for AnnRefMut<'a, C, A>
 where
     C: Compound<A>,
-    A: Annotation<C::Leaf>,
+    A: Combine<C, A>,
 {
     type Target = C;
 
@@ -104,7 +112,7 @@ where
 impl<'a, C, A> DerefMut for AnnRefMut<'a, C, A>
 where
     C: Compound<A>,
-    A: Annotation<C::Leaf>,
+    A: Combine<C, A>,
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.val
@@ -114,10 +122,10 @@ where
 impl<'a, C, A> Drop for AnnRefMut<'a, C, A>
 where
     C: Compound<A>,
-    A: Annotation<C::Leaf>,
+    A: Combine<C, A>,
 {
     fn drop(&mut self) {
-        *self.annotation = C::annotate_node(&*self.val)
+        *self.annotation = A::combine(&*self.val)
     }
 }
 
@@ -137,8 +145,11 @@ where
     A: Annotation<C::Leaf>,
 {
     /// Create a new annotated type
-    pub fn new(compound: C) -> Self {
-        let a = C::annotate_node(&compound);
+    pub fn new(compound: C) -> Self
+    where
+        A: Combine<C, A>,
+    {
+        let a = A::combine(&compound);
         Annotated(Repr::new(compound), Rc::new(a))
     }
 
@@ -156,7 +167,10 @@ where
     }
 
     /// Returns a Mutable annotated reference to the underlying type
-    pub fn val_mut(&mut self) -> Result<AnnRefMut<C, A>, CanonError> {
+    pub fn val_mut(&mut self) -> Result<AnnRefMut<C, A>, CanonError>
+    where
+        A: Combine<C, A>,
+    {
         Ok(AnnRefMut {
             annotation: Rc::make_mut(&mut self.1),
             val: self.0.val_mut()?,

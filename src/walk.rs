@@ -6,7 +6,7 @@
 
 use core::marker::PhantomData;
 
-use crate::annotations::Annotation;
+use crate::annotations::Combine;
 use crate::compound::{Child, Compound};
 
 /// The return value from a closure to `walk` the tree.
@@ -33,7 +33,7 @@ pub struct Walk<'a, C, A> {
 impl<'a, C, A> Walk<'a, C, A>
 where
     C: Compound<A>,
-    A: Annotation<C::Leaf>,
+    A: Combine<C, A>,
 {
     pub(crate) fn new(compound: &'a C, ofs: usize) -> Self {
         Walk {
@@ -52,7 +52,7 @@ where
 pub trait Walker<C, A>
 where
     C: Compound<A>,
-    A: Annotation<C::Leaf>,
+    A: Combine<C, A>,
 {
     fn walk(&mut self, walk: Walk<C, A>) -> Step;
 }
@@ -63,7 +63,7 @@ pub struct AllLeaves;
 impl<C, A> Walker<C, A> for AllLeaves
 where
     C: Compound<A>,
-    A: Annotation<C::Leaf>,
+    A: Combine<C, A>,
 {
     fn walk(&mut self, walk: Walk<C, A>) -> Step {
         for i in 0.. {
