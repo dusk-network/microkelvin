@@ -3,6 +3,7 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
+
 use core::borrow::Borrow;
 
 use rand::{prelude::SliceRandom, thread_rng};
