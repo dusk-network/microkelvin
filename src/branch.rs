@@ -21,7 +21,7 @@ enum LevelNode<'a, C, A> {
 }
 
 #[derive(Debug)]
-struct Level<'a, C, A> {
+pub struct Level<'a, C, A> {
     offset: usize,
     node: LevelNode<'a, C, A>,
 }
@@ -92,6 +92,10 @@ where
 
     pub fn depth(&self) -> usize {
         self.0.len()
+    }
+
+    pub fn levels(&self) -> &[Level<C, A>] {
+        &self.0
     }
 
     fn leaf(&self) -> Option<&C::Leaf> {
@@ -260,6 +264,11 @@ where
     /// Returns the depth of the branch
     pub fn depth(&self) -> usize {
         self.0.depth()
+    }
+
+    /// Returns a slice into the levels of the tree.
+    pub fn levels(&self) -> &[Level<C, A>] {
+        self.0.levels()
     }
 
     /// Returns a branch that maps the leaf to a specific value.
