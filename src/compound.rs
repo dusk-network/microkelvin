@@ -64,11 +64,14 @@ pub trait Compound<A>: Sized + Canon {
     }
 }
 
+/// The kinds of children you can encounter iterating over a Compound
 pub enum IterChild<'a, C, A>
 where
     C: Compound<A>,
 {
+    /// Iterator found a leaf
     Leaf(&'a C::Leaf),
+    /// Iterator found an annotated node
     Node(&'a Annotated<C, A>),
 }
 
@@ -77,6 +80,7 @@ where
     A: Annotation<C::Leaf>,
     C: Compound<A>,
 {
+    /// Returns the annotation of the child
     pub fn annotation(&self) -> WrappedAnnotation<A> {
         match self {
             IterChild::Leaf(l) => WrappedAnnotation::Owned(A::from_leaf(l)),
