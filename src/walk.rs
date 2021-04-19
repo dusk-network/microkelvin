@@ -6,8 +6,12 @@
 
 use core::marker::PhantomData;
 
+use canonical::CanonError;
+
 use crate::annotations::Combine;
-use crate::compound::{Child, Compound};
+use crate::branch::Branch;
+use crate::branch_mut::BranchMut;
+use crate::compound::{Child, Compound, MutableLeaves};
 
 /// The return value from a closure to `walk` the tree.
 ///
@@ -75,5 +79,45 @@ where
             }
         }
         unreachable!()
+    }
+}
+
+/// Trait that provides a nth() method to any Compound with a Cardinality
+/// annotation
+pub trait First<'a, A>
+where
+    Self: Compound<A>,
+    A: Combine<Self, A>,
+{
+    /// Construct a `Branch` pointing to the `nth` element, if any
+    fn first(&'a self) -> Result<Option<Branch<'a, Self, A>>, CanonError>;
+
+    /// Construct a `BranchMut` pointing to the `nth` element, if any
+    fn first_mut(
+        &'a mut self,
+    ) -> Result<Option<BranchMut<'a, Self, A>>, CanonError>
+    where
+        Self: MutableLeaves;
+}
+
+impl<'a, C, A> First<'a, A> for C
+where
+    C: Compound<A> + Clone,
+    A: Combine<C, A>,
+{
+    fn first(&'a self) -> Result<Option<Branch<'a, Self, A>>, CanonError> {
+        // Return the first that satisfies the walk
+        Branch::<_, A>::walk(self, AllLeaves)
+    }
+
+    fn first_mut(
+        &'a mut self,
+    ) -> Result<Option<BranchMut<'a, Self, A>>, CanonError>
+    where
+        A: Combine<Self, A>,
+        C: MutableLeaves,
+    {
+        // Return the first mutable branch that satisfies the walk
+        BranchMut::<_, A>::walk(self, AllLeaves)
     }
 }
