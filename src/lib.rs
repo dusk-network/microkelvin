@@ -31,4 +31,4 @@ pub use annotations::{
 pub use branch::Branch;
 pub use branch_mut::BranchMut;
 pub use compound::{Child, ChildMut, Compound, MutableLeaves};
-pub use walk::{Step, Walk};
+pub use walk::{First, Step, Walk};

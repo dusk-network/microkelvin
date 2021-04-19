@@ -7,7 +7,8 @@
 use canonical::Canon;
 use canonical_derive::Canon;
 use microkelvin::{
-    Annotated, Annotation, Child, ChildMut, Combine, Compound, MutableLeaves,
+    Annotated, Annotation, Child, ChildMut, Combine, Compound, First,
+    MutableLeaves,
 };
 
 #[derive(Clone, Canon, Debug)]
@@ -158,7 +159,7 @@ fn iterate_immutable() {
     }
 
     // branch from first element
-    let branch = list.nth(0).unwrap().unwrap();
+    let branch = list.first().unwrap().unwrap();
 
     let mut count = n;
 
@@ -197,7 +198,7 @@ fn iterate_mutable() {
     }
 
     // branch from first element
-    let branch_mut = list.nth_mut(0).unwrap().unwrap();
+    let branch_mut = list.first_mut().unwrap().unwrap();
 
     let mut count = n;
 
@@ -206,7 +207,7 @@ fn iterate_mutable() {
     }
 
     // branch from first element
-    let branch = list.nth(0).unwrap().unwrap();
+    let branch = list.first().unwrap().unwrap();
 
     for res_leaf in branch {
         let leaf = res_leaf.unwrap();
