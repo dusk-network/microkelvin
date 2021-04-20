@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2021-04-21
+
+### Added
+
+- Add `Walker` trait, to specify the way in which a `Branch` or `BranchMut` can be walked from a root node
+- Add `Nth` trait, to construct a branch to the nth element of a `Compound` collection
+- Add `MaxKey` and `Keyed` traits to keep track of the maximum keyed leaf in the collection
+- Add the `levels` method to `Branch` to introspect the individual branch `Levels`
+- Add the `path` constructor to `Branch` and `BranchMut` to traverse the collectiong along a specified path
+- Added the `MappedBranch` to provide branches that only allow access to certain parts of its leaves
+- Add implementation of `IntoIterator` for `Branch` and `BranchMut`
+- Add `First` auto-trait to construct a `Branch` to the first element in a collection
+- Add `LinkedList` implementation in tests
+
+### Changed
+
+- Change `canonical`/`canonical_derive` version from 0.5 to 0.6
+- Refactor the `Annotation` trait into `Annotation` for the leaves, and `Combine` for the nodes
+- Change the iterator on `Compound` to only iterate over populated subtrees or leaves
+
+### Removed
+
+- Remove the `Annotation` trait parameter on `Compound`, moving it to a generic on the type
+
 ## [0.6.0] - 2021-01-25
 
 ### Changed
@@ -100,7 +124,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Initial
 
-[Unreleased]: https://github.com/dusk-network/microkelvin/compare/canonical-0.6.0...HEAD
+[Unreleased]: https://github.com/dusk-network/microkelvin/compare/v-0.7.0...HEAD
+[0.7.0]: https://github.com/dusk-network/microkelvin/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/dusk-network/microkelvin/compare/v0.5.8...v0.6.0
 [0.5.8]: https://github.com/dusk-network/microkelvin/compare/v0.5.7...v0.5.8
 [0.5.7]: https://github.com/dusk-network/microkelvin/compare/v0.5.6...v0.5.7

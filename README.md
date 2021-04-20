@@ -21,28 +21,32 @@ pub trait Compound<A>: Sized + Canon {
     fn child_mut(&mut self, ofs: usize) -> ChildMut<Self, A>
     where
         A: Annotation<Self::Leaf>;
-
-    /// Calculate the Compound annotation for a node
-    fn annotate_node(&self) -> A
-    where
-        A: Annotation<Self::Leaf>;
 ```
 
 The Compound trait defines a type as a collection type. This means that it can be searched and have branches constructed pointing to its elements.
 
-# Annotation trait
+# Annotation/Combine trait
 
 ```rust
 /// The trait defining an annotation type over a leaf
 pub trait Annotation<Leaf>: Default + Clone {
     /// Creates an annotation from the leaf type
     fn from_leaf(leaf: &Leaf) -> Self;
-    /// Combines multiple annotations in an associative way
-    fn combine(annotations: &[Ann<Self>]) -> Self;
 }
 ```
 
-The annotation trait keeps an automatically updated annotation of subtrees, for example total leaf amount (`Cardinality` in reference implementation), or which leaf compares the greatest (`Max` in reference implementation)
+```rust
+/// Trait for defining how to combine Annotations
+pub trait Combine<C, A>: Annotation<C::Leaf>
+where
+    C: Compound<A>,
+{
+    /// Combines multiple annotations
+    fn combine(node: &C) -> Self;
+}
+```
+
+The annotation and combine traits keep an automatically updated annotation of subtrees, for example total leaf amount (`Cardinality` in reference implementation), or which leaf compares the greatest (`Max` in reference implementation)
 
 # Branch walking
 
@@ -51,41 +55,6 @@ This is ane example of walking a recursive structure to yield a branch pointing 
 It is automatically implemented on all types implementing `Compound` whose annotation can be borrowed as `Cardinality`. Giving this capability to any such structure.
 
 ```rust
-fn nth<C, A>(walk: Walk<C, A>, remainder: &mut u64) -> Step
-where
-    C: Compound<A>,
-    A: Annotation<C::Leaf> + Borrow<Cardinality> + Clone,
-{
-    match walk {
-        Walk::Leaf(_) => {
-            // Walk found a leaf!
-            if *remainder == 0 {
-                // if we're already at our destination, we're done!
-                Step::Found
-            } else {
-                // else, we subtract one and try again
-                *remainder -= 1;
-                Step::Next
-            }
-        }
-        Walk::Ann(ann) => {
-            // Walk found an annotated subtree, let's borrow it's annotation as
-            // `Cardinality` as per the generic bounds on `A`
-            let &Cardinality(card) = ann.borrow();
-
-            if card <= *remainder {
-                // The subtree is smaller than our remainder, subtract and
-                // continue
-                *remainder -= card;
-                Step::Next
-            } else {
-                // The subtree is larger than our remainder, descend into
-                // it
-                Step::Into
-            }
-        }
-    }
-}
 
 impl<'a, C, A> Nth<'a, A> for C
 where

@@ -1,4 +1,4 @@
-# Announcing microkelvin 0.7-rc.0
+# Announcing microkelvin 0.7
 
 Microkelvin is a toolkit for making advanced custom datastructures easy to implement for use in smart contracts.
 
@@ -74,12 +74,6 @@ pub trait Compound<A>: Sized + Canon {
     fn child_mut(&mut self, ofs: usize) -> ChildMut<Self, A>
     where
         A: Annotation<Self::Leaf>;
-
-    /// Calculate the Compound annotation for a node
-    fn annotate_node(&self) -> A
-    where
-        A: Annotation<Self::Leaf>,
-    { [ ... ] }
 }
 ```
 
