@@ -18,7 +18,7 @@ use crate::compound::{Child, Compound, MutableLeaves};
 use crate::walk::{Step, Walk, Walker};
 
 /// The cardinality of a compound collection
-#[derive(Canon, PartialEq, Debug, Clone, Default)]
+#[derive(Canon, PartialEq, Debug, Clone, Default, Copy)]
 pub struct Cardinality(pub(crate) u64);
 
 impl From<Cardinality> for u64 {
@@ -90,8 +90,8 @@ where
     }
 }
 
-/// Trait that provides a nth() method to any Compound with a Cardinality
-/// annotation
+/// Trait that provides `nth()` and `nth_mut()` methods to any Compound with a
+/// Cardinality annotation
 pub trait Nth<'a, A>
 where
     Self: Compound<A>,
