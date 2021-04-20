@@ -6,7 +6,7 @@
 
 use core::marker::PhantomData;
 
-use crate::annotations::{Annotated, Annotation, Combine, WrappedAnnotation};
+use crate::annotations::{Annotated, Annotation, WrappedAnnotation};
 use canonical::Canon;
 
 /// The response of the `child` method on a `Compound` node.

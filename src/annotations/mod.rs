@@ -33,7 +33,7 @@ where
     C: Compound<A>,
 {
     /// Combines multiple annotations
-    fn combine<'a>(node: &'a C) -> Self;
+    fn combine(node: &C) -> Self;
 }
 
 #[derive(Debug)]
