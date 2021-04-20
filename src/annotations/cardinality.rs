@@ -90,7 +90,8 @@ where
     }
 }
 
-/// Trait that provides `nth()` and `nth_mut()` methods to any Compound with a Cardinality annotation
+/// Trait that provides `nth()` and `nth_mut()` methods to any Compound with a
+/// Cardinality annotation
 pub trait Nth<'a, A>
 where
     Self: Compound<A>,
