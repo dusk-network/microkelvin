@@ -82,17 +82,17 @@ where
     }
 }
 
-/// Trait that provides a nth() method to any Compound with a Cardinality
-/// annotation
+/// Trait that provides a `first` and `first_mut` method to any Compound with a
+/// Cardinality annotation
 pub trait First<'a, A>
 where
     Self: Compound<A>,
     A: Combine<Self, A>,
 {
-    /// Construct a `Branch` pointing to the `nth` element, if any
+    /// Construct a `Branch` pointing to the first element, if not empty
     fn first(&'a self) -> Result<Option<Branch<'a, Self, A>>, CanonError>;
 
-    /// Construct a `BranchMut` pointing to the `nth` element, if any
+    /// Construct a `BranchMut` pointing to the first element, if not empty
     fn first_mut(
         &'a mut self,
     ) -> Result<Option<BranchMut<'a, Self, A>>, CanonError>
@@ -106,7 +106,6 @@ where
     A: Combine<C, A>,
 {
     fn first(&'a self) -> Result<Option<Branch<'a, Self, A>>, CanonError> {
-        // Return the first that satisfies the walk
         Branch::<_, A>::walk(self, AllLeaves)
     }
 
@@ -117,7 +116,6 @@ where
         A: Combine<Self, A>,
         C: MutableLeaves,
     {
-        // Return the first mutable branch that satisfies the walk
         BranchMut::<_, A>::walk(self, AllLeaves)
     }
 }
