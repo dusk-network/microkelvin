@@ -1,6 +1,6 @@
 [package]
 name = "microkelvin"
-version = "0.6.0"
+version = "0.7.0"
 authors = ["Kristoffer Ström <kristoffer@dusk.network>"]
 edition = "2018"
 keywords = ["datastructures"]
@@ -9,8 +9,8 @@ license = "MPL-2.0"
 readme = "README.md"
 
 [dependencies]
-canonical = "0.5"
-canonical_derive = "0.5"
+canonical = "0.6"
+canonical_derive = "0.6"
 
 [dev-dependencies]
-canonical_host = "0.5"
+rand = "0.8.3"

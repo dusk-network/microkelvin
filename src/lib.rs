@@ -14,16 +14,21 @@
 //! data as well as methods of search.
 
 #![no_std]
-#![warn(missing_docs)]
+#![deny(missing_docs)]
 
+#[macro_use]
 extern crate alloc;
 
-mod annotation;
+mod annotations;
 mod branch;
 mod branch_mut;
 mod compound;
+mod walk;
 
-pub use annotation::{Annotated, Annotation, Cardinality, Max};
-pub use branch::{Branch, Level, Step, Walk};
-pub use branch_mut::{BranchMut, LevelMut, StepMut, WalkMut};
-pub use compound::{Child, ChildMut, Compound, Nth};
+pub use annotations::{
+    Annotated, Annotation, Cardinality, Combine, GetMaxKey, Keyed, MaxKey, Nth,
+};
+pub use branch::Branch;
+pub use branch_mut::BranchMut;
+pub use compound::{Child, ChildMut, Compound, IterChild, MutableLeaves};
+pub use walk::{First, Step, Walk};

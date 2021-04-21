@@ -4,178 +4,130 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use core::borrow::Borrow;
 use core::marker::PhantomData;
 
-use canonical::{Canon, Store};
-
-use crate::annotation::{Annotated, Annotation, Cardinality};
-use crate::branch::{Branch, Step, Walk};
-use crate::branch_mut::{BranchMut, StepMut, WalkMut};
+use crate::annotations::{Annotated, Annotation, WrappedAnnotation};
+use canonical::Canon;
 
 /// The response of the `child` method on a `Compound` node.
-pub enum Child<'a, C, S>
+pub enum Child<'a, C, A>
 where
-    C: Compound<S>,
-    S: Store,
+    C: Compound<A>,
 {
     /// Child is a leaf
     Leaf(&'a C::Leaf),
     /// Child is an annotated subtree node
-    Node(&'a Annotated<C, S>),
+    Node(&'a Annotated<C, A>),
+    /// Empty slot
+    Empty,
     /// No more children
     EndOfNode,
 }
 
 /// The response of the `child_mut` method on a `Compound` node.
-pub enum ChildMut<'a, C, S>
+pub enum ChildMut<'a, C, A>
 where
-    C: Compound<S>,
-    S: Store,
+    C: Compound<A>,
 {
     /// Child is a leaf
     Leaf(&'a mut C::Leaf),
     /// Child is an annotated node
-    Node(&'a mut Annotated<C, S>),
+    Node(&'a mut Annotated<C, A>),
+    /// Empty slot
+    Empty,
     /// No more children
     EndOfNode,
 }
 
-/// Trait for compound datastructures
-pub trait Compound<S>
-where
-    Self: Canon<S>,
-    S: Store,
-{
-    /// The leaf type of the collection
+/// A type that can recursively contain itself and leaves.
+pub trait Compound<A>: Sized + Canon {
+    /// The leaf type of the Compound collection
     type Leaf;
 
-    /// The annotation type of the connection
-    type Annotation;
-
     /// Returns a reference to a possible child at specified offset
-    fn child(&self, ofs: usize) -> Child<Self, S>;
-    /// Returns an iterator over all the available offsets for this compound
-    fn child_iter(&self) -> ChildIterator<Self, S> {
-        self.into()
-    }
+    fn child(&self, ofs: usize) -> Child<Self, A>
+    where
+        A: Annotation<Self::Leaf>;
+
     /// Returns a mutable reference to a possible child at specified offset
-    fn child_mut(&mut self, ofs: usize) -> ChildMut<Self, S>;
-}
+    fn child_mut(&mut self, ofs: usize) -> ChildMut<Self, A>
+    where
+        A: Annotation<Self::Leaf>;
 
-pub struct ChildIterator<'a, C, S>
-where
-    C: Compound<S>,
-    S: Store,
-{
-    ofs: usize,
-    compound: &'a C,
-    store: PhantomData<S>,
-}
-
-impl<'a, C, S> From<&'a C> for ChildIterator<'a, C, S>
-where
-    C: Compound<S>,
-    S: Store,
-{
-    fn from(c: &C) -> ChildIterator<C, S> {
+    /// Returns an iterator over the children of the Compound node.
+    fn children(&self) -> ChildIterator<Self, A> {
         ChildIterator {
+            node: self,
             ofs: 0,
-            compound: c,
-            store: PhantomData,
+            _marker: PhantomData,
         }
     }
 }
 
-impl<'a, C, S> Iterator for ChildIterator<'a, C, S>
+/// The kinds of children you can encounter iterating over a Compound
+pub enum IterChild<'a, C, A>
 where
-    C: Compound<S>,
-    S: Store,
+    C: Compound<A>,
 {
-    type Item = Child<'a, C, S>;
+    /// Iterator found a leaf
+    Leaf(&'a C::Leaf),
+    /// Iterator found an annotated node
+    Node(&'a Annotated<C, A>),
+}
+
+impl<'a, C, A> IterChild<'a, C, A>
+where
+    A: Annotation<C::Leaf>,
+    C: Compound<A>,
+{
+    /// Returns the annotation of the child
+    pub fn annotation(&self) -> WrappedAnnotation<A> {
+        match self {
+            IterChild::Leaf(l) => WrappedAnnotation::Owned(A::from_leaf(l)),
+            IterChild::Node(a) => WrappedAnnotation::Borrowed(a.annotation()),
+        }
+    }
+}
+
+pub struct ChildIterator<'a, C, A> {
+    node: &'a C,
+    ofs: usize,
+    _marker: PhantomData<A>,
+}
+
+impl<'a, C, A> Iterator for ChildIterator<'a, C, A>
+where
+    C: Compound<A>,
+    C::Leaf: 'a,
+    A: Annotation<C::Leaf> + 'a,
+{
+    type Item = IterChild<'a, C, A>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let c = self.compound.child(self.ofs);
-        self.ofs += 1;
-
-        match c {
-            Child::EndOfNode => None,
-            _ => Some(c),
+        loop {
+            match self.node.child(self.ofs) {
+                Child::Empty => self.ofs += 1,
+                Child::EndOfNode => return None,
+                Child::Leaf(l) => {
+                    self.ofs += 1;
+                    return Some(IterChild::Leaf(l));
+                }
+                Child::Node(a) => {
+                    self.ofs += 1;
+                    return Some(IterChild::Node(a));
+                }
+            }
         }
     }
 }
 
-/// Find the nth element of any collection satisfying the given annotation
-/// constraints
-pub trait Nth<'a, S>
-where
-    Self: Compound<S> + Sized,
-    Self::Annotation: Annotation<Self, S>,
-    S: Store,
-{
-    /// Construct a `Branch` pointing to the `nth` element, if any
-    fn nth(&'a self, n: u64) -> Result<Option<Branch<'a, Self, S>>, S::Error>;
-
-    /// Construct a `BranchMut` pointing to the `nth` element, if any
-    fn nth_mut(
-        &'a mut self,
-        n: u64,
-    ) -> Result<Option<BranchMut<'a, Self, S>>, S::Error>;
-}
-
-impl<'a, C, S> Nth<'a, S> for C
-where
-    C: Compound<S>,
-    C::Annotation: Annotation<C, S> + Borrow<Cardinality>,
-    S: Store,
-{
-    fn nth(
-        &'a self,
-        mut index: u64,
-    ) -> Result<Option<Branch<'a, Self, S>>, S::Error> {
-        Branch::walk(self, |f| match f {
-            Walk::Leaf(l) => {
-                if index == 0 {
-                    Step::Found(l)
-                } else {
-                    index -= 1;
-                    Step::Next
-                }
-            }
-            Walk::Node(n) => {
-                let &Cardinality(card) = n.annotation().borrow();
-                if card <= index {
-                    index -= card;
-                    Step::Next
-                } else {
-                    Step::Into(n)
-                }
-            }
-        })
-    }
-
-    fn nth_mut(
-        &'a mut self,
-        mut index: u64,
-    ) -> Result<Option<BranchMut<'a, Self, S>>, S::Error> {
-        BranchMut::walk(self, |f| match f {
-            WalkMut::Leaf(l) => {
-                if index == 0 {
-                    StepMut::Found(l)
-                } else {
-                    index -= 1;
-                    StepMut::Next
-                }
-            }
-            WalkMut::Node(n) => {
-                let &Cardinality(card) = n.annotation().borrow();
-                if card <= index {
-                    index -= card;
-                    StepMut::Next
-                } else {
-                    StepMut::Into(n)
-                }
-            }
-        })
-    }
-}
+/// Marker trait to signal that a datastructre can allow mutable access to its
+/// leaves.
+///
+/// For example, a `Vec`-like structure can allow editing of its leaves without
+/// issue, whereas editing the (Key, Value) pair of a map could make the map
+/// logically invalid.
+///
+/// Note that this is still safe to implement, since it can only cause logical
+/// errors, not undefined behaviour,
+pub trait MutableLeaves {}
