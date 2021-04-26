@@ -59,7 +59,7 @@ where
     C: Compound<A>,
     A: Combine<C, A>,
 {
-    /// Walks the node selecting a leaf or a node, aborting or proceeding
+    /// Walk the tree node, returning the appropriate `Step`
     fn walk(&mut self, walk: Walk<C, A>) -> Step;
 }
 
