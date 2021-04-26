@@ -53,11 +53,13 @@ where
     }
 }
 
+/// The trait used to construct a `Branch` or to iterate through a tree.
 pub trait Walker<C, A>
 where
     C: Compound<A>,
     A: Combine<C, A>,
 {
+    /// Walk the tree node, returning the appropriate `Step`
     fn walk(&mut self, walk: Walk<C, A>) -> Step;
 }
 
