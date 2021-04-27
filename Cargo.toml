@@ -1,6 +1,6 @@
 [package]
 name = "microkelvin"
-version = "0.7.0"
+version = "0.7.1"
 authors = ["Kristoffer Ström <kristoffer@dusk.network>"]
 edition = "2018"
 keywords = ["datastructures"]
@@ -14,3 +14,4 @@ canonical_derive = "0.6"
 
 [dev-dependencies]
 rand = "0.8.3"
+
