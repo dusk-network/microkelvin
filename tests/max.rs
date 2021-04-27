@@ -39,7 +39,7 @@ fn maximum() {
     let mut list = LinkedList::<_, MaxKey<u64>>::new();
 
     for key in keys {
-        list.insert(TestLeaf { key, other: () });
+        list.push(TestLeaf { key, other: () });
     }
 
     let max = list.max_key().unwrap().unwrap();
