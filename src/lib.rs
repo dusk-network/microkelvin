@@ -13,7 +13,7 @@
 //! `Branch` and `BranchMut`, types for representing branches in tree-formed
 //! data as well as methods of search.
 
-#![no_std]
+#![cfg_attr(not(feature = "persistance"), no_std)]
 #![deny(missing_docs)]
 
 #[macro_use]
@@ -32,3 +32,9 @@ pub use branch::Branch;
 pub use branch_mut::BranchMut;
 pub use compound::{Child, ChildMut, Compound, IterChild, MutableLeaves};
 pub use walk::{First, Step, Walk, Walker};
+
+#[cfg(feature = "persistance")]
+mod persist;
+
+#[cfg(feature = "persistance")]
+pub use persist::{PStore, Persist};
