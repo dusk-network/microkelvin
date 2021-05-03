@@ -14,7 +14,7 @@
 //! data as well as methods of search.
 
 #![cfg_attr(not(feature = "persistance"), no_std)]
-#![deny(missing_docs)]
+#![warn(missing_docs)]
 
 #[macro_use]
 extern crate alloc;

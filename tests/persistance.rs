@@ -8,12 +8,12 @@ mod linked_list;
 
 #[cfg(feature = "persistance")]
 mod persist_tests {
+    use super::*;
 
     use linked_list::LinkedList;
 
     use canonical_derive::Canon;
-    use microkelvin::{GetMaxKey, Keyed, MaxKey, PStore};
-    use tempfile;
+    use microkelvin::{Keyed, PStore, Persist};
 
     #[derive(PartialEq, Clone, Canon, Debug)]
     struct TestLeaf {
@@ -29,10 +29,10 @@ mod persist_tests {
 
     #[test]
     fn persist() {
-        let path = tempfile::tempdir().unwrap();
-        let mut store = PStore::new(&path);
+        let dir = tempfile::tempdir().unwrap();
+        let mut store = PStore::new(dir.path()).unwrap();
 
-        let n: u64 = 1024;
+        let n: u64 = 4;
 
         let mut list = LinkedList::<_, ()>::new();
 
@@ -42,8 +42,6 @@ mod persist_tests {
 
         let id = list.persist(&mut store);
 
-        drop(store);
-
-        let new_store = PStore::new(&path);
+        let restored = LinkedList::restore(id, &store);
     }
 }
