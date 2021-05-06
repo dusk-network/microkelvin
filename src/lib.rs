@@ -26,7 +26,7 @@ mod compound;
 mod walk;
 
 pub use annotations::{
-    Annotated, Annotation, Cardinality, Combine, GetMaxKey, Keyed, MaxKey, Nth,
+    Annotation, Cardinality, Combine, GetMaxKey, Keyed, Link, MaxKey, Nth,
 };
 pub use branch::Branch;
 pub use branch_mut::BranchMut;
@@ -37,4 +37,4 @@ pub use walk::{First, Step, Walk, Walker};
 mod persist;
 
 #[cfg(feature = "persistance")]
-pub use persist::{PStore, Persist};
+pub use persist::PStore;

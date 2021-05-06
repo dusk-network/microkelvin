@@ -6,7 +6,7 @@
 
 use core::marker::PhantomData;
 
-use crate::annotations::{Annotated, Annotation, WrappedAnnotation};
+use crate::annotations::{Annotation, Link, WrappedAnnotation};
 use canonical::Canon;
 
 /// The response of the `child` method on a `Compound` node.
@@ -17,7 +17,7 @@ where
     /// Child is a leaf
     Leaf(&'a C::Leaf),
     /// Child is an annotated subtree node
-    Node(&'a Annotated<C, A>),
+    Node(&'a Link<C, A>),
     /// Empty slot
     Empty,
     /// No more children
@@ -32,7 +32,7 @@ where
     /// Child is a leaf
     Leaf(&'a mut C::Leaf),
     /// Child is an annotated node
-    Node(&'a mut Annotated<C, A>),
+    Node(&'a mut Link<C, A>),
     /// Empty slot
     Empty,
     /// No more children
@@ -72,7 +72,7 @@ where
     /// Iterator found a leaf
     Leaf(&'a C::Leaf),
     /// Iterator found an annotated node
-    Node(&'a Annotated<C, A>),
+    Node(&'a Link<C, A>),
 }
 
 impl<'a, C, A> IterChild<'a, C, A>

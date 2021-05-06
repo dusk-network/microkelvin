@@ -10,6 +10,7 @@ use canonical::{CanonError, Repr, Val, ValMut};
 use canonical_derive::Canon;
 
 use crate::compound::Compound;
+use crate::persist::Persisted;
 
 use alloc::rc::Rc;
 
@@ -129,17 +130,27 @@ where
     }
 }
 
+pub enum LinkInner<C, A> {
+    Value(C),
+    AnnotatedValue(C, A),
+    Persisted(Persisted, A)
+    AnnotatedPersistedValue(Persisted, C, A),
+}
+
+// Valid configurations with Id
+
+
 #[derive(Debug, Canon)]
 /// A wrapper type that keeps the annotation of the Compound referenced cached
-pub struct Annotated<C, A>(Repr<C>, Rc<A>);
+pub struct Link<C, A>(Repr<C>, Rc<A>);
 
-impl<C, A> Clone for Annotated<C, A> {
+impl<C, A> Clone for Link<C, A> {
     fn clone(&self) -> Self {
-        Annotated(self.0.clone(), self.1.clone())
+        Link(self.0.clone(), self.1.clone())
     }
 }
 
-impl<C, A> Annotated<C, A>
+impl<C, A> Link<C, A>
 where
     C: Compound<A>,
     A: Annotation<C::Leaf>,
@@ -150,7 +161,11 @@ where
         A: Combine<C, A>,
     {
         let a = A::combine(&compound);
-        Annotated(Repr::new(compound), Rc::new(a))
+        Link(Repr::new(compound), Rc::new(a))
+    }
+
+    pub(crate) fn from_persisted(p: Persisted, a: A) -> Self {
+        todo!()
     }
 
     /// Returns a reference to to the annotation stored

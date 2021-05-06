@@ -7,14 +7,14 @@
 use canonical::Canon;
 use canonical_derive::Canon;
 use microkelvin::{
-    Annotated, Annotation, Child, ChildMut, Combine, Compound, First,
+    Annotation, Child, ChildMut, Combine, Compound, First, MerkleLink,
     MutableLeaves,
 };
 
 #[derive(Clone, Canon, Debug)]
 pub enum LinkedList<T, A> {
     Empty,
-    Node { val: T, next: Annotated<Self, A> },
+    Node { val: T, next: MerkleLink<Self, A> },
 }
 
 impl<T, A> Default for LinkedList<T, A> {
@@ -71,13 +71,13 @@ where
             LinkedList::Empty => {
                 *self = LinkedList::Node {
                     val: t,
-                    next: Annotated::new(LinkedList::Empty),
+                    next: MerkleLink::new(LinkedList::Empty),
                 }
             }
             old @ LinkedList::Node { .. } => {
                 *self = LinkedList::Node {
                     val: t,
-                    next: Annotated::new(old),
+                    next: MerkleLink::new(old),
                 };
             }
         }
