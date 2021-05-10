@@ -8,7 +8,6 @@ use core::marker::PhantomData;
 
 use canonical::CanonError;
 
-use crate::annotations::Combine;
 use crate::branch::Branch;
 use crate::branch_mut::BranchMut;
 use crate::compound::{Child, Compound, MutableLeaves};
@@ -37,7 +36,6 @@ pub struct Walk<'a, C, A> {
 impl<'a, C, A> Walk<'a, C, A>
 where
     C: Compound<A>,
-    A: Combine<C, A>,
 {
     pub(crate) fn new(compound: &'a C, ofs: usize) -> Self {
         Walk {
@@ -57,7 +55,6 @@ where
 pub trait Walker<C, A>
 where
     C: Compound<A>,
-    A: Combine<C, A>,
 {
     /// Walk the tree node, returning the appropriate `Step`
     fn walk(&mut self, walk: Walk<C, A>) -> Step;
@@ -69,7 +66,6 @@ pub struct AllLeaves;
 impl<C, A> Walker<C, A> for AllLeaves
 where
     C: Compound<A>,
-    A: Combine<C, A>,
 {
     fn walk(&mut self, walk: Walk<C, A>) -> Step {
         for i in 0.. {
@@ -89,7 +85,6 @@ where
 pub trait First<'a, A>
 where
     Self: Compound<A>,
-    A: Combine<Self, A>,
 {
     /// Construct a `Branch` pointing to the first element, if not empty
     fn first(&'a self) -> Result<Option<Branch<'a, Self, A>>, CanonError>;
@@ -99,13 +94,12 @@ where
         &'a mut self,
     ) -> Result<Option<BranchMut<'a, Self, A>>, CanonError>
     where
-        Self: MutableLeaves;
+        Self: MutableLeaves + Clone;
 }
 
 impl<'a, C, A> First<'a, A> for C
 where
-    C: Compound<A> + Clone,
-    A: Combine<C, A>,
+    C: Compound<A>,
 {
     fn first(&'a self) -> Result<Option<Branch<'a, Self, A>>, CanonError> {
         Branch::<_, A>::walk(self, AllLeaves)
@@ -115,8 +109,7 @@ where
         &'a mut self,
     ) -> Result<Option<BranchMut<'a, Self, A>>, CanonError>
     where
-        A: Combine<Self, A>,
-        C: MutableLeaves,
+        C: MutableLeaves + Clone,
     {
         BranchMut::<_, A>::walk(self, AllLeaves)
     }

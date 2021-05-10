@@ -11,62 +11,51 @@ use alloc::vec::Vec;
 
 use canonical::CanonError;
 
-use crate::annotations::{AnnRefMut, Combine};
 use crate::compound::{Child, ChildMut, Compound};
+use crate::link::LinkCompoundMut;
 use crate::walk::{AllLeaves, Step, Walk, Walker};
 
 #[derive(Debug)]
-enum LevelNodeMut<'a, C, A>
-where
-    C: Compound<A>,
-    A: Combine<C, A>,
-{
+enum LevelNodeMut<'a, C, A> {
     Root(&'a mut C),
-    Val(AnnRefMut<'a, C, A>),
+    Val(LinkCompoundMut<'a, C, A>),
 }
 
 impl<'a, C, A> Deref for LevelNodeMut<'a, C, A>
 where
-    C: Compound<A>,
-    A: Combine<C, A>,
+    C: Clone,
 {
     type Target = C;
 
     fn deref(&self) -> &Self::Target {
         match self {
-            LevelNodeMut::Root(target) => target,
-            LevelNodeMut::Val(val) => &**val,
+            LevelNodeMut::Root(root) => &*root,
+            LevelNodeMut::Val(val) => &*val,
         }
     }
 }
 
 impl<'a, C, A> DerefMut for LevelNodeMut<'a, C, A>
 where
-    C: Compound<A>,
-    A: Combine<C, A>,
+    C: Clone,
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
         match self {
             LevelNodeMut::Root(target) => target,
-            LevelNodeMut::Val(val) => &mut **val,
+            LevelNodeMut::Val(val) => &mut *val,
         }
     }
 }
 
 #[derive(Debug)]
-pub struct LevelMut<'a, C, A>
-where
-    C: Compound<A>,
-    A: Combine<C, A>,
-{
+pub struct LevelMut<'a, C, A> {
     offset: usize,
     node: LevelNodeMut<'a, C, A>,
 }
 
 impl<'a, C, A> Deref for LevelMut<'a, C, A>
 where
-    C: Compound<A>,
-    A: Combine<C, A>,
+    C: Compound<A> + Clone,
 {
     type Target = C;
 
@@ -77,8 +66,7 @@ where
 
 impl<'a, C, A> DerefMut for LevelMut<'a, C, A>
 where
-    C: Compound<A>,
-    A: Combine<C, A>,
+    C: Compound<A> + Clone,
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut *self.node
@@ -88,7 +76,6 @@ where
 impl<'a, C, A> LevelMut<'a, C, A>
 where
     C: Compound<A>,
-    A: Combine<C, A>,
 {
     fn new_root(root: &'a mut C) -> LevelMut<'a, C, A> {
         LevelMut {
@@ -97,10 +84,10 @@ where
         }
     }
 
-    fn new_val(ann: AnnRefMut<'a, C, A>) -> LevelMut<'a, C, A> {
+    fn new_val(link_compound: LinkCompoundMut<'a, C, A>) -> LevelMut<'a, C, A> {
         LevelMut {
             offset: 0,
-            node: LevelNodeMut::Val(ann),
+            node: LevelNodeMut::Val(link_compound),
         }
     }
 
@@ -114,15 +101,11 @@ where
     }
 }
 
-pub struct PartialBranchMut<'a, C, A>(Vec<LevelMut<'a, C, A>>)
-where
-    C: Compound<A>,
-    A: Combine<C, A>;
+pub struct PartialBranchMut<'a, C, A>(Vec<LevelMut<'a, C, A>>);
 
 impl<'a, C, A> PartialBranchMut<'a, C, A>
 where
-    C: Compound<A>,
-    A: Combine<C, A>,
+    C: Compound<A> + Clone,
 {
     fn new(root: &'a mut C) -> Self {
         PartialBranchMut(vec![LevelMut::new_root(root)])
@@ -210,7 +193,7 @@ where
                     let top_child = top.child_mut(ofs);
                     if let ChildMut::Node(n) = top_child {
                         let level: LevelMut<'_, C, A> =
-                            LevelMut::new_val(n.val_mut()?);
+                            LevelMut::new_val(n.compound_mut()?);
 
                         // Extend the lifetime of the Level.
                         // See comment in `Branch::walk` for justification.
@@ -247,7 +230,7 @@ where
                 }
                 ChildMut::Node(n) => {
                     let level: LevelMut<'_, C, A> =
-                        LevelMut::new_val(n.val_mut()?);
+                        LevelMut::new_val(n.compound_mut()?);
                     // Extend the lifetime of the Level.
                     // See comment in `Branch::walk` for justification.
                     let extended: LevelMut<'a, C, A> =
@@ -265,21 +248,9 @@ where
     }
 }
 
-impl<'a, C, A> Drop for BranchMut<'a, C, A>
-where
-    C: Compound<A>,
-    A: Combine<C, A>,
-{
-    fn drop(&mut self) {
-        // unwind when dropping
-        while self.0.pop().is_some() {}
-    }
-}
-
 impl<'a, C, A> BranchMut<'a, C, A>
 where
-    C: Compound<A>,
-    A: Combine<C, A>,
+    C: Compound<A> + Clone,
 {
     /// Returns the depth of the branch
     pub fn depth(&self) -> usize {
@@ -341,15 +312,11 @@ where
 ///
 /// Branches are always guaranteed to point at a leaf, and can be dereferenced
 /// to the pointed-at leaf.
-pub struct BranchMut<'a, C, A>(PartialBranchMut<'a, C, A>)
-where
-    C: Compound<A>,
-    A: Combine<C, A>;
+pub struct BranchMut<'a, C, A>(PartialBranchMut<'a, C, A>);
 
 impl<'a, C, A> Deref for BranchMut<'a, C, A>
 where
-    C: Compound<A>,
-    A: Combine<C, A>,
+    C: Compound<A> + Clone,
 {
     type Target = C::Leaf;
 
@@ -360,8 +327,7 @@ where
 
 impl<'a, C, A> DerefMut for BranchMut<'a, C, A>
 where
-    C: Compound<A>,
-    A: Combine<C, A>,
+    C: Compound<A> + Clone,
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.0.leaf_mut().expect("Invalid branch")
@@ -372,7 +338,6 @@ where
 pub struct BranchMutMapped<'a, C, A, M>
 where
     C: Compound<A>,
-    A: Combine<C, A>,
 {
     inner: BranchMut<'a, C, A>,
     closure: for<'b> fn(&'b C::Leaf) -> &'b M,
@@ -380,8 +345,7 @@ where
 
 impl<'a, C, A, M> Deref for BranchMutMapped<'a, C, A, M>
 where
-    C: Compound<A>,
-    A: Combine<C, A>,
+    C: Compound<A> + Clone,
 {
     type Target = M;
 
@@ -393,8 +357,7 @@ where
 /// A `BranchMut` with a mutably mapped leaf
 pub struct BranchMutMappedMut<'a, C, A, M>
 where
-    C: Compound<A>,
-    A: Combine<C, A>,
+    C: Compound<A> + Clone,
 {
     inner: BranchMut<'a, C, A>,
     closure: for<'b> fn(&'b mut C::Leaf) -> &'b mut M,
@@ -402,8 +365,7 @@ where
 
 impl<'a, C, A, M> Deref for BranchMutMappedMut<'a, C, A, M>
 where
-    C: Compound<A>,
-    A: Combine<C, A>,
+    C: Compound<A> + Clone,
 {
     type Target = M;
 
@@ -419,8 +381,7 @@ where
 
 impl<'a, C, A, M> DerefMut for BranchMutMappedMut<'a, C, A, M>
 where
-    C: Compound<A>,
-    A: Combine<C, A>,
+    C: Compound<A> + Clone,
 {
     fn deref_mut(&mut self) -> &mut M {
         (self.closure)(&mut *self.inner)
@@ -431,8 +392,7 @@ where
 
 pub enum BranchMutIterator<'a, C, A, W>
 where
-    C: Compound<A>,
-    A: Combine<C, A>,
+    C: Compound<A> + Clone,
 {
     Initial(BranchMut<'a, C, A>, W),
     Intermediate(BranchMut<'a, C, A>, W),
@@ -441,8 +401,7 @@ where
 
 impl<'a, C, A> IntoIterator for BranchMut<'a, C, A>
 where
-    C: Compound<A>,
-    A: Combine<C, A>,
+    C: Compound<A> + Clone,
 {
     type Item = Result<&'a mut C::Leaf, CanonError>;
 
@@ -455,8 +414,7 @@ where
 
 impl<'a, C, A, W> Iterator for BranchMutIterator<'a, C, A, W>
 where
-    C: Compound<A>,
-    A: Combine<C, A>,
+    C: Compound<A> + Clone,
     W: Walker<C, A>,
 {
     type Item = Result<&'a mut C::Leaf, CanonError>;

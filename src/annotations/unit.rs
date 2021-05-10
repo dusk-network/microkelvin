@@ -7,7 +7,7 @@
 #![allow(clippy::unused_unit)]
 
 use crate::annotations::{Annotation, Combine};
-use crate::compound::Compound;
+use crate::compound::AnnoIter;
 
 impl<L> Annotation<L> for () {
     fn from_leaf(_: &L) -> Self {
@@ -15,11 +15,8 @@ impl<L> Annotation<L> for () {
     }
 }
 
-impl<C, A> Combine<C, A> for ()
-where
-    C: Compound<A>,
-{
-    fn combine(_: &C) -> Self {
+impl<A> Combine<A> for () {
+    fn combine<C>(_: AnnoIter<C, A>) -> Self {
         ()
     }
 }

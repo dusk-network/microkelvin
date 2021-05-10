@@ -13,7 +13,7 @@ mod persist_tests {
     use linked_list::LinkedList;
 
     use canonical_derive::Canon;
-    use microkelvin::{Keyed, PStore};
+    use microkelvin::{Compound, Keyed, PStore};
 
     #[derive(PartialEq, Clone, Canon, Debug)]
     struct TestLeaf {
@@ -32,16 +32,30 @@ mod persist_tests {
         let dir = tempfile::tempdir().unwrap();
         let mut store = PStore::new(dir.path()).unwrap();
 
-        let n: u64 = 4;
+        let n: u64 = 16;
 
         let mut list = LinkedList::<_, ()>::new();
 
         for i in 0..n {
-            list.insert(i);
+            list.push(i);
         }
 
         let persisted = store.persist(&list);
+        let restored_generic = store.restore(persisted).unwrap();
 
-        let restored = store.restore(persisted);
+        let mut restored: LinkedList<u64, ()> =
+            LinkedList::from_generic(&restored_generic).unwrap();
+
+        // first empty the original
+
+        for i in 0..n {
+            assert_eq!(list.pop().unwrap(), Some(n - i - 1))
+        }
+
+        // then the restored copy
+
+        for i in 0..n {
+            assert_eq!(restored.pop().unwrap(), Some(n - i - 1))
+        }
     }
 }

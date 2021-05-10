@@ -4,10 +4,13 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use canonical::{Canon, CanonError};
+
 use core::marker::PhantomData;
 
-use crate::annotations::{Annotation, Link, WrappedAnnotation};
-use canonical::Canon;
+use crate::annotations::{Annotation, WrappedAnnotation};
+use crate::generic::GenericTree;
+use crate::link::Link;
 
 /// The response of the `child` method on a `Compound` node.
 pub enum Child<'a, C, A>
@@ -40,68 +43,79 @@ where
 }
 
 /// A type that can recursively contain itself and leaves.
-pub trait Compound<A>: Sized + Canon {
+pub trait Compound<A>: Sized {
     /// The leaf type of the Compound collection
     type Leaf;
 
     /// Returns a reference to a possible child at specified offset
-    fn child(&self, ofs: usize) -> Child<Self, A>
-    where
-        A: Annotation<Self::Leaf>;
+    fn child(&self, ofs: usize) -> Child<Self, A>;
 
     /// Returns a mutable reference to a possible child at specified offset
-    fn child_mut(&mut self, ofs: usize) -> ChildMut<Self, A>
-    where
-        A: Annotation<Self::Leaf>;
+    fn child_mut(&mut self, ofs: usize) -> ChildMut<Self, A>;
 
-    /// Returns an iterator over the children of the Compound node.
-    fn children(&self) -> ChildIterator<Self, A> {
-        ChildIterator {
+    /// Provides an iterator over all sub-annotations of the compound node
+    fn annotations(&self) -> AnnoIter<Self, A>
+    where
+        A: Annotation<Self::Leaf>,
+    {
+        AnnoIter {
             node: self,
             ofs: 0,
             _marker: PhantomData,
         }
     }
-}
 
-/// The kinds of children you can encounter iterating over a Compound
-pub enum IterChild<'a, C, A>
-where
-    C: Compound<A>,
-{
-    /// Iterator found a leaf
-    Leaf(&'a C::Leaf),
-    /// Iterator found an annotated node
-    Node(&'a Link<C, A>),
-}
+    /// Returns a generic version of this compound tree, erasing the specific
+    /// annotation and leaf types, to provide a universal tree encoding.
+    fn generic(&self) -> GenericTree
+    where
+        Self::Leaf: Canon,
+        A: Annotation<Self::Leaf> + Canon,
+    {
+        let mut generic = GenericTree::new();
 
-impl<'a, C, A> IterChild<'a, C, A>
-where
-    A: Annotation<C::Leaf>,
-    C: Compound<A>,
-{
-    /// Returns the annotation of the child
-    pub fn annotation(&self) -> WrappedAnnotation<A> {
-        match self {
-            IterChild::Leaf(l) => WrappedAnnotation::Owned(A::from_leaf(l)),
-            IterChild::Node(a) => WrappedAnnotation::Borrowed(a.annotation()),
+        for i in 0.. {
+            match self.child(i) {
+                Child::Empty => generic.push_empty(),
+                Child::Leaf(leaf) => generic.push_leaf(leaf),
+                Child::Node(link) => generic.push_link(link),
+                Child::EndOfNode => break,
+            }
         }
+
+        generic
     }
+
+    /// Construct a specific compound tree from a generic tree
+    fn from_generic(tree: &GenericTree) -> Result<Self, CanonError>
+    where
+        Self::Leaf: Canon,
+        A: Canon;
 }
 
-pub struct ChildIterator<'a, C, A> {
+/// An iterator over the sub-annotations of a Compound collection
+pub struct AnnoIter<'a, C, A> {
     node: &'a C,
     ofs: usize,
     _marker: PhantomData<A>,
 }
 
-impl<'a, C, A> Iterator for ChildIterator<'a, C, A>
+impl<'a, C, A> Clone for AnnoIter<'a, C, A> {
+    fn clone(&self) -> Self {
+        AnnoIter {
+            node: self.node,
+            ofs: self.ofs,
+            _marker: self._marker,
+        }
+    }
+}
+
+impl<'a, C, A> Iterator for AnnoIter<'a, C, A>
 where
     C: Compound<A>,
-    C::Leaf: 'a,
     A: Annotation<C::Leaf> + 'a,
 {
-    type Item = IterChild<'a, C, A>;
+    type Item = WrappedAnnotation<'a, C, A>;
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
@@ -110,11 +124,11 @@ where
                 Child::EndOfNode => return None,
                 Child::Leaf(l) => {
                     self.ofs += 1;
-                    return Some(IterChild::Leaf(l));
+                    return Some(WrappedAnnotation::Owned(A::from_leaf(l)));
                 }
                 Child::Node(a) => {
                     self.ofs += 1;
-                    return Some(IterChild::Node(a));
+                    return Some(WrappedAnnotation::Link(a.annotation()));
                 }
             }
         }
