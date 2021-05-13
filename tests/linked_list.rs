@@ -68,7 +68,7 @@ where
 
         let val: Self::Leaf = match children.next() {
             Some(GenericChild::Leaf(leaf)) => leaf.cast()?,
-            Some(GenericChild::Empty) => return Ok(LinkedList::Empty),
+            None => return Ok(LinkedList::Empty),
             _ => return Err(CanonError::InvalidEncoding),
         };
 
@@ -115,7 +115,8 @@ where
 
     pub fn pop(&mut self) -> Result<Option<T>, CanonError>
     where
-        T: Clone,
+        T: Canon + Clone,
+        A: Canon,
     {
         match core::mem::take(self) {
             LinkedList::Empty => Ok(None),

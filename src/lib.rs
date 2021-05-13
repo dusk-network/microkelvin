@@ -25,6 +25,8 @@ mod branch_mut;
 mod compound;
 mod generic;
 mod link;
+#[cfg(feature = "persistance")]
+mod persist;
 mod walk;
 
 pub use annotations::{
@@ -38,7 +40,4 @@ pub use link::{Link, LinkAnnotation, LinkCompound, LinkCompoundMut};
 pub use walk::{First, Step, Walk, Walker};
 
 #[cfg(feature = "persistance")]
-mod persist;
-
-#[cfg(feature = "persistance")]
-pub use persist::{PStore, PersistError};
+pub use persist::{BackendCtor, DiskBackend, PersistError, Persistance};

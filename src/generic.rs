@@ -95,6 +95,11 @@ impl Canon for GenericChild {
     }
 }
 
+/// The generic tree structure, this is a generic version of any Compound tree,
+/// which has had it's leaves and annotations replaced with generic variants of
+/// prefixed lengths, so that the tree structure can still be followed even if
+/// you don't know the concrete associated and generic types of the Compound
+/// structure that was persisted
 #[derive(Default, Clone, Canon, Debug)]
 pub struct GenericTree(Vec<GenericChild>);
 
@@ -122,6 +127,7 @@ impl GenericTree {
         self.0.push(GenericChild::Link(id, anno));
     }
 
+    /// Provides an iterator over the generic children of the node
     pub fn children(&self) -> &[GenericChild] {
         &self.0
     }

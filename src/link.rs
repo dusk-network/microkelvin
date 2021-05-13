@@ -5,6 +5,8 @@ use core::ops::{Deref, DerefMut};
 
 use canonical::{Canon, CanonError, Id};
 
+// when not using persistance, the PStore is just a unit struct.
+
 use crate::{Annotation, Compound};
 
 #[derive(Debug, Clone)]
@@ -12,9 +14,8 @@ enum LinkInner<C, A> {
     Placeholder,
     C(Rc<C>),
     Ca(Rc<C>, A),
-    #[allow(unused)] // TODO
     Ia(Id, A),
-    #[allow(unused)] // TODO
+    #[allow(unused)]
     Ica(Id, Rc<C>, A),
 }
 
@@ -108,6 +109,8 @@ where
     pub fn into_compound(self) -> Result<C, CanonError>
     where
         C: Clone,
+        C::Leaf: Canon,
+        A: Canon,
     {
         let inner = self.inner.into_inner();
         match inner {
@@ -118,7 +121,7 @@ where
                 Ok(c) => Ok(c),
                 Err(rc) => Ok((&*rc).clone()),
             },
-            LinkInner::Ia(_, _) => todo!(),
+            LinkInner::Ia(id, _) => C::from_generic(&id.reify()?),
         }
     }
 
@@ -155,7 +158,6 @@ where
                 *borrow = LinkInner::C(c);
                 return Ok(LinkCompoundMut(borrow));
             }
-
             LinkInner::Ia(_, _) => {
                 todo!()
             }

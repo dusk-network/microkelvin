@@ -13,7 +13,7 @@ mod persist_tests {
     use linked_list::LinkedList;
 
     use canonical_derive::Canon;
-    use microkelvin::{Compound, Keyed, PStore};
+    use microkelvin::{BackendCtor, Compound, DiskBackend, Keyed, Persistance};
 
     #[derive(PartialEq, Clone, Canon, Debug)]
     struct TestLeaf {
@@ -27,11 +27,15 @@ mod persist_tests {
         }
     }
 
+    fn testbackend() -> BackendCtor<DiskBackend> {
+        BackendCtor::new(|| {
+            let dir = tempfile::tempdir().unwrap();
+            DiskBackend::new(dir.path()).unwrap()
+        })
+    }
+
     #[test]
     fn persist() {
-        let dir = tempfile::tempdir().unwrap();
-        let mut store = PStore::new(dir.path()).unwrap();
-
         let n: u64 = 16;
 
         let mut list = LinkedList::<_, ()>::new();
@@ -40,22 +44,33 @@ mod persist_tests {
             list.push(i);
         }
 
-        let persisted = store.persist(&list);
-        let restored_generic = store.restore(persisted).unwrap();
+        println!("list post push {:?}", list);
+
+        let persisted = Persistance::persist(&testbackend(), &list).unwrap();
+
+        println!("list post persisted {:?}", list);
+
+        let restored_generic = persisted.reify().unwrap();
+
+        println!("list post restored generic {:?}", restored_generic);
 
         let mut restored: LinkedList<u64, ()> =
             LinkedList::from_generic(&restored_generic).unwrap();
 
+        println!("list post restored cast {:?}", restored);
+
         // first empty the original
 
         for i in 0..n {
-            assert_eq!(list.pop().unwrap(), Some(n - i - 1))
+            assert_eq!(list.pop().unwrap(), Some(n - i - 1));
+            println!("list A: {:?}", list);
         }
 
         // then the restored copy
 
         for i in 0..n {
-            assert_eq!(restored.pop().unwrap(), Some(n - i - 1))
+            assert_eq!(restored.pop().unwrap(), Some(n - i - 1));
+            println!("list B: {:?}", restored);
         }
     }
 }
