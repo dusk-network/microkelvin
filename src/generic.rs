@@ -1,5 +1,6 @@
 use alloc::vec::Vec;
 
+use arbitrary::Arbitrary;
 use canonical::{Canon, CanonError, EncodeToVec, Id, Source};
 use canonical_derive::Canon;
 
@@ -11,11 +12,11 @@ const TAG_LEAF: u8 = 1;
 const TAG_LINK: u8 = 2;
 
 /// A generic annotation
-#[derive(Clone, Canon, Debug)]
+#[derive(Clone, Canon, Debug, PartialEq, Arbitrary)]
 pub struct GenericAnnotation(Vec<u8>);
 
 /// A generic leaf
-#[derive(Clone, Canon, Debug)]
+#[derive(Clone, Canon, Debug, PartialEq, Arbitrary)]
 pub struct GenericLeaf(Vec<u8>);
 
 impl GenericLeaf {
@@ -41,7 +42,7 @@ impl GenericAnnotation {
 }
 
 /// A generic child of a collection
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Arbitrary)]
 pub enum GenericChild {
     /// Child is empty
     Empty,
@@ -81,15 +82,12 @@ impl Canon for GenericChild {
     }
 
     fn encoded_len(&self) -> usize {
-        let tag_len = 1;
+        const TAG_LEN: usize = 1;
         match self {
-            Self::Empty => tag_len,
-            Self::Leaf(leaf) => {
-                let size_len = 2;
-                tag_len + size_len + leaf.encoded_len()
-            }
+            Self::Empty => TAG_LEN,
+            Self::Leaf(leaf) => TAG_LEN + leaf.encoded_len(),
             Self::Link(id, anno) => {
-                tag_len + id.encoded_len() + anno.encoded_len()
+                TAG_LEN + id.encoded_len() + anno.encoded_len()
             }
         }
     }
@@ -100,7 +98,7 @@ impl Canon for GenericChild {
 /// prefixed lengths, so that the tree structure can still be followed even if
 /// you don't know the concrete associated and generic types of the Compound
 /// structure that was persisted
-#[derive(Default, Clone, Canon, Debug)]
+#[derive(Default, Clone, Canon, Debug, PartialEq, Arbitrary)]
 pub struct GenericTree(Vec<GenericChild>);
 
 impl GenericTree {

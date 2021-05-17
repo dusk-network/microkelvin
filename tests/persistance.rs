@@ -15,6 +15,10 @@ mod persist_tests {
     use canonical_derive::Canon;
     use microkelvin::{BackendCtor, Compound, DiskBackend, Keyed, Persistance};
 
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::thread;
+    use std::time;
+
     #[derive(PartialEq, Clone, Canon, Debug)]
     struct TestLeaf {
         key: u64,
@@ -27,15 +31,21 @@ mod persist_tests {
         }
     }
 
+    static INIT_COUNTER: AtomicUsize = AtomicUsize::new(0);
+
     fn testbackend() -> BackendCtor<DiskBackend> {
         BackendCtor::new(|| {
+            INIT_COUNTER.fetch_add(1, Ordering::SeqCst);
+
             let dir = tempfile::tempdir().unwrap();
-            DiskBackend::new(dir.path()).unwrap()
+            let b = DiskBackend::new(dir.path()).unwrap();
+            core::mem::forget(dir);
+            b
         })
     }
 
     #[test]
-    fn persist() {
+    fn persist_a() {
         let n: u64 = 16;
 
         let mut list = LinkedList::<_, ()>::new();
@@ -44,33 +54,104 @@ mod persist_tests {
             list.push(i);
         }
 
-        println!("list post push {:?}", list);
-
         let persisted = Persistance::persist(&testbackend(), &list).unwrap();
 
-        println!("list post persisted {:?}", list);
-
-        let restored_generic = persisted.reify().unwrap();
-
-        println!("list post restored generic {:?}", restored_generic);
+        let restored_generic = persisted.restore().unwrap();
 
         let mut restored: LinkedList<u64, ()> =
             LinkedList::from_generic(&restored_generic).unwrap();
-
-        println!("list post restored cast {:?}", restored);
 
         // first empty the original
 
         for i in 0..n {
             assert_eq!(list.pop().unwrap(), Some(n - i - 1));
-            println!("list A: {:?}", list);
         }
 
         // then the restored copy
 
         for i in 0..n {
             assert_eq!(restored.pop().unwrap(), Some(n - i - 1));
-            println!("list B: {:?}", restored);
+        }
+    }
+
+    // Identical to persist_a, to test concurrency
+
+    #[test]
+    fn persist_b() {
+        let n: u64 = 2;
+
+        let mut list = LinkedList::<_, ()>::new();
+
+        for i in 0..n {
+            list.push(i);
+        }
+
+        let persisted = Persistance::persist(&testbackend(), &list).unwrap();
+
+        let restored_generic = persisted.restore().unwrap();
+
+        let mut restored: LinkedList<u64, ()> =
+            LinkedList::from_generic(&restored_generic).unwrap();
+
+        // first empty the original
+
+        for i in 0..n {
+            assert_eq!(list.pop().unwrap(), Some(n - i - 1));
+        }
+
+        // then the restored copy
+
+        for i in 0..n {
+            assert_eq!(restored.pop().unwrap(), Some(n - i - 1));
+        }
+    }
+
+    // this test should work across threads!
+
+    #[test]
+    fn persist_across_threads() {
+        let n: u64 = 16;
+
+        let mut list = LinkedList::<_, ()>::new();
+
+        for i in 0..n {
+            list.push(i);
+        }
+
+        let persisted = Persistance::persist(&testbackend(), &list).unwrap();
+
+        // it should now be available from other threads
+
+        std::thread::spawn(move || {
+            let restored_generic = persisted.restore().unwrap();
+
+            let mut restored: LinkedList<u64, ()> =
+                LinkedList::from_generic(&restored_generic).unwrap();
+
+            for i in 0..n {
+                assert_eq!(restored.pop().unwrap(), Some(n - i - 1));
+            }
+        })
+        .join()
+        .unwrap();
+
+        // then empty the original
+
+        for i in 0..n {
+            assert_eq!(list.pop().unwrap(), Some(n - i - 1));
+        }
+    }
+
+    #[test]
+    fn persist_create_once() {
+        while INIT_COUNTER.load(Ordering::SeqCst) == 0 {}
+
+        for _ in 0..128 {
+            assert_eq!(INIT_COUNTER.load(Ordering::SeqCst), 1);
+
+            thread::sleep(time::Duration::from_millis(1));
+
+            assert_eq!(INIT_COUNTER.load(Ordering::SeqCst), 1);
         }
     }
 }

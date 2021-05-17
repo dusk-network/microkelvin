@@ -25,9 +25,10 @@ mod branch_mut;
 mod compound;
 mod generic;
 mod link;
+mod walk;
+
 #[cfg(feature = "persistance")]
 mod persist;
-mod walk;
 
 pub use annotations::{
     Annotation, Cardinality, Combine, GetMaxKey, Keyed, MaxKey, Nth,
@@ -40,4 +41,6 @@ pub use link::{Link, LinkAnnotation, LinkCompound, LinkCompoundMut};
 pub use walk::{First, Step, Walk, Walker};
 
 #[cfg(feature = "persistance")]
-pub use persist::{BackendCtor, DiskBackend, PersistError, Persistance};
+pub use persist::{
+    BackendCtor, DiskBackend, PersistError, Persistance, PersistedId,
+};

@@ -14,10 +14,17 @@ parking_lot = { version = "0.11.1", optional = true }
 lazy_static = { version = "1.4.0", optional = true }
 canonical = "0.6"
 canonical_derive = "0.6"
+arbitrary = { version = "1.0.0", features = ["derive"] }
 
 [dev-dependencies]
 rand = "0.8.3"
 tempfile = "3.2.0"
+canonical_fuzz = "0.6"
 
 [features]
 persistance = ["appendix", "parking_lot", "lazy_static"]
+
+[patch.crates-io]
+canonical = { path = "../canonical/canon" }
+canonical_derive = { path = "../canonical/canon_derive" }
+canonical_fuzz = { path = "../canonical/canon_fuzz" }
