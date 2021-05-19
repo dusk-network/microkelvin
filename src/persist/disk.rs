@@ -79,6 +79,7 @@ impl Backend for DiskBackend {
             let mut source = Source::new(&buf);
             Ok(GenericTree::decode(&mut source)?)
         } else {
+            println!("error in disk get");
             Err(CanonError::NotFound.into())
         }
     }

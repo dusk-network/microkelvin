@@ -78,7 +78,7 @@ mod persist_tests {
 
     #[test]
     fn persist_b() {
-        let n: u64 = 2;
+        let n: u64 = 16;
 
         let mut list = LinkedList::<_, ()>::new();
 

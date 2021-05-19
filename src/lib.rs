@@ -42,5 +42,6 @@ pub use walk::{First, Step, Walk, Walker};
 
 #[cfg(feature = "persistance")]
 pub use persist::{
-    BackendCtor, DiskBackend, PersistError, Persistance, PersistedId,
+    Backend, BackendCtor, DiskBackend, PersistError, Persistance, PersistedId,
+    PutResult,
 };

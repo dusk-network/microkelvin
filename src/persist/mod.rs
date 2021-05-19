@@ -6,14 +6,18 @@ use std::{
     hash::Hash,
 };
 
+mod disk;
+mod test;
+
 use crate::Child;
 use canonical::{Canon, CanonError, Id};
 use lazy_static::lazy_static;
 use parking_lot::{RwLock, RwLockWriteGuard};
 
-mod disk;
-use crate::{Annotation, Compound, GenericTree};
 pub use disk::DiskBackend;
+pub use test::TestBackend;
+
+use crate::{Annotation, Compound, GenericTree};
 pub(crate) struct WrappedBackend(Arc<RwLock<dyn Backend>>);
 
 impl WrappedBackend {
@@ -48,7 +52,7 @@ impl WrappedBackend {
 
         let id = Id::new(&generic);
 
-        if let Some(bytes) = id.promote_bytes()? {
+        if let Some(bytes) = id.take_bytes()? {
             match backend.put(&id, &bytes[..])? {
                 PutResult::Written => {
                     // Recursively store the children if not already in backend
@@ -147,7 +151,16 @@ impl Persistance {
                 return Ok(tree);
             }
         }
+        println!("error in get");
         Err(CanonError::NotFound.into())
+    }
+
+    pub fn test_backend_ctor() -> BackendCtor<TestBackend> {
+        BackendCtor::new(|| {
+            let dir = tempfile::tempdir().unwrap();
+            let b = DiskBackend::new(dir.path()).unwrap();
+            TestBackend(b, dir)
+        })
     }
 }
 
