@@ -230,3 +230,70 @@ fn iterate_mutable() {
         count -= 1;
     }
 }
+
+#[test]
+fn iterate_map() {
+    let n: u64 = 32;
+
+    let mut list = LinkedList::<_, ()>::new();
+
+    for i in 0..n {
+        list.insert(i)
+    }
+
+    // branch from first element
+    let branch_mut = list.first().unwrap().unwrap();
+    let mapped = branch_mut.map_leaf(|x| x);
+
+    let mut count = n - 1;
+
+    for leaf in mapped {
+        let leaf = leaf.unwrap();
+
+        assert_eq!(*leaf, count);
+
+        count = count.saturating_sub(1);
+    }
+}
+
+#[test]
+fn iterate_map_mutable() {
+    let n: u64 = 32;
+
+    let mut list = LinkedList::<_, ()>::new();
+
+    for i in 0..n {
+        list.insert(i)
+    }
+
+    // branch from first element
+    let branch_mut = list.first_mut().unwrap().unwrap();
+    let mapped = branch_mut.map_leaf_mut(|x| x);
+
+    let mut count = n - 1;
+
+    for leaf in mapped {
+        let leaf = leaf.unwrap();
+
+        assert_eq!(*leaf, count);
+
+        count = count.saturating_sub(1);
+    }
+}
+
+#[test]
+fn deref_mapped_mutable_branch() {
+    let n: u64 = 32;
+
+    let mut list = LinkedList::<_, ()>::new();
+
+    for i in 0..n {
+        list.insert(i)
+    }
+
+    // branch from first element
+    let branch_mut = list.first_mut().unwrap().unwrap();
+    let mapped = branch_mut.map_leaf_mut(|x| x);
+
+    assert_eq!(core::ops::Deref::deref(&mapped), &31);
+}

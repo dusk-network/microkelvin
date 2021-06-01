@@ -408,10 +408,12 @@ where
     type Target = M;
 
     fn deref(&self) -> &M {
-        // FIXME, could we just transmute &self to &mut self here, since we're
-        // turning it back to a & reference again directly?
-
-        todo!()
+        // This is safe since we never use the mutable pointer as such, and
+        // convert it back to a shared reference as we return.
+        unsafe {
+            let transmuted: *mut Self = core::mem::transmute(self);
+            (self.closure)(&mut (*transmuted).inner)
+        }
     }
 }
 
@@ -425,6 +427,8 @@ where
     }
 }
 
+// iterators
+
 pub enum BranchMutIterator<'a, C, A, W>
 where
     C: Compound<A>,
@@ -435,7 +439,6 @@ where
     Exhausted,
 }
 
-// iterators
 impl<'a, C, A> IntoIterator for BranchMut<'a, C, A>
 where
     C: Compound<A>,
@@ -450,7 +453,6 @@ where
     }
 }
 
-// iterators
 impl<'a, C, A, W> Iterator for BranchMutIterator<'a, C, A, W>
 where
     C: Compound<A>,
@@ -489,6 +491,78 @@ where
             BranchMutIterator::Intermediate(branch, _) => {
                 let leaf: &mut C::Leaf = &mut *branch;
                 let leaf_extended: &'a mut C::Leaf =
+                    unsafe { core::mem::transmute(leaf) };
+                Some(Ok(leaf_extended))
+            }
+            _ => unreachable!(),
+        }
+    }
+}
+
+pub enum BranchMutMappedMutIterator<'a, C, A, W, M>
+where
+    C: Compound<A>,
+    A: Combine<C, A>,
+{
+    Initial(BranchMutMappedMut<'a, C, A, M>, W),
+    Intermediate(BranchMutMappedMut<'a, C, A, M>, W),
+    Exhausted,
+}
+
+impl<'a, C, A, M> IntoIterator for BranchMutMappedMut<'a, C, A, M>
+where
+    C: Compound<A>,
+    A: Combine<C, A>,
+    M: 'a,
+{
+    type Item = Result<&'a mut M, CanonError>;
+
+    type IntoIter = BranchMutMappedMutIterator<'a, C, A, AllLeaves, M>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        BranchMutMappedMutIterator::Initial(self, AllLeaves)
+    }
+}
+
+impl<'a, C, A, W, M> Iterator for BranchMutMappedMutIterator<'a, C, A, W, M>
+where
+    C: Compound<A>,
+    A: Combine<C, A>,
+    W: Walker<C, A>,
+    M: 'a,
+{
+    type Item = Result<&'a mut M, CanonError>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match core::mem::replace(self, Self::Exhausted) {
+            Self::Initial(branch, walker) => {
+                *self = Self::Intermediate(branch, walker);
+            }
+            Self::Intermediate(mut branch, mut walker) => {
+                branch.inner.0.advance();
+                // access partialbranch
+                match branch.inner.0.walk(&mut walker) {
+                    Ok(None) => {
+                        *self = Self::Exhausted;
+                        return None;
+                    }
+                    Ok(Some(..)) => {
+                        *self = Self::Intermediate(branch, walker);
+                    }
+                    Err(e) => {
+                        return Some(Err(e));
+                    }
+                }
+            }
+            Self::Exhausted => {
+                return None;
+            }
+        }
+
+        match self {
+            Self::Intermediate(branch, _) => {
+                let leaf: &mut M = &mut *branch;
+                let leaf_extended: &'a mut M =
                     unsafe { core::mem::transmute(leaf) };
                 Some(Ok(leaf_extended))
             }

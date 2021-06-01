@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.2] - 2021-06-01
+
+### Added
+Add `IntoIterator` to `MappedBranch` and `BranchMutMappedMut`
+Add support for non-mutably dereferencing mutable mapped branches
+
 ## [0.7.1] - 2021-04-27
 
 ### Added
@@ -130,7 +136,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Initial
 
-[Unreleased]: https://github.com/dusk-network/microkelvin/compare/v-0.7.1...HEAD
+[Unreleased]: https://github.com/dusk-network/microkelvin/compare/v-0.7.2...HEAD
+[0.7.2]: https://github.com/dusk-network/microkelvin/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/dusk-network/microkelvin/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/dusk-network/microkelvin/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/dusk-network/microkelvin/compare/v0.5.8...v0.6.0

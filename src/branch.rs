@@ -368,7 +368,6 @@ where
     }
 }
 
-// iterators
 impl<'a, C, A, W> Iterator for BranchIterator<'a, C, A, W>
 where
     C: Compound<A>,
@@ -407,6 +406,78 @@ where
             BranchIterator::Intermediate(branch, _) => {
                 let leaf: &C::Leaf = &*branch;
                 let leaf_extended: &'a C::Leaf =
+                    unsafe { core::mem::transmute(leaf) };
+                Some(Ok(leaf_extended))
+            }
+            _ => unreachable!(),
+        }
+    }
+}
+
+pub enum MappedBranchIterator<'a, C, A, W, M>
+where
+    C: Compound<A>,
+    A: Combine<C, A>,
+{
+    Initial(MappedBranch<'a, C, A, M>, W),
+    Intermediate(MappedBranch<'a, C, A, M>, W),
+    Exhausted,
+}
+
+impl<'a, C, A, M> IntoIterator for MappedBranch<'a, C, A, M>
+where
+    C: Compound<A>,
+    A: Combine<C, A>,
+    M: 'a,
+{
+    type Item = Result<&'a M, CanonError>;
+
+    type IntoIter = MappedBranchIterator<'a, C, A, AllLeaves, M>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        MappedBranchIterator::Initial(self, AllLeaves)
+    }
+}
+
+impl<'a, C, A, W, M> Iterator for MappedBranchIterator<'a, C, A, W, M>
+where
+    C: Compound<A>,
+    A: Combine<C, A>,
+    W: Walker<C, A>,
+    M: 'a,
+{
+    type Item = Result<&'a M, CanonError>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match core::mem::replace(self, Self::Exhausted) {
+            Self::Initial(branch, walker) => {
+                *self = Self::Intermediate(branch, walker);
+            }
+            Self::Intermediate(mut branch, mut walker) => {
+                branch.inner.0.advance();
+                // access partialbranch
+                match branch.inner.0.walk(&mut walker) {
+                    Ok(None) => {
+                        *self = Self::Exhausted;
+                        return None;
+                    }
+                    Ok(Some(..)) => {
+                        *self = Self::Intermediate(branch, walker);
+                    }
+                    Err(e) => {
+                        return Some(Err(e));
+                    }
+                }
+            }
+            Self::Exhausted => {
+                return None;
+            }
+        }
+
+        match self {
+            Self::Intermediate(branch, _) => {
+                let leaf: &M = &*branch;
+                let leaf_extended: &'a M =
                     unsafe { core::mem::transmute(leaf) };
                 Some(Ok(leaf_extended))
             }
