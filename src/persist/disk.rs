@@ -79,7 +79,6 @@ impl Backend for DiskBackend {
             let mut source = Source::new(&buf);
             Ok(GenericTree::decode(&mut source)?)
         } else {
-            println!("error in disk get");
             Err(CanonError::NotFound.into())
         }
     }
@@ -89,8 +88,6 @@ impl Backend for DiskBackend {
         id: &Id,
         bytes: &[u8],
     ) -> Result<PutResult, PersistError> {
-        println!("putting to disk {:?} {:?}", id, bytes);
-
         if self.index.get(id)?.is_some() {
             return Ok(PutResult::AlreadyPresent);
         } else {

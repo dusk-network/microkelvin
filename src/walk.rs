@@ -6,7 +6,7 @@
 
 use core::marker::PhantomData;
 
-use canonical::CanonError;
+use canonical::{Canon, CanonError};
 
 use crate::branch::Branch;
 use crate::branch_mut::BranchMut;
@@ -100,6 +100,7 @@ where
 impl<'a, C, A> First<'a, A> for C
 where
     C: Compound<A>,
+    A: Canon,
 {
     fn first(&'a self) -> Result<Option<Branch<'a, Self, A>>, CanonError> {
         Branch::<_, A>::walk(self, AllLeaves)

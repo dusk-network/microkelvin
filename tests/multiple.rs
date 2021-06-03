@@ -11,6 +11,7 @@ use rand::{prelude::SliceRandom, thread_rng};
 mod linked_list;
 use linked_list::LinkedList;
 
+use canonical::Canon;
 use canonical_derive::Canon;
 use microkelvin::{
     AnnoIter, Annotation, Cardinality, Combine, Compound, GetMaxKey, Keyed,
@@ -38,7 +39,7 @@ impl<K> Borrow<Cardinality> for Anno<K> {
 impl<Leaf, K> Annotation<Leaf> for Anno<K>
 where
     Leaf: Keyed<K>,
-    K: Clone + Ord + Default,
+    K: Ord + Default + Canon,
 {
     fn from_leaf(leaf: &Leaf) -> Self {
         Anno {
@@ -51,7 +52,7 @@ where
 impl<K, A> Combine<A> for Anno<K>
 where
     K: Clone + Ord + Default,
-    A: Borrow<MaxKey<K>> + Borrow<Cardinality>,
+    A: Borrow<MaxKey<K>> + Borrow<Cardinality> + Canon,
 {
     fn combine<C>(iter: AnnoIter<C, A>) -> Self
     where

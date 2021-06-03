@@ -8,7 +8,7 @@ use core::ops::Deref;
 
 use alloc::vec::Vec;
 
-use canonical::CanonError;
+use canonical::{Canon, CanonError};
 
 use crate::annotations::Annotation;
 use crate::compound::{Child, Compound};
@@ -30,6 +30,7 @@ pub struct Level<'a, C, A> {
 impl<'a, C, A> Deref for Level<'a, C, A>
 where
     C: Compound<A>,
+    A: Canon,
 {
     type Target = C;
 
@@ -69,6 +70,7 @@ pub struct PartialBranch<'a, C, A>(Vec<Level<'a, C, A>>);
 impl<'a, C, A> Deref for LevelNode<'a, C, A>
 where
     C: Compound<A>,
+    A: Canon,
 {
     type Target = C;
 
@@ -83,6 +85,7 @@ where
 impl<'a, C, A> PartialBranch<'a, C, A>
 where
     C: Compound<A>,
+    A: Canon,
 {
     fn new(root: &'a C) -> Self {
         PartialBranch(vec![Level::new_root(root)])
@@ -222,6 +225,7 @@ where
 impl<'a, C, A> Branch<'a, C, A>
 where
     C: Compound<A>,
+    A: Canon,
 {
     /// Returns the depth of the branch
     pub fn depth(&self) -> usize {
@@ -269,6 +273,7 @@ pub struct Branch<'a, C, A>(PartialBranch<'a, C, A>);
 impl<'a, C, A> Deref for Branch<'a, C, A>
 where
     C: Compound<A>,
+    A: Canon,
 {
     type Target = C::Leaf;
 
@@ -289,6 +294,7 @@ impl<'a, C, A, M> Deref for MappedBranch<'a, C, A, M>
 where
     C: Compound<A>,
     C::Leaf: 'a,
+    A: Canon,
 {
     type Target = M;
 
@@ -307,6 +313,7 @@ pub enum BranchIterator<'a, C, A, W> {
 impl<'a, C, A> IntoIterator for Branch<'a, C, A>
 where
     C: Compound<A>,
+    A: Canon,
 {
     type Item = Result<&'a C::Leaf, CanonError>;
 
@@ -321,6 +328,7 @@ impl<'a, C, A, W> Iterator for BranchIterator<'a, C, A, W>
 where
     C: Compound<A>,
     W: Walker<C, A>,
+    A: Canon,
 {
     type Item = Result<&'a C::Leaf, CanonError>;
 
@@ -375,7 +383,7 @@ where
 impl<'a, C, A, M> IntoIterator for MappedBranch<'a, C, A, M>
 where
     C: Compound<A>,
-    A: Annotation<C::Leaf>,
+    A: Annotation<C::Leaf> + Canon,
     M: 'a,
 {
     type Item = Result<&'a M, CanonError>;
@@ -390,7 +398,7 @@ where
 impl<'a, C, A, W, M> Iterator for MappedBranchIterator<'a, C, A, W, M>
 where
     C: Compound<A>,
-    A: Annotation<C::Leaf>,
+    A: Annotation<C::Leaf> + Canon,
     W: Walker<C, A>,
     M: 'a,
 {

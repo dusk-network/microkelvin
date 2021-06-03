@@ -5,13 +5,14 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use canonical::{Canon, CanonError};
+use canonical_derive::Canon;
 
 use microkelvin::{
     Annotation, Child, ChildMut, Compound, First, GenericChild, GenericTree,
     Link, MutableLeaves,
 };
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Canon)]
 pub enum LinkedList<T, A>
 where
     A: Annotation<T>,
@@ -31,7 +32,8 @@ where
 
 impl<T, A> Compound<A> for LinkedList<T, A>
 where
-    A: Annotation<T>,
+    A: Annotation<T> + Canon,
+    T: Canon,
 {
     type Leaf = T;
 
@@ -90,7 +92,8 @@ impl<T, A> MutableLeaves for LinkedList<T, A> where A: Annotation<T> {}
 
 impl<T, A> LinkedList<T, A>
 where
-    A: Annotation<T>,
+    A: Annotation<T> + Canon,
+    T: Canon,
 {
     pub fn new() -> Self {
         Default::default()
@@ -115,7 +118,7 @@ where
 
     pub fn pop(&mut self) -> Result<Option<T>, CanonError>
     where
-        T: Canon + Clone,
+        T: Canon,
         A: Canon,
     {
         match core::mem::take(self) {

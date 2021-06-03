@@ -49,7 +49,6 @@ impl WrappedBackend {
         A: Annotation<C::Leaf> + Canon,
     {
         let generic = tree.generic();
-
         let id = Id::new(&generic);
 
         if let Some(bytes) = id.take_bytes()? {
@@ -69,9 +68,7 @@ impl WrappedBackend {
                         }
                     }
                 }
-                PutResult::AlreadyPresent => {
-                    println!("Already there");
-                }
+                PutResult::AlreadyPresent => (),
             }
         }
 
@@ -151,7 +148,6 @@ impl Persistance {
                 return Ok(tree);
             }
         }
-        println!("error in get");
         Err(CanonError::NotFound.into())
     }
 

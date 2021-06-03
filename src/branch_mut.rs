@@ -9,7 +9,7 @@ use core::ops::{Deref, DerefMut};
 
 use alloc::vec::Vec;
 
-use canonical::CanonError;
+use canonical::{Canon, CanonError};
 
 use crate::annotations::Annotation;
 use crate::compound::{Child, ChildMut, Compound};
@@ -104,6 +104,7 @@ pub struct PartialBranchMut<'a, C, A>(Vec<LevelMut<'a, C, A>>);
 impl<'a, C, A> PartialBranchMut<'a, C, A>
 where
     C: Compound<A>,
+    A: Canon,
 {
     fn new(root: &'a mut C) -> Self {
         PartialBranchMut(vec![LevelMut::new_root(root)])
@@ -160,7 +161,7 @@ where
     fn walk<W>(&mut self, walker: &mut W) -> Result<Option<()>, CanonError>
     where
         W: Walker<C, A>,
-        C: Clone,
+        C: Canon,
     {
         enum State<C> {
             Init,
@@ -216,6 +217,7 @@ where
 impl<'a, C, A> BranchMut<'a, C, A>
 where
     C: Compound<A>,
+    A: Canon,
 {
     /// Returns the depth of the branch
     pub fn depth(&self) -> usize {
@@ -242,7 +244,7 @@ where
     ) -> Result<Option<Self>, CanonError>
     where
         W: Walker<C, A>,
-        C: Clone,
+        C: Canon,
     {
         let mut partial = PartialBranchMut::new(root);
         Ok(partial.walk(&mut walker)?.map(|()| BranchMut(partial)))
@@ -262,6 +264,7 @@ pub struct BranchMut<'a, C, A>(PartialBranchMut<'a, C, A>);
 impl<'a, C, A> Deref for BranchMut<'a, C, A>
 where
     C: Compound<A>,
+    A: Canon,
 {
     type Target = C::Leaf;
 
@@ -273,6 +276,7 @@ where
 impl<'a, C, A> DerefMut for BranchMut<'a, C, A>
 where
     C: Compound<A> + Clone,
+    A: Canon,
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.0.leaf_mut().expect("Invalid branch")
@@ -291,6 +295,7 @@ where
 impl<'a, C, A, M> Deref for MappedBranchMut<'a, C, A, M>
 where
     C: Compound<A> + Clone,
+    A: Canon,
 {
     type Target = M;
 
@@ -306,7 +311,8 @@ where
 
 impl<'a, C, A, M> DerefMut for MappedBranchMut<'a, C, A, M>
 where
-    C: Compound<A> + Clone,
+    C: Compound<A>,
+    A: Canon,
 {
     fn deref_mut(&mut self) -> &mut M {
         (self.closure)(&mut *self.inner)
@@ -326,7 +332,8 @@ where
 
 impl<'a, C, A> IntoIterator for BranchMut<'a, C, A>
 where
-    C: Compound<A> + Clone,
+    C: Compound<A>,
+    A: Canon,
 {
     type Item = Result<&'a mut C::Leaf, CanonError>;
 
@@ -341,6 +348,7 @@ impl<'a, C, A, W> Iterator for BranchMutIterator<'a, C, A, W>
 where
     C: Compound<A> + Clone,
     W: Walker<C, A>,
+    A: Canon,
 {
     type Item = Result<&'a mut C::Leaf, CanonError>;
 
@@ -395,7 +403,7 @@ where
 impl<'a, C, A, M> IntoIterator for MappedBranchMut<'a, C, A, M>
 where
     C: Compound<A> + Clone,
-    A: Annotation<C::Leaf>,
+    A: Annotation<C::Leaf> + Canon,
     M: 'a,
 {
     type Item = Result<&'a mut M, CanonError>;
@@ -410,7 +418,7 @@ where
 impl<'a, C, A, W, M> Iterator for MappedBranchMutIterator<'a, C, A, W, M>
 where
     C: Compound<A> + Clone,
-    A: Annotation<C::Leaf>,
+    A: Annotation<C::Leaf> + Canon,
     W: Walker<C, A>,
     M: 'a,
 {

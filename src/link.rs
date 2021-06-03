@@ -35,6 +35,8 @@ impl<C: core::fmt::Debug, A: core::fmt::Debug> core::fmt::Debug for Link<C, A> {
 impl<C, A> Link<C, A>
 where
     C: Compound<A>,
+    C::Leaf: Canon,
+    A: Canon,
 {
     /// Create a new link
     pub fn new(compound: C) -> Self
@@ -46,17 +48,7 @@ where
         }
     }
 
-    /// Create a new link
-    pub fn new_annotated(compound: C, annotation: A) -> Self
-    where
-        A: Annotation<C::Leaf>,
-    {
-        Link {
-            inner: RefCell::new(LinkInner::Ca(Rc::new(compound), annotation)),
-        }
-    }
-
-    /// Create a new link
+    /// Creates a new link from an id and annotation
     pub fn new_persisted(id: Id, annotation: A) -> Self {
         Link {
             inner: RefCell::new(LinkInner::Ia(id, annotation)),
@@ -89,48 +81,23 @@ where
     /// Gets a reference to the inner compound of the link'
     ///
     /// Can fail when trying to fetch data over i/o
-    pub fn compound(&self) -> Result<LinkCompound<C, A>, CanonError> {
-        let borrow: RefMut<LinkInner<C, A>> = self.inner.borrow_mut();
-        match *borrow {
-            LinkInner::Placeholder => unreachable!(),
-            LinkInner::C(_) | LinkInner::Ca(_, _) | LinkInner::Ica(_, _, _) => {
-                return Ok(LinkCompound(borrow))
-            }
-            LinkInner::Ia(_, _) => todo!(),
-        }
-    }
-
-    /// Gets a reference to the inner compound of the link'
-    ///
-    /// Can fail when trying to fetch data over i/o
     pub fn into_compound(self) -> Result<C, CanonError>
     where
-        C: Clone,
         C::Leaf: Canon,
-        A: Canon,
     {
+        // assure compound is loaded
+        let _ = self.compound()?;
+
         let inner = self.inner.into_inner();
         match inner {
-            LinkInner::Placeholder => unreachable!(),
             LinkInner::C(rc)
             | LinkInner::Ca(rc, _)
             | LinkInner::Ica(_, rc, _) => match Rc::try_unwrap(rc) {
                 Ok(c) => Ok(c),
                 Err(rc) => Ok((&*rc).clone()),
             },
-            LinkInner::Ia(id, _) => match id.reify() {
-                Ok(generic) => C::from_generic(&generic),
-                #[cfg(feature = "persistance")]
-                Err(CanonError::NotFound) => match Persistance::get(&id) {
-                    Ok(generic) => C::from_generic(&generic),
-                    Err(PersistError::Canon(e)) => Err(e),
-                    Err(PersistError::Io(_)) => {
-                        // FIXME, report the error through other channels
-                        Err(CanonError::NotFound)
-                    }
-                },
-                Err(e) => return Err(e),
-            },
+
+            _ => unreachable!(),
         }
     }
 
@@ -138,7 +105,7 @@ where
     pub fn id(&self) -> Id
     where
         C::Leaf: Canon,
-        A: Annotation<C::Leaf> + Canon,
+        A: Annotation<C::Leaf>,
     {
         let borrow = self.inner.borrow();
         match &*borrow {
@@ -151,26 +118,66 @@ where
         }
     }
 
+    /// Gets a reference to the inner compound of the link'
+    ///
+    /// Can fail when trying to fetch data over i/o
+    pub fn compound(&self) -> Result<LinkCompound<C, A>, CanonError> {
+        #[cfg(feature = "persistance")]
+        let mut borrow: RefMut<LinkInner<C, A>> = self.inner.borrow_mut();
+        #[cfg(not(feature = "persistance"))]
+        let borrow: RefMut<LinkInner<C, A>> = self.inner.borrow_mut();
+
+        match *borrow {
+            LinkInner::Placeholder => unreachable!(),
+            LinkInner::C(_) | LinkInner::Ca(_, _) | LinkInner::Ica(_, _, _) => {
+                return Ok(LinkCompound(borrow))
+            }
+            LinkInner::Ia(_, _) => {
+                #[cfg(feature = "persistance")]
+                if let LinkInner::Ia(id, anno) =
+                    mem::replace(&mut *borrow, LinkInner::Placeholder)
+                {
+                    match Persistance::get(&id) {
+                        Ok(generic) => {
+                            let compound = C::from_generic(&generic)?;
+                            *borrow =
+                                LinkInner::Ica(id, Rc::new(compound), anno);
+                            Ok(LinkCompound(borrow))
+                        }
+                        Err(PersistError::Canon(e)) => Err(e),
+                        Err(PersistError::Io(_)) => Err(CanonError::NotFound),
+                    }
+                } else {
+                    unreachable!()
+                }
+                #[cfg(not(feature = "persistance"))]
+                Err(CanonError::NotFound)
+            }
+        }
+    }
+
     /// Returns a Mutable reference to the underlying compound node
     ///
     /// Drops cached annotations and ids
     ///
     /// Can fail when trying to fetch data over i/o
-    pub fn compound_mut(
-        &mut self,
-    ) -> Result<LinkCompoundMut<C, A>, CanonError> {
+    pub fn compound_mut(&mut self) -> Result<LinkCompoundMut<C, A>, CanonError>
+    where
+        C: Canon,
+    {
+        // assure compound is loaded
+        let _ = self.compound()?;
+
         let mut borrow: RefMut<LinkInner<C, A>> = self.inner.borrow_mut();
 
         match mem::replace(&mut *borrow, LinkInner::Placeholder) {
-            LinkInner::Placeholder => unreachable!(),
             LinkInner::C(c) | LinkInner::Ca(c, _) | LinkInner::Ica(_, c, _) => {
+                // clear all cached data
                 *borrow = LinkInner::C(c);
-                return Ok(LinkCompoundMut(borrow));
             }
-            LinkInner::Ia(_, _) => {
-                todo!()
-            }
+            _ => unreachable!(),
         }
+        Ok(LinkCompoundMut(borrow))
     }
 }
 

@@ -45,9 +45,9 @@ where
 }
 
 /// A type that can recursively contain itself and leaves.
-pub trait Compound<A>: Sized {
+pub trait Compound<A>: Canon {
     /// The leaf type of the Compound collection
-    type Leaf;
+    type Leaf: Canon;
 
     /// Returns a reference to a possible child at specified offset
     fn child(&self, ofs: usize) -> Child<Self, A>;
@@ -115,7 +115,7 @@ impl<'a, C, A> Clone for AnnoIter<'a, C, A> {
 impl<'a, C, A> Iterator for AnnoIter<'a, C, A>
 where
     C: Compound<A>,
-    A: Annotation<C::Leaf> + 'a,
+    A: Annotation<C::Leaf> + Canon + 'a,
 {
     type Item = WrappedAnnotation<'a, C, A>;
 

@@ -8,7 +8,7 @@
 /// i.e. the amount of elements in a collection
 use core::borrow::Borrow;
 
-use canonical::CanonError;
+use canonical::{Canon, CanonError};
 use canonical_derive::Canon;
 
 use crate::annotations::{Annotation, Combine};
@@ -41,7 +41,7 @@ impl<L> Annotation<L> for Cardinality {
 
 impl<A> Combine<A> for Cardinality
 where
-    A: Borrow<Self>,
+    A: Borrow<Self> + Canon,
 {
     fn combine<C>(iter: AnnoIter<C, A>) -> Self
     where
@@ -63,7 +63,7 @@ pub struct Offset(u64);
 impl<C, A> Walker<C, A> for Offset
 where
     C: Compound<A>,
-    A: Annotation<C::Leaf> + Borrow<Cardinality>,
+    A: Annotation<C::Leaf> + Borrow<Cardinality> + Canon,
 {
     fn walk(&mut self, walk: Walk<C, A>) -> Step {
         for i in 0.. {
@@ -115,7 +115,7 @@ where
 impl<'a, C, A> Nth<'a, A> for C
 where
     C: Compound<A> + Clone,
-    A: Annotation<C::Leaf> + Borrow<Cardinality>,
+    A: Annotation<C::Leaf> + Borrow<Cardinality> + Canon,
 {
     fn nth(
         &'a self,
