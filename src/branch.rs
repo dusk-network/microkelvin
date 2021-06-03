@@ -217,43 +217,6 @@ where
             }
         }
     }
-
-    fn path<P>(&mut self, mut path: P) -> Result<Option<()>, CanonError>
-    where
-        P: FnMut() -> usize,
-        A: Annotation<C::Leaf>,
-    {
-        let mut push = None;
-        loop {
-            if let Some(push) = push.take() {
-                self.0.push(push);
-            }
-
-            let ofs = path();
-            let top = self.top_mut();
-            *top.offset_mut() = ofs;
-
-            match top.child(ofs) {
-                Child::Leaf(_) => {
-                    return Ok(Some(()));
-                }
-                Child::Node(n) => {
-                    let level: Level<'_, C, A> = Level::new_val(n.compound()?);
-                    // Extend the lifetime of the Level.
-                    // See comment in `Branch::walk` for justification.
-                    let extended: Level<'a, C, A> =
-                        unsafe { core::mem::transmute(level) };
-                    push = Some(extended);
-                }
-                Child::Empty => {
-                    return Ok(None);
-                }
-                Child::EndOfNode => {
-                    return Ok(None);
-                }
-            }
-        }
-    }
 }
 
 impl<'a, C, A> Branch<'a, C, A>
@@ -293,16 +256,6 @@ where
     {
         let mut partial = PartialBranch::new(root);
         Ok(partial.walk(&mut walker)?.map(|()| Branch(partial)))
-    }
-
-    /// Construct a branch given a function returning child offsets
-    pub fn path<P>(root: &'a C, path: P) -> Result<Option<Self>, CanonError>
-    where
-        P: FnMut() -> usize,
-        A: Annotation<C::Leaf>,
-    {
-        let mut partial = PartialBranch::new(root);
-        Ok(partial.path(path)?.map(|()| Branch(partial)))
     }
 }
 
@@ -412,7 +365,7 @@ where
 pub enum MappedBranchIterator<'a, C, A, W, M>
 where
     C: Compound<A>,
-    A: Combine<C, A>,
+    A: Annotation<C::Leaf>,
 {
     Initial(MappedBranch<'a, C, A, M>, W),
     Intermediate(MappedBranch<'a, C, A, M>, W),
@@ -422,7 +375,7 @@ where
 impl<'a, C, A, M> IntoIterator for MappedBranch<'a, C, A, M>
 where
     C: Compound<A>,
-    A: Combine<C, A>,
+    A: Annotation<C::Leaf>,
     M: 'a,
 {
     type Item = Result<&'a M, CanonError>;
@@ -437,7 +390,7 @@ where
 impl<'a, C, A, W, M> Iterator for MappedBranchIterator<'a, C, A, W, M>
 where
     C: Compound<A>,
-    A: Combine<C, A>,
+    A: Annotation<C::Leaf>,
     W: Walker<C, A>,
     M: 'a,
 {

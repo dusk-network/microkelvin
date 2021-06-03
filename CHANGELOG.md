@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+Change the name of `BranchMutMappedMut` to `MappedBranchMut`
+
+### Removed
+Remove `path` from branch traversal, case now covered by `walk`
+
 ## [0.7.2] - 2021-06-01
 
 ### Added

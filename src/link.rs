@@ -238,10 +238,7 @@ impl<'a, C, A> Deref for LinkCompound<'a, C, A> {
     }
 }
 
-impl<'a, C, A> Deref for LinkCompoundMut<'a, C, A>
-where
-    C: Clone,
-{
+impl<'a, C, A> Deref for LinkCompoundMut<'a, C, A> {
     type Target = C;
 
     fn deref(&self) -> &Self::Target {

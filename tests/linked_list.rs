@@ -297,7 +297,7 @@ fn iterate_map() {
     let mut list = LinkedList::<_, ()>::new();
 
     for i in 0..n {
-        list.insert(i)
+        list.push(i)
     }
 
     // branch from first element
@@ -322,12 +322,12 @@ fn iterate_map_mutable() {
     let mut list = LinkedList::<_, ()>::new();
 
     for i in 0..n {
-        list.insert(i)
+        list.push(i)
     }
 
     // branch from first element
     let branch_mut = list.first_mut().unwrap().unwrap();
-    let mapped = branch_mut.map_leaf_mut(|x| x);
+    let mapped = branch_mut.map_leaf(|x| x);
 
     let mut count = n - 1;
 
@@ -347,12 +347,12 @@ fn deref_mapped_mutable_branch() {
     let mut list = LinkedList::<_, ()>::new();
 
     for i in 0..n {
-        list.insert(i)
+        list.push(i)
     }
 
     // branch from first element
     let branch_mut = list.first_mut().unwrap().unwrap();
-    let mapped = branch_mut.map_leaf_mut(|x| x);
+    let mapped = branch_mut.map_leaf(|x| x);
 
     assert_eq!(core::ops::Deref::deref(&mapped), &31);
 }

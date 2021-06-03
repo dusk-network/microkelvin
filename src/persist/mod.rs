@@ -155,6 +155,7 @@ impl Persistance {
         Err(CanonError::NotFound.into())
     }
 
+    /// Returns a constructor for a temporary test backend
     pub fn test_backend_ctor() -> BackendCtor<TestBackend> {
         BackendCtor::new(|| {
             let dir = tempfile::tempdir().unwrap();
@@ -164,8 +165,12 @@ impl Persistance {
     }
 }
 
+/// The trait defining a disk or network backend for microkelvin structures.
 pub trait Backend: Send + Sync {
+    /// Get get a generic tree stored in the backend from an `Id`
     fn get(&self, id: &Id) -> Result<GenericTree, PersistError>;
+
+    /// Write encoded bytes with a corresponding `Id` into the backend
     fn put(&mut self, id: &Id, bytes: &[u8])
         -> Result<PutResult, PersistError>;
 }
@@ -193,6 +198,8 @@ impl From<CanonError> for PersistError {
 
 /// Type to indicate if the backend already contained the value to write
 pub enum PutResult {
+    /// The bytes were written to the backend
     Written,
+    /// The bytes were already present in the backend
     AlreadyPresent,
 }
