@@ -63,7 +63,7 @@ pub struct Offset(u64);
 impl<C, A> Walker<C, A> for Offset
 where
     C: Compound<A>,
-    A: Annotation<C::Leaf> + Borrow<Cardinality> + Canon,
+    A: Annotation<C::Leaf> + Borrow<Cardinality>,
 {
     fn walk(&mut self, walk: Walk<C, A>) -> Step {
         for i in 0.. {
@@ -115,7 +115,7 @@ where
 impl<'a, C, A> Nth<'a, A> for C
 where
     C: Compound<A> + Clone,
-    A: Annotation<C::Leaf> + Borrow<Cardinality> + Canon,
+    A: Annotation<C::Leaf> + Borrow<Cardinality>,
 {
     fn nth(
         &'a self,

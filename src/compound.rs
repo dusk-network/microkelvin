@@ -72,7 +72,7 @@ pub trait Compound<A>: Canon {
     fn generic(&self) -> GenericTree
     where
         Self::Leaf: Canon,
-        A: Annotation<Self::Leaf> + Canon,
+        A: Annotation<Self::Leaf>,
     {
         let mut generic = GenericTree::new();
 
@@ -115,7 +115,7 @@ impl<'a, C, A> Clone for AnnoIter<'a, C, A> {
 impl<'a, C, A> Iterator for AnnoIter<'a, C, A>
 where
     C: Compound<A>,
-    A: Annotation<C::Leaf> + Canon + 'a,
+    A: Annotation<C::Leaf> + 'a,
 {
     type Item = WrappedAnnotation<'a, C, A>;
 

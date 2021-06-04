@@ -403,7 +403,7 @@ where
 impl<'a, C, A, M> IntoIterator for MappedBranchMut<'a, C, A, M>
 where
     C: Compound<A> + Clone,
-    A: Annotation<C::Leaf> + Canon,
+    A: Annotation<C::Leaf>,
     M: 'a,
 {
     type Item = Result<&'a mut M, CanonError>;
@@ -417,8 +417,8 @@ where
 
 impl<'a, C, A, W, M> Iterator for MappedBranchMutIterator<'a, C, A, W, M>
 where
-    C: Compound<A> + Clone,
-    A: Annotation<C::Leaf> + Canon,
+    C: Compound<A>,
+    A: Annotation<C::Leaf>,
     W: Walker<C, A>,
     M: 'a,
 {

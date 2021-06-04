@@ -383,7 +383,7 @@ where
 impl<'a, C, A, M> IntoIterator for MappedBranch<'a, C, A, M>
 where
     C: Compound<A>,
-    A: Annotation<C::Leaf> + Canon,
+    A: Annotation<C::Leaf>,
     M: 'a,
 {
     type Item = Result<&'a M, CanonError>;
@@ -398,7 +398,7 @@ where
 impl<'a, C, A, W, M> Iterator for MappedBranchIterator<'a, C, A, W, M>
 where
     C: Compound<A>,
-    A: Annotation<C::Leaf> + Canon,
+    A: Annotation<C::Leaf>,
     W: Walker<C, A>,
     M: 'a,
 {

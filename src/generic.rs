@@ -118,7 +118,7 @@ impl GenericTree {
     where
         C: Compound<A>,
         C::Leaf: Canon,
-        A: Annotation<C::Leaf> + Canon,
+        A: Annotation<C::Leaf>,
     {
         let id = link.id();
         let anno = GenericAnnotation::new(&*link.annotation());

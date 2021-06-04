@@ -185,7 +185,7 @@ impl<C, A> Canon for Link<C, A>
 where
     C: Compound<A> + Canon,
     C::Leaf: Canon,
-    A: Annotation<C::Leaf> + Canon,
+    A: Annotation<C::Leaf>,
 {
     fn encode(&self, sink: &mut Sink) {
         self.id().encode(sink);

@@ -35,7 +35,7 @@ impl WrappedBackend {
     ) -> Result<PersistedId, PersistError>
     where
         C::Leaf: Canon,
-        A: Annotation<C::Leaf> + Canon,
+        A: Annotation<C::Leaf>,
     {
         Self::persist_inner(&mut self.0.write(), tree)
     }
@@ -46,7 +46,7 @@ impl WrappedBackend {
     ) -> Result<PersistedId, PersistError>
     where
         C::Leaf: Canon,
-        A: Annotation<C::Leaf> + Canon,
+        A: Annotation<C::Leaf>,
     {
         let generic = tree.generic();
         let id = Id::new(&generic);
@@ -119,7 +119,7 @@ impl Persistance {
     where
         C: Compound<A>,
         C::Leaf: Canon,
-        A: Annotation<C::Leaf> + Canon,
+        A: Annotation<C::Leaf>,
         B: 'static + Backend,
     {
         let mut backends = BACKENDS.write();

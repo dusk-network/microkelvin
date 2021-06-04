@@ -32,7 +32,7 @@ where
 
 impl<T, A> Compound<A> for LinkedList<T, A>
 where
-    A: Annotation<T> + Canon,
+    A: Annotation<T>,
     T: Canon,
 {
     type Leaf = T;
@@ -92,7 +92,7 @@ impl<T, A> MutableLeaves for LinkedList<T, A> where A: Annotation<T> {}
 
 impl<T, A> LinkedList<T, A>
 where
-    A: Annotation<T> + Canon,
+    A: Annotation<T>,
     T: Canon,
 {
     pub fn new() -> Self {
