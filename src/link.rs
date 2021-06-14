@@ -5,7 +5,7 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use alloc::rc::Rc;
-use core::cell::{RefCell, RefMut};
+use core::cell::{Ref, RefCell, RefMut};
 use core::mem;
 use core::ops::{Deref, DerefMut};
 
@@ -66,7 +66,7 @@ where
     where
         A: Annotation<C::Leaf>,
     {
-        let mut borrow = self.inner.borrow_mut();
+        let borrow = self.inner.borrow();
         let a = match *borrow {
             LinkInner::Ca(_, _)
             | LinkInner::Ica(_, _, _)
@@ -74,6 +74,10 @@ where
             LinkInner::C(ref c) => A::combine(c.annotations()),
             LinkInner::Placeholder => unreachable!(),
         };
+
+        drop(borrow);
+        let mut borrow = self.inner.borrow_mut();
+
         if let LinkInner::C(c) =
             mem::replace(&mut *borrow, LinkInner::Placeholder)
         {
@@ -81,6 +85,8 @@ where
         } else {
             unreachable!()
         }
+        drop(borrow);
+        let borrow = self.inner.borrow();
         LinkAnnotation(borrow)
     }
 
@@ -128,10 +134,7 @@ where
     ///
     /// Can fail when trying to fetch data over i/o
     pub fn compound(&self) -> Result<LinkCompound<C, A>, CanonError> {
-        #[cfg(feature = "persistance")]
-        let mut borrow: RefMut<LinkInner<C, A>> = self.inner.borrow_mut();
-        #[cfg(not(feature = "persistance"))]
-        let borrow: RefMut<LinkInner<C, A>> = self.inner.borrow_mut();
+        let borrow = self.inner.borrow();
 
         match *borrow {
             LinkInner::Placeholder => unreachable!(),
@@ -214,11 +217,11 @@ where
 /// A wrapped borrow of an inner link guaranteed to contain a computed
 /// annotation
 #[derive(Debug)]
-pub struct LinkAnnotation<'a, C, A>(RefMut<'a, LinkInner<C, A>>);
+pub struct LinkAnnotation<'a, C, A>(Ref<'a, LinkInner<C, A>>);
 
 /// A wrapped borrow of an inner node guaranteed to contain a compound node
 #[derive(Debug)]
-pub struct LinkCompound<'a, C, A>(RefMut<'a, LinkInner<C, A>>);
+pub struct LinkCompound<'a, C, A>(Ref<'a, LinkInner<C, A>>);
 
 /// A wrapped mutable borrow of an inner node guaranteed to contain a compound
 /// node
