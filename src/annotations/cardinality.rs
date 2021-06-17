@@ -48,12 +48,7 @@ where
         C: Compound<A>,
         A: Annotation<C::Leaf>,
     {
-        let mut sum = 0;
-        for ann in iter {
-            let card = (*ann).borrow();
-            sum += card.0
-        }
-        Cardinality(sum)
+        Cardinality(iter.fold(0, |sum, ann| sum + (*ann).borrow().0))
     }
 }
 

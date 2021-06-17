@@ -143,21 +143,33 @@ where
             }
             LinkInner::Ia(_, _) => {
                 #[cfg(feature = "persistance")]
-                if let LinkInner::Ia(id, anno) =
-                    mem::replace(&mut *borrow, LinkInner::Placeholder)
                 {
-                    match Persistance::get(&id) {
-                        Ok(generic) => {
-                            let compound = C::from_generic(&generic)?;
-                            *borrow =
-                                LinkInner::Ica(id, Rc::new(compound), anno);
-                            Ok(LinkCompound(borrow))
+                    // re-borrow mutable
+                    drop(borrow);
+                    let mut borrow = self.inner.borrow_mut();
+                    if let LinkInner::Ia(id, anno) =
+                        mem::replace(&mut *borrow, LinkInner::Placeholder)
+                    {
+                        match Persistance::get(&id) {
+                            Ok(generic) => {
+                                let compound = C::from_generic(&generic)?;
+                                *borrow =
+                                    LinkInner::Ica(id, Rc::new(compound), anno);
+
+                                // re-borrow immutable
+                                drop(borrow);
+                                let borrow = self.inner.borrow();
+
+                                Ok(LinkCompound(borrow))
+                            }
+                            Err(PersistError::Canon(e)) => Err(e),
+                            Err(PersistError::Io(_)) => {
+                                Err(CanonError::NotFound)
+                            }
                         }
-                        Err(PersistError::Canon(e)) => Err(e),
-                        Err(PersistError::Io(_)) => Err(CanonError::NotFound),
+                    } else {
+                        unreachable!()
                     }
-                } else {
-                    unreachable!()
                 }
                 #[cfg(not(feature = "persistance"))]
                 Err(CanonError::NotFound)

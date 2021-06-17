@@ -98,16 +98,15 @@ where
         C: Compound<A>,
         A: Annotation<C::Leaf>,
     {
-        let mut max = MaxKey::NegativeInfinity;
-
-        for ann in iter {
+        iter.fold(MaxKey::NegativeInfinity, |max, ann| {
             let m = (*ann).borrow();
-
+            // We only clone if neccesary
             if *m > max {
-                max = m.clone()
+                m.clone()
+            } else {
+                max
             }
-        }
-        max
+        })
     }
 }
 

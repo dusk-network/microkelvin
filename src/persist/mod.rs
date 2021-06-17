@@ -21,7 +21,6 @@ use lazy_static::lazy_static;
 use parking_lot::{RwLock, RwLockWriteGuard};
 
 pub use disk::DiskBackend;
-pub use test::TestBackend;
 
 use crate::{Annotation, Compound, GenericTree};
 pub(crate) struct WrappedBackend(Arc<RwLock<dyn Backend>>);
@@ -155,15 +154,6 @@ impl Persistance {
             }
         }
         Err(CanonError::NotFound.into())
-    }
-
-    /// Returns a constructor for a temporary test backend
-    pub fn test_backend_ctor() -> BackendCtor<TestBackend> {
-        BackendCtor::new(|| {
-            let dir = tempfile::tempdir().unwrap();
-            let b = DiskBackend::new(dir.path()).unwrap();
-            TestBackend(b, dir)
-        })
     }
 }
 

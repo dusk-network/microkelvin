@@ -74,10 +74,7 @@ impl Backend for DiskBackend {
             data.seek(SeekFrom::Start(*ofs))?;
 
             let len = id.size();
-
-            let mut buf = Vec::with_capacity(len);
-            buf.resize_with(len, || 0);
-
+            let mut buf = vec![0u8; len];
             let read_res = data.read_exact(&mut buf[..]);
 
             read_res?;
