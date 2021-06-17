@@ -13,7 +13,6 @@ use std::{
 };
 
 mod disk;
-mod test;
 
 use crate::Child;
 use canonical::{Canon, CanonError, Id};
