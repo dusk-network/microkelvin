@@ -39,11 +39,8 @@ impl DiskBackend {
     {
         let path = path.into();
 
-        let mut index_path = path.clone();
-        let mut data_path = path.clone();
-
-        index_path.push("index");
-        data_path.push("data");
+        let index_path = path.join("index");
+        let data_path = path.join("data");
 
         fs::create_dir(&index_path)?;
 
