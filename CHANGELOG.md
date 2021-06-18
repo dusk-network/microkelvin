@@ -7,11 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Change the name of `BranchMutMappedMut` to `MappedBranchMut`
+
+### Removed
+- Remove `path` from branch traversal, case now covered by `walk`
+
 ## [0.7.2] - 2021-06-01
 
 ### Added
-Add `IntoIterator` to `MappedBranch` and `BranchMutMappedMut`
-Add support for non-mutably dereferencing mutable mapped branches
+- Add `IntoIterator` to `MappedBranch` and `BranchMutMappedMut`
+- Add support for non-mutably dereferencing mutable mapped branches
 
 ## [0.7.1] - 2021-04-27
 

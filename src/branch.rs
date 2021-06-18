@@ -8,16 +8,17 @@ use core::ops::Deref;
 
 use alloc::vec::Vec;
 
-use canonical::CanonError;
+use canonical::{Canon, CanonError};
 
-use crate::annotations::{AnnRef, Combine};
+use crate::annotations::Annotation;
 use crate::compound::{Child, Compound};
+use crate::link::LinkCompound;
 use crate::walk::{AllLeaves, Step, Walk, Walker};
 
 #[derive(Debug)]
 enum LevelNode<'a, C, A> {
     Root(&'a C),
-    Val(AnnRef<'a, C, A>),
+    Val(LinkCompound<'a, C, A>),
 }
 
 #[derive(Debug)]
@@ -29,7 +30,7 @@ pub struct Level<'a, C, A> {
 impl<'a, C, A> Deref for Level<'a, C, A>
 where
     C: Compound<A>,
-    A: Combine<C, A>,
+    A: Canon,
 {
     type Target = C;
 
@@ -46,10 +47,10 @@ impl<'a, C, A> Level<'a, C, A> {
         }
     }
 
-    pub fn new_val(ann: AnnRef<'a, C, A>) -> Level<'a, C, A> {
+    pub fn new_val(link_compound: LinkCompound<'a, C, A>) -> Level<'a, C, A> {
         Level {
             offset: 0,
-            node: LevelNode::Val(ann),
+            node: LevelNode::Val(link_compound),
         }
     }
 
@@ -69,7 +70,7 @@ pub struct PartialBranch<'a, C, A>(Vec<Level<'a, C, A>>);
 impl<'a, C, A> Deref for LevelNode<'a, C, A>
 where
     C: Compound<A>,
-    A: Combine<C, A>,
+    A: Canon,
 {
     type Target = C;
 
@@ -84,7 +85,7 @@ where
 impl<'a, C, A> PartialBranch<'a, C, A>
 where
     C: Compound<A>,
-    A: Combine<C, A>,
+    A: Canon,
 {
     fn new(root: &'a C) -> Self {
         PartialBranch(vec![Level::new_root(root)])
@@ -102,7 +103,7 @@ where
         let top = self.top();
         let ofs = top.offset();
 
-        match top.child(ofs) {
+        match (**top).child(ofs) {
             Child::Leaf(l) => Some(l),
             _ => None,
         }
@@ -165,7 +166,8 @@ where
                     let ofs = top.offset();
                     let top_child = top.child(ofs);
                     if let Child::Node(n) = top_child {
-                        let level: Level<'_, C, A> = Level::new_val(n.val()?);
+                        let level: Level<'_, C, A> =
+                            Level::new_val(n.compound()?);
                         // Extend the lifetime of the Level.
                         //
                         // JUSTIFICATION
@@ -218,48 +220,12 @@ where
             }
         }
     }
-
-    fn path<P>(&mut self, mut path: P) -> Result<Option<()>, CanonError>
-    where
-        P: FnMut() -> usize,
-    {
-        let mut push = None;
-        loop {
-            if let Some(push) = push.take() {
-                self.0.push(push);
-            }
-
-            let ofs = path();
-            let top = self.top_mut();
-            *top.offset_mut() = ofs;
-
-            match top.child(ofs) {
-                Child::Leaf(_) => {
-                    return Ok(Some(()));
-                }
-                Child::Node(n) => {
-                    let level: Level<'_, C, A> = Level::new_val(n.val()?);
-                    // Extend the lifetime of the Level.
-                    // See comment in `Branch::walk` for justification.
-                    let extended: Level<'a, C, A> =
-                        unsafe { core::mem::transmute(level) };
-                    push = Some(extended);
-                }
-                Child::Empty => {
-                    return Ok(None);
-                }
-                Child::EndOfNode => {
-                    return Ok(None);
-                }
-            }
-        }
-    }
 }
 
 impl<'a, C, A> Branch<'a, C, A>
 where
     C: Compound<A>,
-    A: Combine<C, A>,
+    A: Canon,
 {
     /// Returns the depth of the branch
     pub fn depth(&self) -> usize {
@@ -295,15 +261,6 @@ where
         let mut partial = PartialBranch::new(root);
         Ok(partial.walk(&mut walker)?.map(|()| Branch(partial)))
     }
-
-    /// Construct a branch given a function returning child offsets
-    pub fn path<P>(root: &'a C, path: P) -> Result<Option<Self>, CanonError>
-    where
-        P: FnMut() -> usize,
-    {
-        let mut partial = PartialBranch::new(root);
-        Ok(partial.path(path)?.map(|()| Branch(partial)))
-    }
 }
 
 /// Reprents an immutable branch view into a collection.
@@ -316,7 +273,7 @@ pub struct Branch<'a, C, A>(PartialBranch<'a, C, A>);
 impl<'a, C, A> Deref for Branch<'a, C, A>
 where
     C: Compound<A>,
-    A: Combine<C, A>,
+    A: Canon,
 {
     type Target = C::Leaf;
 
@@ -328,7 +285,6 @@ where
 pub struct MappedBranch<'a, C, A, M>
 where
     C: Compound<A>,
-    A: Combine<C, A>,
 {
     inner: Branch<'a, C, A>,
     closure: for<'b> fn(&'b C::Leaf) -> &'b M,
@@ -338,7 +294,7 @@ impl<'a, C, A, M> Deref for MappedBranch<'a, C, A, M>
 where
     C: Compound<A>,
     C::Leaf: 'a,
-    A: Combine<C, A>,
+    A: Canon,
 {
     type Target = M;
 
@@ -357,7 +313,7 @@ pub enum BranchIterator<'a, C, A, W> {
 impl<'a, C, A> IntoIterator for Branch<'a, C, A>
 where
     C: Compound<A>,
-    A: Combine<C, A>,
+    A: Canon,
 {
     type Item = Result<&'a C::Leaf, CanonError>;
 
@@ -371,8 +327,8 @@ where
 impl<'a, C, A, W> Iterator for BranchIterator<'a, C, A, W>
 where
     C: Compound<A>,
-    A: Combine<C, A>,
     W: Walker<C, A>,
+    A: Canon,
 {
     type Item = Result<&'a C::Leaf, CanonError>;
 
@@ -417,7 +373,7 @@ where
 pub enum MappedBranchIterator<'a, C, A, W, M>
 where
     C: Compound<A>,
-    A: Combine<C, A>,
+    A: Annotation<C::Leaf>,
 {
     Initial(MappedBranch<'a, C, A, M>, W),
     Intermediate(MappedBranch<'a, C, A, M>, W),
@@ -427,7 +383,7 @@ where
 impl<'a, C, A, M> IntoIterator for MappedBranch<'a, C, A, M>
 where
     C: Compound<A>,
-    A: Combine<C, A>,
+    A: Annotation<C::Leaf>,
     M: 'a,
 {
     type Item = Result<&'a M, CanonError>;
@@ -442,7 +398,7 @@ where
 impl<'a, C, A, W, M> Iterator for MappedBranchIterator<'a, C, A, W, M>
 where
     C: Compound<A>,
-    A: Combine<C, A>,
+    A: Annotation<C::Leaf>,
     W: Walker<C, A>,
     M: 'a,
 {
