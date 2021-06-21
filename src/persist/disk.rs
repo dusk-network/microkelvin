@@ -10,6 +10,7 @@ use std::path::PathBuf;
 
 use appendix::Index;
 use canonical::{Canon, CanonError, Id, Source};
+use tempfile::{tempdir, TempDir};
 
 use crate::generic::GenericTree;
 use crate::persist::{Backend, PersistError, PutResult};
@@ -19,6 +20,10 @@ pub struct DiskBackend {
     index: Index<Id, u64>,
     data_path: PathBuf,
     data_ofs: u64,
+    // in the case of an ephemeral store, we need to extend the lifetime of the
+    // `TempDir` by storing it in the struct
+    #[allow(unused)]
+    temp_dir: Option<TempDir>,
 }
 
 impl std::fmt::Debug for DiskBackend {
@@ -59,7 +64,22 @@ impl DiskBackend {
             data_path,
             index,
             data_ofs,
+            temp_dir: None,
         })
+    }
+
+    fn register_temp_dir(&mut self, dir: TempDir) {
+        self.temp_dir = Some(dir)
+    }
+
+    /// Create an ephemeral Diskbackend, that deletes its data when going out of
+    /// scope
+    pub fn ephemeral() -> io::Result<Self> {
+        let dir = tempdir()?;
+
+        let mut db = DiskBackend::new(dir.path())?;
+        db.register_temp_dir(dir);
+        Ok(db)
     }
 }
 
