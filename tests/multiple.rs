@@ -11,9 +11,11 @@ use rand::{prelude::SliceRandom, thread_rng};
 mod linked_list;
 use linked_list::LinkedList;
 
+use canonical::Canon;
 use canonical_derive::Canon;
 use microkelvin::{
-    Annotation, Cardinality, Combine, Compound, GetMaxKey, Keyed, MaxKey,
+    AnnoIter, Annotation, Cardinality, Combine, Compound, GetMaxKey, Keyed,
+    MaxKey,
 };
 
 #[derive(Default, Clone, Canon)]
@@ -37,7 +39,7 @@ impl<K> Borrow<Cardinality> for Anno<K> {
 impl<Leaf, K> Annotation<Leaf> for Anno<K>
 where
     Leaf: Keyed<K>,
-    K: Clone + Ord + Default,
+    K: Ord + Default + Canon,
 {
     fn from_leaf(leaf: &Leaf) -> Self {
         Anno {
@@ -47,17 +49,19 @@ where
     }
 }
 
-impl<C, A, K> Combine<C, A> for Anno<K>
+impl<K, A> Combine<A> for Anno<K>
 where
-    C: Compound<A>,
-    C::Leaf: Keyed<K>,
-    A: Annotation<C::Leaf> + Borrow<MaxKey<K>> + Borrow<Cardinality>,
     K: Clone + Ord + Default,
+    A: Borrow<MaxKey<K>> + Borrow<Cardinality> + Canon,
 {
-    fn combine(node: &C) -> Self {
+    fn combine<C>(iter: AnnoIter<C, A>) -> Self
+    where
+        C: Compound<A>,
+        A: Annotation<C::Leaf>,
+    {
         Anno {
-            max: MaxKey::combine(node),
-            card: Cardinality::combine(node),
+            max: MaxKey::combine(iter.clone()),
+            card: Cardinality::combine(iter.clone()),
         }
     }
 }
@@ -89,7 +93,7 @@ fn maximum_multiple() {
     let mut list = LinkedList::<_, Anno<u64>>::new();
 
     for key in keys {
-        list.insert(TestLeaf { key, other: () });
+        list.push(TestLeaf { key, other: () });
     }
 
     let max = list.max_key().unwrap().unwrap();

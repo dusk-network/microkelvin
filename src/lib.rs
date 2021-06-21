@@ -13,7 +13,7 @@
 //! `Branch` and `BranchMut`, types for representing branches in tree-formed
 //! data as well as methods of search.
 
-#![no_std]
+#![cfg_attr(not(feature = "persistance"), no_std)]
 #![deny(missing_docs)]
 
 #[macro_use]
@@ -23,12 +23,26 @@ mod annotations;
 mod branch;
 mod branch_mut;
 mod compound;
+mod generic;
+mod link;
 mod walk;
 
+#[cfg(feature = "persistance")]
+mod persist;
+
 pub use annotations::{
-    Annotated, Annotation, Cardinality, Combine, GetMaxKey, Keyed, MaxKey, Nth,
+    Annotation, Cardinality, Combine, GetMaxKey, Keyed, MaxKey, Nth,
 };
 pub use branch::Branch;
 pub use branch_mut::BranchMut;
-pub use compound::{Child, ChildMut, Compound, IterChild, MutableLeaves};
+
+pub use compound::{AnnoIter, Child, ChildMut, Compound, MutableLeaves};
+pub use generic::{GenericAnnotation, GenericChild, GenericLeaf, GenericTree};
+pub use link::{Link, LinkAnnotation, LinkCompound, LinkCompoundMut};
 pub use walk::{First, Step, Walk, Walker};
+
+#[cfg(feature = "persistance")]
+pub use persist::{
+    Backend, BackendCtor, DiskBackend, PersistError, Persistance, PersistedId,
+    PutResult,
+};
