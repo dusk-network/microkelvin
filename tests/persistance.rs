@@ -36,11 +36,7 @@ mod persist_tests {
     fn testbackend() -> BackendCtor<DiskBackend> {
         BackendCtor::new(|| {
             INIT_COUNTER.fetch_add(1, Ordering::SeqCst);
-
-            let dir = tempfile::tempdir().unwrap();
-            let b = DiskBackend::new(dir.path()).unwrap();
-            core::mem::forget(dir);
-            b
+            DiskBackend::ephemeral().unwrap()
         })
     }
 
