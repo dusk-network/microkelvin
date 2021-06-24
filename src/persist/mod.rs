@@ -4,6 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use std::error::Error;
 use std::hash::Hasher;
 use std::io;
 use std::sync::Arc;
@@ -87,13 +88,13 @@ lazy_static! {
 
 /// A backend constructor
 pub struct BackendCtor<B> {
-    ctor: fn() -> B,
+    ctor: fn() -> Result<B, PersistError>,
     id: u64,
 }
 
 impl<B> BackendCtor<B> {
     /// Create a new constructor from a function/closure
-    pub fn new(ctor: fn() -> B) -> Self {
+    pub fn new(ctor: fn() -> Result<B, PersistError>) -> Self {
         let mut hasher = DefaultHasher::new();
         Hash::hash(&ctor, &mut hasher);
         let id = hasher.finish();
@@ -132,7 +133,7 @@ impl Persistance {
         match entry {
             Entry::Occupied(mut occupied) => occupied.get_mut().persist(c),
             Entry::Vacant(vacant) => {
-                let backend = (ctor.ctor)();
+                let backend = (ctor.ctor)()?;
                 vacant.insert(WrappedBackend::new(backend)).persist(c)
             }
         }
@@ -166,13 +167,15 @@ pub trait Backend: Send + Sync {
         -> Result<PutResult, PersistError>;
 }
 
-/// An error that can appear when persisting structures to disk
+/// An error that can happen when persisting structures to disk
 #[derive(Debug)]
 pub enum PersistError {
     /// An io-error occured while persisting
     Io(io::Error),
     /// A CanonError occured while persisting
     Canon(CanonError),
+    /// Other backend specific error
+    Other(Box<dyn Error + Send>),
 }
 
 impl From<io::Error> for PersistError {

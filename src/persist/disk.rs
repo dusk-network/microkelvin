@@ -5,7 +5,7 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use std::fs::{self, File, OpenOptions};
-use std::io::{self, Read, Seek, SeekFrom, Write};
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::PathBuf;
 
 use appendix::Index;
@@ -38,7 +38,7 @@ impl std::fmt::Debug for DiskBackend {
 
 impl DiskBackend {
     /// Create a new disk backend
-    pub fn new<P>(path: P) -> io::Result<Self>
+    pub fn new<P>(path: P) -> Result<Self, PersistError>
     where
         P: Into<PathBuf>,
     {
@@ -74,7 +74,7 @@ impl DiskBackend {
 
     /// Create an ephemeral Diskbackend, that deletes its data when going out of
     /// scope
-    pub fn ephemeral() -> io::Result<Self> {
+    pub fn ephemeral() -> Result<Self, PersistError> {
         let dir = tempdir()?;
 
         let mut db = DiskBackend::new(dir.path())?;

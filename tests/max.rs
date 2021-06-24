@@ -9,6 +9,7 @@ use rand::{prelude::SliceRandom, thread_rng};
 mod linked_list;
 use linked_list::LinkedList;
 
+use canonical::CanonError;
 use canonical_derive::Canon;
 use microkelvin::{GetMaxKey, Keyed, MaxKey};
 
@@ -25,7 +26,7 @@ impl Keyed<u64> for TestLeaf {
 }
 
 #[test]
-fn maximum() {
+fn maximum() -> Result<(), CanonError> {
     let n: u64 = 1024;
 
     let mut keys = vec![];
@@ -42,7 +43,7 @@ fn maximum() {
         list.push(TestLeaf { key, other: () });
     }
 
-    let max = list.max_key().unwrap().unwrap();
+    let max = list.max_key()?.expect("Some(branch)");
 
     assert_eq!(
         *max,
@@ -50,5 +51,7 @@ fn maximum() {
             key: 1023,
             other: ()
         }
-    )
+    );
+
+    Ok(())
 }

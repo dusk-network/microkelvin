@@ -163,7 +163,10 @@ where
                                 Ok(LinkCompound(borrow))
                             }
                             Err(PersistError::Canon(e)) => Err(e),
-                            Err(PersistError::Io(_)) => {
+                            Err(
+                                PersistError::Io(_) | PersistError::Other(_),
+                            ) => {
+                                // TODO: log errors to the backend
                                 Err(CanonError::NotFound)
                             }
                         }
