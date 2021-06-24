@@ -13,7 +13,9 @@ mod persist_tests {
     use linked_list::LinkedList;
 
     use canonical_derive::Canon;
-    use microkelvin::{BackendCtor, Compound, DiskBackend, Keyed, Persistance};
+    use microkelvin::{
+        BackendCtor, Compound, DiskBackend, Keyed, PersistError, Persistance,
+    };
 
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::thread;
@@ -36,12 +38,12 @@ mod persist_tests {
     fn testbackend() -> BackendCtor<DiskBackend> {
         BackendCtor::new(|| {
             INIT_COUNTER.fetch_add(1, Ordering::SeqCst);
-            DiskBackend::ephemeral().unwrap()
+            DiskBackend::ephemeral()
         })
     }
 
     #[test]
-    fn persist_a() {
+    fn persist_a() -> Result<(), PersistError> {
         let n: u64 = 16;
 
         let mut list = LinkedList::<_, ()>::new();
@@ -50,30 +52,32 @@ mod persist_tests {
             list.push(i);
         }
 
-        let persisted = Persistance::persist(&testbackend(), &list).unwrap();
+        let persisted = Persistance::persist(&testbackend(), &list)?;
 
-        let restored_generic = persisted.restore().unwrap();
+        let restored_generic = persisted.restore()?;
 
         let mut restored: LinkedList<u64, ()> =
-            LinkedList::from_generic(&restored_generic).unwrap();
+            LinkedList::from_generic(&restored_generic)?;
 
         // first empty the original
 
         for i in 0..n {
-            assert_eq!(list.pop().unwrap(), Some(n - i - 1));
+            assert_eq!(list.pop()?, Some(n - i - 1));
         }
 
         // then the restored copy
 
         for i in 0..n {
-            assert_eq!(restored.pop().unwrap(), Some(n - i - 1));
+            assert_eq!(restored.pop()?, Some(n - i - 1));
         }
+
+        Ok(())
     }
 
     // Identical to persist_a, to test concurrency
 
     #[test]
-    fn persist_b() {
+    fn persist_b() -> Result<(), PersistError> {
         let n: u64 = 16;
 
         let mut list = LinkedList::<_, ()>::new();
@@ -82,30 +86,30 @@ mod persist_tests {
             list.push(i);
         }
 
-        let persisted = Persistance::persist(&testbackend(), &list).unwrap();
+        let persisted = Persistance::persist(&testbackend(), &list)?;
 
-        let restored_generic = persisted.restore().unwrap();
+        let restored_generic = persisted.restore()?;
 
         let mut restored: LinkedList<u64, ()> =
-            LinkedList::from_generic(&restored_generic).unwrap();
+            LinkedList::from_generic(&restored_generic)?;
 
         // first empty the original
 
         for i in 0..n {
-            assert_eq!(list.pop().unwrap(), Some(n - i - 1));
+            assert_eq!(list.pop()?, Some(n - i - 1));
         }
 
         // then the restored copy
 
         for i in 0..n {
-            assert_eq!(restored.pop().unwrap(), Some(n - i - 1));
+            assert_eq!(restored.pop()?, Some(n - i - 1));
         }
+
+        Ok(())
     }
 
-    // this test should work across threads!
-
     #[test]
-    fn persist_across_threads() {
+    fn persist_across_threads() -> Result<(), PersistError> {
         let n: u64 = 16;
 
         let mut list = LinkedList::<_, ()>::new();
@@ -114,28 +118,32 @@ mod persist_tests {
             list.push(i);
         }
 
-        let persisted = Persistance::persist(&testbackend(), &list).unwrap();
+        let persisted = Persistance::persist(&testbackend(), &list)?;
 
         // it should now be available from other threads
 
         std::thread::spawn(move || {
-            let restored_generic = persisted.restore().unwrap();
+            let restored_generic = persisted.restore()?;
 
             let mut restored: LinkedList<u64, ()> =
-                LinkedList::from_generic(&restored_generic).unwrap();
+                LinkedList::from_generic(&restored_generic)?;
 
             for i in 0..n {
-                assert_eq!(restored.pop().unwrap(), Some(n - i - 1));
+                assert_eq!(restored.pop()?, Some(n - i - 1));
             }
+
+            Ok(()) as Result<(), PersistError>
         })
         .join()
-        .unwrap();
+        .expect("thread to join cleanly")?;
 
         // then empty the original
 
         for i in 0..n {
-            assert_eq!(list.pop().unwrap(), Some(n - i - 1));
+            assert_eq!(list.pop()?, Some(n - i - 1));
         }
+
+        Ok(())
     }
 
     #[test]
