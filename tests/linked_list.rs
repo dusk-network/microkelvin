@@ -156,7 +156,7 @@ fn push_cardinality() {
 }
 
 #[test]
-fn push_nth() {
+fn push_nth() -> Result<(), CanonError> {
     let n: u64 = 1024;
 
     use microkelvin::{Cardinality, Nth};
@@ -168,12 +168,14 @@ fn push_nth() {
     }
 
     for i in 0..n {
-        assert_eq!(*list.nth(i).unwrap().unwrap(), n - i - 1)
+        assert_eq!(*list.nth(i)?.expect("Some(branch)"), n - i - 1)
     }
+
+    Ok(())
 }
 
 #[test]
-fn push_pop() {
+fn push_pop() -> Result<(), CanonError> {
     let n: u64 = 1024;
 
     let mut list = LinkedList::<_, ()>::new();
@@ -183,12 +185,14 @@ fn push_pop() {
     }
 
     for i in 0..n {
-        assert_eq!(list.pop().unwrap(), Some(n - i - 1))
+        assert_eq!(list.pop()?, Some(n - i - 1))
     }
+
+    Ok(())
 }
 
 #[test]
-fn push_mut() {
+fn push_mut() -> Result<(), CanonError> {
     let n: u64 = 1024;
 
     use microkelvin::{Cardinality, Nth};
@@ -200,16 +204,18 @@ fn push_mut() {
     }
 
     for i in 0..n {
-        *list.nth_mut(i).unwrap().unwrap() += 1
+        *list.nth_mut(i)?.expect("Some(branch)") += 1
     }
 
     for i in 0..n {
-        assert_eq!(*list.nth(i).unwrap().unwrap(), n - i)
+        assert_eq!(*list.nth(i)?.expect("Some(branch)"), n - i)
     }
+
+    Ok(())
 }
 
 #[test]
-fn iterate_immutable() {
+fn iterate_immutable() -> Result<(), CanonError> {
     let n: u64 = 16;
 
     use microkelvin::{Cardinality, Nth};
@@ -221,12 +227,12 @@ fn iterate_immutable() {
     }
 
     // branch from first element
-    let branch = list.first().unwrap().unwrap();
+    let branch = list.first()?.expect("Some(branch)");
 
     let mut count = n;
 
     for res_leaf in branch {
-        let leaf = res_leaf.unwrap();
+        let leaf = res_leaf?;
 
         count -= 1;
 
@@ -234,21 +240,23 @@ fn iterate_immutable() {
     }
 
     // branch from 7th element
-    let branch = list.nth(6).unwrap().unwrap();
+    let branch = list.nth(6)?.expect("Some(branch)");
 
     let mut count = n - 6;
 
     for res_leaf in branch {
-        let leaf = res_leaf.unwrap();
+        let leaf = res_leaf?;
 
         count -= 1;
 
         assert_eq!(*leaf, count);
     }
+
+    Ok(())
 }
 
 #[test]
-fn iterate_mutable() {
+fn iterate_mutable() -> Result<(), CanonError> {
     let n: u64 = 32;
 
     use microkelvin::{Cardinality, Nth};
@@ -260,19 +268,19 @@ fn iterate_mutable() {
     }
 
     // branch from first element
-    let branch_mut = list.first_mut().unwrap().unwrap();
+    let branch_mut = list.first_mut()?.expect("Some(branch_mut)");
 
     let mut count = n;
 
     for res_leaf in branch_mut {
-        *res_leaf.unwrap() += 1;
+        *res_leaf? += 1;
     }
 
     // branch from first element
-    let branch = list.first().unwrap().unwrap();
+    let branch = list.first()?.expect("Some(brach)");
 
     for res_leaf in branch {
-        let leaf = res_leaf.unwrap();
+        let leaf = res_leaf?;
 
         assert_eq!(*leaf, count);
 
@@ -280,21 +288,23 @@ fn iterate_mutable() {
     }
 
     // branch from 8th element
-    let branch = list.nth(7).unwrap().unwrap();
+    let branch = list.nth(7)?.expect("Some(branch)");
 
     let mut count = n - 7;
 
     for res_leaf in branch {
-        let leaf = res_leaf.unwrap();
+        let leaf = res_leaf?;
 
         assert_eq!(*leaf, count);
 
         count -= 1;
     }
+
+    Ok(())
 }
 
 #[test]
-fn iterate_map() {
+fn iterate_map() -> Result<(), CanonError> {
     let n: u64 = 32;
 
     let mut list = LinkedList::<_, ()>::new();
@@ -304,22 +314,24 @@ fn iterate_map() {
     }
 
     // branch from first element
-    let branch_mut = list.first().unwrap().unwrap();
+    let branch_mut = list.first()?.expect("Some(brach_mut)");
     let mapped = branch_mut.map_leaf(|x| x);
 
     let mut count = n - 1;
 
     for leaf in mapped {
-        let leaf = leaf.unwrap();
+        let leaf = leaf?;
 
         assert_eq!(*leaf, count);
 
         count = count.saturating_sub(1);
     }
+
+    Ok(())
 }
 
 #[test]
-fn iterate_map_mutable() {
+fn iterate_map_mutable() -> Result<(), CanonError> {
     let n: u64 = 32;
 
     let mut list = LinkedList::<_, ()>::new();
@@ -329,22 +341,24 @@ fn iterate_map_mutable() {
     }
 
     // branch from first element
-    let branch_mut = list.first_mut().unwrap().unwrap();
+    let branch_mut = list.first_mut()?.expect("Some(branch_mut)");
     let mapped = branch_mut.map_leaf(|x| x);
 
     let mut count = n - 1;
 
     for leaf in mapped {
-        let leaf = leaf.unwrap();
+        let leaf = leaf?;
 
         assert_eq!(*leaf, count);
 
         count = count.saturating_sub(1);
     }
+
+    Ok(())
 }
 
 #[test]
-fn deref_mapped_mutable_branch() {
+fn deref_mapped_mutable_branch() -> Result<(), CanonError> {
     let n: u64 = 32;
 
     let mut list = LinkedList::<_, ()>::new();
@@ -354,8 +368,10 @@ fn deref_mapped_mutable_branch() {
     }
 
     // branch from first element
-    let branch_mut = list.first_mut().unwrap().unwrap();
+    let branch_mut = list.first_mut()?.expect("Some(brach_mut)");
     let mapped = branch_mut.map_leaf(|x| x);
 
     assert_eq!(core::ops::Deref::deref(&mapped), &31);
+
+    Ok(())
 }
