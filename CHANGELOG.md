@@ -5,20 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.9.0] - 2021-06-24
+## [0.9.1] - 2021-07-02
 
 ### Changed
+
 - Change `BackendCtor` to take a fallible closure
 - Change tests to use `?` instead of unwraps.
 
 ## [0.8.1] - 2021-06-21
 
 ### Added
+
 - Add `ephemeral` method to `DiskBackend`
 
 ## [0.8.0] - 2021-06-18
 
 ### Added
+
 - Add feature `persistance`
 - Add `DiskBackend` to persist datastructures to disk
 - Add `Persistance` to interact with the persistance layer
@@ -26,9 +29,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add support for non-mutably dereferencing mutable mapped branches
 
 ### Changed
+
 - Change the name of `BranchMutMappedMut` to `MappedBranchMut`
 
 ### Removed
+
 - Remove `path` from branch traversal, case now covered by `walk`
 
 ## [0.7.1] - 2021-04-27
@@ -91,28 +96,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Remove unused `no_std` and `feature(min_const_generics)`
 
 ## [0.5.5] - 2020-12-03
+
 ### Changed
+
 - `Max<K>` should implement `PartialOrd<K>`
 
 ## [0.5.4] - 2020-12-03
+
 ### Changed
+
 - Annotation impl of Max<K> should require `Borrow<Max<K>>`
 
 ## [0.5.3] - 2020-11-16
+
 ### Changed
+
 - Use PartialOrd with K in Max<K>
 
 ## [0.5.2] - 2020-11-06
+
 ### Changed
+
 - Canonical update to support hosted-only calls
 - Unused associative feature removed
 
 ## [0.5.1] - 2020-10-30
+
 ### Added
+
 - Cardinality reference implements Into<u64>
 
 ## [0.5.0] - 2020-10-28
+
 ### Changed
+
 - Associative annotation as a feature
 
 ## [0.4.0] - 2020-10-26
@@ -145,6 +162,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Change the `Annotation::op` method to take self by value
 
 ### Added
+
 - Add LICENSE and copyright notices
 - Add `Nth` trait for trees
 - Add capacity to search through trees by walking
@@ -154,8 +172,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Initial
 
-[Unreleased]: https://github.com/dusk-network/microkelvin/compare/v0.9.0...HEAD
-[0.9.0]: https://github.com/dusk-network/microkelvin/compare/v0.8.1...v0.9.0
+[unreleased]: https://github.com/dusk-network/microkelvin/compare/v0.9.1...HEAD
+[0.9.0]: https://github.com/dusk-network/microkelvin/compare/v0.8.1...v0.9.1
 [0.8.1]: https://github.com/dusk-network/microkelvin/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/dusk-network/microkelvin/compare/v0.7.1...v0.8.0
 [0.7.1]: https://github.com/dusk-network/microkelvin/compare/v0.7.0...v0.7.1
