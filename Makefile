@@ -6,6 +6,7 @@ help: ## Display this help screen
 all: $(SUBDIRS)
 
 test: $(SUBDIRS)
+	cargo test
 	cargo test --all-features
 
 $(SUBDIRS):

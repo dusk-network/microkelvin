@@ -14,6 +14,7 @@ use canonical::{Canon, CanonError, Id, Sink, Source};
 #[cfg(feature = "persistence")]
 use crate::persist::{PersistError, Persistence};
 
+use crate::generic::GenericTree;
 use crate::{Annotation, Compound};
 
 #[derive(Debug, Clone)]
@@ -113,7 +114,7 @@ where
         }
     }
 
-    /// Computes the Id of the
+    /// Computes the Id of the link
     pub fn id(&self) -> Id
     where
         C::Leaf: Canon,
@@ -141,41 +142,83 @@ where
             LinkInner::C(_) | LinkInner::Ca(_, _) | LinkInner::Ica(_, _, _) => {
                 return Ok(LinkCompound(borrow))
             }
-            LinkInner::Ia(_, _) => {
-                #[cfg(feature = "persistence")]
-                {
-                    // re-borrow mutable
-                    drop(borrow);
-                    let mut borrow = self.inner.borrow_mut();
-                    if let LinkInner::Ia(id, anno) =
-                        mem::replace(&mut *borrow, LinkInner::Placeholder)
-                    {
-                        match Persistence::get(&id) {
-                            Ok(generic) => {
-                                let compound = C::from_generic(&generic)?;
-                                *borrow =
-                                    LinkInner::Ica(id, Rc::new(compound), anno);
+            LinkInner::Ia(id, _) => {
+                // First we check if the value is available to be reified
+                // directly
+                match id.reify::<GenericTree>() {
+                    Ok(generic) => {
+                        // re-borrow mutable
+                        drop(borrow);
+                        let mut borrow = self.inner.borrow_mut();
+                        if let LinkInner::Ia(id, anno) =
+                            mem::replace(&mut *borrow, LinkInner::Placeholder)
+                        {
+                            let value = C::from_generic(&generic)?;
+                            *borrow = LinkInner::Ica(id, Rc::new(value), anno);
 
-                                // re-borrow immutable
-                                drop(borrow);
-                                let borrow = self.inner.borrow();
+                            // re-borrow immutable
+                            drop(borrow);
+                            let borrow = self.inner.borrow();
 
-                                Ok(LinkCompound(borrow))
-                            }
-                            Err(PersistError::Canon(e)) => Err(e),
-                            Err(
-                                PersistError::Io(_) | PersistError::Other(_),
-                            ) => {
-                                // TODO: log errors to the backend
-                                Err(CanonError::NotFound)
+                            Ok(LinkCompound(borrow))
+                        } else {
+                            unreachable!(
+                                "Guaranteed to match the same as above"
+                            )
+                        }
+                    }
+                    Err(CanonError::NotFound) => {
+                        // Value was not able to be reified, if we're using
+                        // persistance we look in the backend, otherwise we
+                        // return an `Err(NotFound)`
+
+                        #[cfg(feature = "persistence")]
+                        {
+                            // re-borrow mutable
+                            drop(borrow);
+                            let mut borrow = self.inner.borrow_mut();
+                            if let LinkInner::Ia(id, anno) = mem::replace(
+                                &mut *borrow,
+                                LinkInner::Placeholder,
+                            ) {
+                                match Persistence::get(&id) {
+                                    Ok(generic) => {
+                                        let compound =
+                                            C::from_generic(&generic)?;
+                                        *borrow = LinkInner::Ica(
+                                            id,
+                                            Rc::new(compound),
+                                            anno,
+                                        );
+
+                                        // re-borrow immutable
+                                        drop(borrow);
+                                        let borrow = self.inner.borrow();
+
+                                        Ok(LinkCompound(borrow))
+                                    }
+                                    Err(PersistError::Canon(e)) => Err(e),
+                                    err
+                                    @
+                                    Err(
+                                        PersistError::Io(_)
+                                        | PersistError::Other(_),
+                                    ) => {
+                                        // TODO: log errors to the backend
+                                        Err(CanonError::NotFound)
+                                    }
+                                }
+                            } else {
+                                unreachable!(
+                                    "Guaranteed to match the same as above"
+                                )
                             }
                         }
-                    } else {
-                        unreachable!()
+                        #[cfg(not(feature = "persistence"))]
+                        Err(CanonError::NotFound)
                     }
+                    Err(e) => Err(e),
                 }
-                #[cfg(not(feature = "persistence"))]
-                Err(CanonError::NotFound)
             }
         }
     }
