@@ -11,8 +11,8 @@ use core::ops::{Deref, DerefMut};
 
 use canonical::{Canon, CanonError, Id, Sink, Source};
 
-#[cfg(feature = "persistance")]
-use crate::persist::{PersistError, Persistance};
+#[cfg(feature = "persistence")]
+use crate::persist::{PersistError, Persistence};
 
 use crate::{Annotation, Compound};
 
@@ -142,7 +142,7 @@ where
                 return Ok(LinkCompound(borrow))
             }
             LinkInner::Ia(_, _) => {
-                #[cfg(feature = "persistance")]
+                #[cfg(feature = "persistence")]
                 {
                     // re-borrow mutable
                     drop(borrow);
@@ -150,7 +150,7 @@ where
                     if let LinkInner::Ia(id, anno) =
                         mem::replace(&mut *borrow, LinkInner::Placeholder)
                     {
-                        match Persistance::get(&id) {
+                        match Persistence::get(&id) {
                             Ok(generic) => {
                                 let compound = C::from_generic(&generic)?;
                                 *borrow =
@@ -174,7 +174,7 @@ where
                         unreachable!()
                     }
                 }
-                #[cfg(not(feature = "persistance"))]
+                #[cfg(not(feature = "persistence"))]
                 Err(CanonError::NotFound)
             }
         }
