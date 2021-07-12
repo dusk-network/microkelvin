@@ -6,7 +6,7 @@
 
 mod linked_list;
 
-#[cfg(feature = "persistance")]
+#[cfg(feature = "persistence")]
 mod persist_tests {
     use super::*;
 
@@ -14,7 +14,7 @@ mod persist_tests {
 
     use canonical_derive::Canon;
     use microkelvin::{
-        BackendCtor, Compound, DiskBackend, Keyed, PersistError, Persistance,
+        BackendCtor, Compound, DiskBackend, Keyed, PersistError, Persistence,
     };
 
     use std::sync::atomic::{AtomicUsize, Ordering};
@@ -52,7 +52,7 @@ mod persist_tests {
             list.push(i);
         }
 
-        let persisted = Persistance::persist(&testbackend(), &list)?;
+        let persisted = Persistence::persist(&testbackend(), &list)?;
 
         let restored_generic = persisted.restore()?;
 
@@ -86,7 +86,7 @@ mod persist_tests {
             list.push(i);
         }
 
-        let persisted = Persistance::persist(&testbackend(), &list)?;
+        let persisted = Persistence::persist(&testbackend(), &list)?;
 
         let restored_generic = persisted.restore()?;
 
@@ -118,7 +118,7 @@ mod persist_tests {
             list.push(i);
         }
 
-        let persisted = Persistance::persist(&testbackend(), &list)?;
+        let persisted = Persistence::persist(&testbackend(), &list)?;
 
         // it should now be available from other threads
 

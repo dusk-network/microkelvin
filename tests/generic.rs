@@ -4,7 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-#[cfg(feature = "persistance")]
+#[cfg(feature = "persistence")]
 mod fuzz_test {
     use canonical_fuzz::fuzz_canon;
     use microkelvin::{GenericChild, GenericTree};
