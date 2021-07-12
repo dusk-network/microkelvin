@@ -4,16 +4,18 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use microkelvin::{GenericChild, GenericTree};
+#[cfg(feature = "persistance")]
+mod fuzz_test {
+    use canonical_fuzz::fuzz_canon;
+    use microkelvin::{GenericChild, GenericTree};
 
-use canonical_fuzz::fuzz_canon;
+    #[test]
+    fn fuzz_generic_tree() {
+        fuzz_canon::<GenericTree>()
+    }
 
-#[test]
-fn fuzz_generic_tree() {
-    fuzz_canon::<GenericTree>()
-}
-
-#[test]
-fn fuzz_generic_child() {
-    fuzz_canon::<GenericChild>()
+    #[test]
+    fn fuzz_generic_child() {
+        fuzz_canon::<GenericChild>()
+    }
 }
