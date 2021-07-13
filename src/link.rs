@@ -143,9 +143,10 @@ where
                 return Ok(LinkCompound(borrow))
             }
             LinkInner::Ia(id, _) => {
+                // First we check if the value is available to be reified
+                // directly
                 match id.reify::<GenericTree>() {
                     Ok(generic) => {
-                        println!("reified");
                         // re-borrow mutable
                         drop(borrow);
                         let mut borrow = self.inner.borrow_mut();
@@ -161,11 +162,16 @@ where
 
                             Ok(LinkCompound(borrow))
                         } else {
-                            unreachable!()
+                            unreachable!(
+                                "Guaranteed to match the same as above"
+                            )
                         }
                     }
                     Err(CanonError::NotFound) => {
-                        println!("not found in store");
+                        // Value was not able to be reified, if we're using
+                        // persistance we look in the backend, otherwise we
+                        // return an `Err(NotFound)`
+
                         #[cfg(feature = "persistence")]
                         {
                             // re-borrow mutable
@@ -177,7 +183,6 @@ where
                             ) {
                                 match Persistence::get(&id) {
                                     Ok(generic) => {
-                                        println!("generic in backend?");
                                         let compound =
                                             C::from_generic(&generic)?;
                                         *borrow = LinkInner::Ica(
@@ -199,13 +204,14 @@ where
                                         PersistError::Io(_)
                                         | PersistError::Other(_),
                                     ) => {
-                                        println!("persist error: {:?}", err);
                                         // TODO: log errors to the backend
                                         Err(CanonError::NotFound)
                                     }
                                 }
                             } else {
-                                unreachable!()
+                                unreachable!(
+                                    "Guaranteed to match the same as above"
+                                )
                             }
                         }
                         #[cfg(not(feature = "persistence"))]

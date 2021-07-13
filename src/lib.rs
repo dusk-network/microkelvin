@@ -13,7 +13,7 @@
 //! `Branch` and `BranchMut`, types for representing branches in tree-formed
 //! data as well as methods of search.
 
-// #![cfg_attr(not(feature = "persistence"), no_std)]
+#![cfg_attr(not(feature = "persistence"), no_std)]
 #![deny(missing_docs)]
 
 #[macro_use]
