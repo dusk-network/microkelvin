@@ -6,7 +6,7 @@
 
 use alloc::vec::Vec;
 
-#[cfg(feature = "persistance")]
+#[cfg(feature = "persistence")]
 use arbitrary::Arbitrary;
 
 use canonical::{Canon, CanonError, EncodeToVec, Id, Source};
@@ -21,12 +21,12 @@ const TAG_LINK: u8 = 2;
 
 /// A generic annotation
 #[derive(Clone, Canon, Debug, PartialEq)]
-#[cfg_attr(feature = "persistance", derive(Arbitrary))]
+#[cfg_attr(feature = "persistence", derive(Arbitrary))]
 pub struct GenericAnnotation(Vec<u8>);
 
 /// A generic leaf
 #[derive(Clone, Canon, Debug, PartialEq)]
-#[cfg_attr(feature = "persistance", derive(Arbitrary))]
+#[cfg_attr(feature = "persistence", derive(Arbitrary))]
 pub struct GenericLeaf(Vec<u8>);
 
 impl GenericLeaf {
@@ -53,7 +53,7 @@ impl GenericAnnotation {
 
 /// A generic child of a collection
 #[derive(Clone, Debug, PartialEq)]
-#[cfg_attr(feature = "persistance", derive(Arbitrary))]
+#[cfg_attr(feature = "persistence", derive(Arbitrary))]
 pub enum GenericChild {
     /// Child is empty
     Empty,
@@ -110,7 +110,7 @@ impl Canon for GenericChild {
 /// you don't know the concrete associated and generic types of the Compound
 /// structure that was persisted
 #[derive(Default, Clone, Canon, Debug, PartialEq)]
-#[cfg_attr(feature = "persistance", derive(Arbitrary))]
+#[cfg_attr(feature = "persistence", derive(Arbitrary))]
 pub struct GenericTree(Vec<GenericChild>);
 
 impl GenericTree {

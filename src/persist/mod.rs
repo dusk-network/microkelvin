@@ -106,16 +106,16 @@ impl<B> BackendCtor<B> {
 pub struct PersistedId(Id);
 
 impl PersistedId {
-    /// Restore a GenericTree from a persistance backend.
+    /// Restore a GenericTree from a persistence backend.
     pub fn restore(&self) -> Result<GenericTree, PersistError> {
-        Persistance::get(&self.0)
+        Persistence::get(&self.0)
     }
 }
 
-/// The singleton interface to the persistance layer
-pub struct Persistance;
+/// The singleton interface to the persistence layer
+pub struct Persistence;
 
-impl Persistance {
+impl Persistence {
     /// Persist the given Compound to a backend
     pub fn persist<C, A, B>(
         ctor: &BackendCtor<B>,

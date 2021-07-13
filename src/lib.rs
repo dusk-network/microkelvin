@@ -13,7 +13,7 @@
 //! `Branch` and `BranchMut`, types for representing branches in tree-formed
 //! data as well as methods of search.
 
-#![cfg_attr(not(feature = "persistance"), no_std)]
+#![cfg_attr(not(feature = "persistence"), no_std)]
 #![deny(missing_docs)]
 
 #[macro_use]
@@ -27,7 +27,7 @@ mod generic;
 mod link;
 mod walk;
 
-#[cfg(feature = "persistance")]
+#[cfg(feature = "persistence")]
 mod persist;
 
 pub use annotations::{
@@ -41,8 +41,8 @@ pub use generic::{GenericAnnotation, GenericChild, GenericLeaf, GenericTree};
 pub use link::{Link, LinkAnnotation, LinkCompound, LinkCompoundMut};
 pub use walk::{First, Step, Walk, Walker};
 
-#[cfg(feature = "persistance")]
+#[cfg(feature = "persistence")]
 pub use persist::{
-    Backend, BackendCtor, DiskBackend, PersistError, Persistance, PersistedId,
+    Backend, BackendCtor, DiskBackend, PersistError, PersistedId, Persistence,
     PutResult,
 };

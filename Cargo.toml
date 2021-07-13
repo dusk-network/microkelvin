@@ -23,5 +23,5 @@ rand = "0.8.3"
 canonical_fuzz = "0.6.2"
 
 [features]
-persistance = ["appendix", "parking_lot", "lazy_static", "tempfile", "arbitrary"]
+persistence = ["appendix", "parking_lot", "lazy_static", "tempfile", "arbitrary"]
 
