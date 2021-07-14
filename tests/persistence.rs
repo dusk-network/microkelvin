@@ -6,7 +6,7 @@
 
 mod linked_list;
 
-#[cfg(feature = "persistance")]
+#[cfg(feature = "persistence")]
 mod persist_tests {
     use super::*;
 
@@ -14,7 +14,7 @@ mod persist_tests {
 
     use canonical_derive::Canon;
     use microkelvin::{
-        BackendCtor, Compound, DiskBackend, Keyed, PersistError, Persistance,
+        BackendCtor, Compound, DiskBackend, Keyed, PersistError, Persistence,
     };
 
     use std::sync::atomic::{AtomicUsize, Ordering};
@@ -42,8 +42,7 @@ mod persist_tests {
         })
     }
 
-    #[test]
-    fn persist_a() -> Result<(), PersistError> {
+    fn persist() -> Result<(), PersistError> {
         let n: u64 = 16;
 
         let mut list = LinkedList::<_, ()>::new();
@@ -52,7 +51,7 @@ mod persist_tests {
             list.push(i);
         }
 
-        let persisted = Persistance::persist(&testbackend(), &list)?;
+        let persisted = Persistence::persist(&testbackend(), &list)?;
 
         let restored_generic = persisted.restore()?;
 
@@ -74,41 +73,26 @@ mod persist_tests {
         Ok(())
     }
 
-    // Identical to persist_a, to test concurrency
+    #[test]
+    fn persist_a() -> Result<(), PersistError> {
+        persist()
+    }
 
     #[test]
     fn persist_b() -> Result<(), PersistError> {
-        let n: u64 = 16;
-
-        let mut list = LinkedList::<_, ()>::new();
-
-        for i in 0..n {
-            list.push(i);
-        }
-
-        let persisted = Persistance::persist(&testbackend(), &list)?;
-
-        let restored_generic = persisted.restore()?;
-
-        let mut restored: LinkedList<u64, ()> =
-            LinkedList::from_generic(&restored_generic)?;
-
-        // first empty the original
-
-        for i in 0..n {
-            assert_eq!(list.pop()?, Some(n - i - 1));
-        }
-
-        // then the restored copy
-
-        for i in 0..n {
-            assert_eq!(restored.pop()?, Some(n - i - 1));
-        }
-
-        Ok(())
+        persist()
     }
 
     #[test]
+    fn persist_c() -> Result<(), PersistError> {
+        persist()
+    }
+
+    #[test]
+    fn persist_d() -> Result<(), PersistError> {
+        persist()
+    }
+
     fn persist_across_threads() -> Result<(), PersistError> {
         let n: u64 = 16;
 
@@ -118,7 +102,7 @@ mod persist_tests {
             list.push(i);
         }
 
-        let persisted = Persistance::persist(&testbackend(), &list)?;
+        let persisted = Persistence::persist(&testbackend(), &list)?;
 
         // it should now be available from other threads
 
@@ -144,6 +128,26 @@ mod persist_tests {
         }
 
         Ok(())
+    }
+
+    #[test]
+    fn persist_across_threads_a() -> Result<(), PersistError> {
+        persist_across_threads()
+    }
+
+    #[test]
+    fn persist_across_threads_b() -> Result<(), PersistError> {
+        persist_across_threads()
+    }
+
+    #[test]
+    fn persist_across_threads_c() -> Result<(), PersistError> {
+        persist_across_threads()
+    }
+
+    #[test]
+    fn persist_across_threads_d() -> Result<(), PersistError> {
+        persist_across_threads()
     }
 
     #[test]
