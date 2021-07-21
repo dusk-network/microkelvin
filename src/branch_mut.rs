@@ -196,7 +196,7 @@ where
                     let top_child = top.child_mut(ofs);
                     if let ChildMut::Node(n) = top_child {
                         let level: LevelMut<'_, C, A> =
-                            LevelMut::new_val(n.compound_mut()?);
+                            LevelMut::new_val(n.inner_mut()?);
 
                         // Extend the lifetime of the Level.
                         // See comment in `Branch::walk` for justification.

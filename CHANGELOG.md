@@ -10,11 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Add test directory `wasm_tests`
+- Add Default for Link,
 
 ### Changed
 
 - Change CI to use `make test` instead of `cargo test`
 - Change name of feature `persistance` to the correctly spelled `persistence`
+- Change `compound` and `compound_mut` on Link to `inner` and `inner_mut`
 
 ## [0.9.1] - 2021-07-02
 
