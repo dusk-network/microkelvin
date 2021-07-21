@@ -166,8 +166,7 @@ where
                     let ofs = top.offset();
                     let top_child = top.child(ofs);
                     if let Child::Node(n) = top_child {
-                        let level: Level<'_, C, A> =
-                            Level::new_val(n.compound()?);
+                        let level: Level<'_, C, A> = Level::new_val(n.inner()?);
                         // Extend the lifetime of the Level.
                         //
                         // JUSTIFICATION

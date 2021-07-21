@@ -28,9 +28,23 @@ enum LinkInner<C, A> {
 }
 
 #[derive(Clone)]
-/// TODO
+/// The Link struct is an annotated merkle link to a compound type
+///
+/// The link takes care of lazily evaluating the annotation of the inner type,
+/// and to load it from memory or backend when needed.
 pub struct Link<C, A> {
     inner: RefCell<LinkInner<C, A>>,
+}
+
+impl<C, A> Default for Link<C, A>
+where
+    C: Default,
+{
+    fn default() -> Self {
+        Link {
+            inner: RefCell::new(LinkInner::C(Rc::new(C::default()))),
+        }
+    }
 }
 
 impl<C: core::fmt::Debug, A: core::fmt::Debug> core::fmt::Debug for Link<C, A> {
@@ -98,8 +112,8 @@ where
     where
         C::Leaf: Canon,
     {
-        // assure compound is loaded
-        let _ = self.compound()?;
+        // assure inner value is loaded
+        let _ = self.inner()?;
 
         let inner = self.inner.into_inner();
         match inner {
@@ -131,10 +145,16 @@ where
         }
     }
 
+    /// See doc for `inner`
+    #[deprecated(since = "0.10.0", note = "Please use `inner` instead")]
+    pub fn compound(&self) -> Result<LinkCompound<C, A>, CanonError> {
+        self.inner()
+    }
+
     /// Gets a reference to the inner compound of the link'
     ///
     /// Can fail when trying to fetch data over i/o
-    pub fn compound(&self) -> Result<LinkCompound<C, A>, CanonError> {
+    pub fn inner(&self) -> Result<LinkCompound<C, A>, CanonError> {
         let borrow = self.inner.borrow();
 
         match *borrow {
@@ -223,17 +243,26 @@ where
         }
     }
 
+    /// See doc for `inner_mut`
+    #[deprecated(since = "0.10.0", note = "Please use `inner` instead")]
+    pub fn compound_mut(&mut self) -> Result<LinkCompoundMut<C, A>, CanonError>
+    where
+        C: Canon,
+    {
+        self.inner_mut()
+    }
+
     /// Returns a Mutable reference to the underlying compound node
     ///
     /// Drops cached annotations and ids
     ///
     /// Can fail when trying to fetch data over i/o
-    pub fn compound_mut(&mut self) -> Result<LinkCompoundMut<C, A>, CanonError>
+    pub fn inner_mut(&mut self) -> Result<LinkCompoundMut<C, A>, CanonError>
     where
         C: Canon,
     {
-        // assure compound is loaded
-        let _ = self.compound()?;
+        // assure inner value is loaded
+        let _ = self.inner()?;
 
         let mut borrow: RefMut<LinkInner<C, A>> = self.inner.borrow_mut();
 

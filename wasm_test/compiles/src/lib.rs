@@ -13,5 +13,5 @@ use dusk_abi;
 
 #[no_mangle]
 fn compile_test() {
-    todo!("testing 1 2 4")
+    panic!("testing 1 2 4")
 }
