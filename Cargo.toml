@@ -1,6 +1,6 @@
 [package]
 name = "microkelvin"
-version = "0.10.0-rc.1"
+version = "0.10.0"
 authors = ["Kristoffer Ström <kristoffer@dusk.network>"]
 edition = "2018"
 keywords = ["datastructures"]
@@ -24,4 +24,3 @@ canonical_fuzz = "0.6.2"
 
 [features]
 persistence = ["appendix", "parking_lot", "lazy_static", "tempfile", "arbitrary"]
-
