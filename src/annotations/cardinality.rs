@@ -8,9 +8,6 @@
 /// i.e. the amount of elements in a collection
 use core::borrow::Borrow;
 
-use canonical::{Canon, CanonError};
-use canonical_derive::Canon;
-
 use crate::annotations::{Annotation, Combine};
 use crate::branch::Branch;
 use crate::branch_mut::BranchMut;
@@ -18,7 +15,7 @@ use crate::compound::{AnnoIter, Child, Compound, MutableLeaves};
 use crate::walk::{Step, Walk, Walker};
 
 /// The cardinality of a compound collection
-#[derive(Canon, PartialEq, Debug, Clone, Default, Copy)]
+#[derive(PartialEq, Debug, Clone, Default, Copy)]
 pub struct Cardinality(pub(crate) u64);
 
 impl From<Cardinality> for u64 {
@@ -41,7 +38,7 @@ impl<L> Annotation<L> for Cardinality {
 
 impl<A> Combine<A> for Cardinality
 where
-    A: Borrow<Self> + Canon,
+    A: Borrow<Self>,
 {
     fn combine<C>(iter: AnnoIter<C, A>) -> Self
     where
@@ -95,14 +92,13 @@ where
     A: Annotation<Self::Leaf> + Borrow<Cardinality>,
 {
     /// Construct a `Branch` pointing to the `nth` element, if any
-    fn nth(&'a self, n: u64)
-        -> Result<Option<Branch<'a, Self, A>>, CanonError>;
+    fn nth(&'a self, n: u64) -> Result<Option<Branch<'a, Self, A>>, ()>;
 
     /// Construct a `BranchMut` pointing to the `nth` element, if any
     fn nth_mut(
         &'a mut self,
         n: u64,
-    ) -> Result<Option<BranchMut<'a, Self, A>>, CanonError>
+    ) -> Result<Option<BranchMut<'a, Self, A>>, ()>
     where
         Self: MutableLeaves;
 }
@@ -112,10 +108,7 @@ where
     C: Compound<A> + Clone,
     A: Annotation<C::Leaf> + Borrow<Cardinality>,
 {
-    fn nth(
-        &'a self,
-        ofs: u64,
-    ) -> Result<Option<Branch<'a, Self, A>>, CanonError> {
+    fn nth(&'a self, ofs: u64) -> Result<Option<Branch<'a, Self, A>>, ()> {
         // Return the first that satisfies the walk
         Branch::<_, A>::walk(self, Offset(ofs))
     }
@@ -123,7 +116,7 @@ where
     fn nth_mut(
         &'a mut self,
         ofs: u64,
-    ) -> Result<Option<BranchMut<'a, Self, A>>, CanonError>
+    ) -> Result<Option<BranchMut<'a, Self, A>>, ()>
     where
         C: MutableLeaves,
     {

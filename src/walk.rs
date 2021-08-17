@@ -6,8 +6,6 @@
 
 use core::marker::PhantomData;
 
-use canonical::{Canon, CanonError};
-
 use crate::branch::Branch;
 use crate::branch_mut::BranchMut;
 use crate::compound::{Child, Compound, MutableLeaves};
@@ -87,12 +85,10 @@ where
     Self: Compound<A>,
 {
     /// Construct a `Branch` pointing to the first element, if not empty
-    fn first(&'a self) -> Result<Option<Branch<'a, Self, A>>, CanonError>;
+    fn first(&'a self) -> Result<Option<Branch<'a, Self, A>>, ()>;
 
     /// Construct a `BranchMut` pointing to the first element, if not empty
-    fn first_mut(
-        &'a mut self,
-    ) -> Result<Option<BranchMut<'a, Self, A>>, CanonError>
+    fn first_mut(&'a mut self) -> Result<Option<BranchMut<'a, Self, A>>, ()>
     where
         Self: MutableLeaves + Clone;
 }
@@ -100,15 +96,12 @@ where
 impl<'a, C, A> First<'a, A> for C
 where
     C: Compound<A>,
-    A: Canon,
 {
-    fn first(&'a self) -> Result<Option<Branch<'a, Self, A>>, CanonError> {
+    fn first(&'a self) -> Result<Option<Branch<'a, Self, A>>, ()> {
         Branch::<_, A>::walk(self, AllLeaves)
     }
 
-    fn first_mut(
-        &'a mut self,
-    ) -> Result<Option<BranchMut<'a, Self, A>>, CanonError>
+    fn first_mut(&'a mut self) -> Result<Option<BranchMut<'a, Self, A>>, ()>
     where
         C: MutableLeaves + Clone,
     {

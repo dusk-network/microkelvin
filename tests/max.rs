@@ -4,16 +4,15 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use std::io::Error;
+
 use rand::{prelude::SliceRandom, thread_rng};
 
 mod linked_list;
 use linked_list::LinkedList;
-
-use canonical::CanonError;
-use canonical_derive::Canon;
 use microkelvin::{GetMaxKey, Keyed, MaxKey};
 
-#[derive(PartialEq, Clone, Canon, Debug)]
+#[derive(PartialEq, Clone, Debug)]
 struct TestLeaf {
     key: u64,
     other: (),
@@ -26,7 +25,7 @@ impl Keyed<u64> for TestLeaf {
 }
 
 #[test]
-fn maximum() -> Result<(), CanonError> {
+fn maximum() -> Result<(), Box<dyn Error>> {
     let n: u64 = 1024;
 
     let mut keys = vec![];

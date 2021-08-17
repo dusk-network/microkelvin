@@ -5,20 +5,19 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use core::borrow::Borrow;
+use std::error::Error;
 
 use rand::{prelude::SliceRandom, thread_rng};
 
 mod linked_list;
 use linked_list::LinkedList;
 
-use canonical::{Canon, CanonError};
-use canonical_derive::Canon;
 use microkelvin::{
     AnnoIter, Annotation, Cardinality, Combine, Compound, GetMaxKey, Keyed,
     MaxKey,
 };
 
-#[derive(Default, Clone, Canon)]
+#[derive(Default, Clone)]
 struct Anno<K> {
     max: MaxKey<K>,
     card: Cardinality,
@@ -39,7 +38,7 @@ impl<K> Borrow<Cardinality> for Anno<K> {
 impl<Leaf, K> Annotation<Leaf> for Anno<K>
 where
     Leaf: Keyed<K>,
-    K: Ord + Default + Canon,
+    K: Ord + Default,
 {
     fn from_leaf(leaf: &Leaf) -> Self {
         Anno {
@@ -52,7 +51,7 @@ where
 impl<K, A> Combine<A> for Anno<K>
 where
     K: Clone + Ord + Default,
-    A: Borrow<MaxKey<K>> + Borrow<Cardinality> + Canon,
+    A: Borrow<MaxKey<K>> + Borrow<Cardinality>,
 {
     fn combine<C>(iter: AnnoIter<C, A>) -> Self
     where
@@ -66,7 +65,7 @@ where
     }
 }
 
-#[derive(PartialEq, Clone, Canon, Debug)]
+#[derive(PartialEq, Clone, Debug)]
 struct TestLeaf {
     key: u64,
     other: (),
@@ -79,7 +78,7 @@ impl Keyed<u64> for TestLeaf {
 }
 
 #[test]
-fn maximum_multiple() -> Result<(), CanonError> {
+fn maximum_multiple() -> Result<(), Box<dyn Error>> {
     let n: u64 = 1024;
 
     let mut keys = vec![];

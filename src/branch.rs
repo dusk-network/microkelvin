@@ -8,8 +8,6 @@ use core::ops::Deref;
 
 use alloc::vec::Vec;
 
-use canonical::{Canon, CanonError};
-
 use crate::annotations::Annotation;
 use crate::compound::{Child, Compound};
 use crate::link::LinkCompound;
@@ -30,7 +28,6 @@ pub struct Level<'a, C, A> {
 impl<'a, C, A> Deref for Level<'a, C, A>
 where
     C: Compound<A>,
-    A: Canon,
 {
     type Target = C;
 
@@ -70,7 +67,6 @@ pub struct PartialBranch<'a, C, A>(Vec<Level<'a, C, A>>);
 impl<'a, C, A> Deref for LevelNode<'a, C, A>
 where
     C: Compound<A>,
-    A: Canon,
 {
     type Target = C;
 
@@ -85,7 +81,6 @@ where
 impl<'a, C, A> PartialBranch<'a, C, A>
 where
     C: Compound<A>,
-    A: Canon,
 {
     fn new(root: &'a C) -> Self {
         PartialBranch(vec![Level::new_root(root)])
@@ -130,7 +125,7 @@ where
         }
     }
 
-    fn walk<W>(&mut self, walker: &mut W) -> Result<Option<()>, CanonError>
+    fn walk<W>(&mut self, walker: &mut W) -> Result<Option<()>, ()>
     where
         W: Walker<C, A>,
     {
@@ -224,7 +219,6 @@ where
 impl<'a, C, A> Branch<'a, C, A>
 where
     C: Compound<A>,
-    A: Canon,
 {
     /// Returns the depth of the branch
     pub fn depth(&self) -> usize {
@@ -250,10 +244,7 @@ where
 
     /// Performs a tree walk, returning either a valid branch or None if the
     /// walk failed.
-    pub fn walk<W>(
-        root: &'a C,
-        mut walker: W,
-    ) -> Result<Option<Self>, CanonError>
+    pub fn walk<W>(root: &'a C, mut walker: W) -> Result<Option<Self>, ()>
     where
         W: Walker<C, A>,
     {
@@ -272,7 +263,6 @@ pub struct Branch<'a, C, A>(PartialBranch<'a, C, A>);
 impl<'a, C, A> Deref for Branch<'a, C, A>
 where
     C: Compound<A>,
-    A: Canon,
 {
     type Target = C::Leaf;
 
@@ -293,7 +283,6 @@ impl<'a, C, A, M> Deref for MappedBranch<'a, C, A, M>
 where
     C: Compound<A>,
     C::Leaf: 'a,
-    A: Canon,
 {
     type Target = M;
 
@@ -312,9 +301,8 @@ pub enum BranchIterator<'a, C, A, W> {
 impl<'a, C, A> IntoIterator for Branch<'a, C, A>
 where
     C: Compound<A>,
-    A: Canon,
 {
-    type Item = Result<&'a C::Leaf, CanonError>;
+    type Item = Result<&'a C::Leaf, ()>;
 
     type IntoIter = BranchIterator<'a, C, A, AllLeaves>;
 
@@ -327,9 +315,8 @@ impl<'a, C, A, W> Iterator for BranchIterator<'a, C, A, W>
 where
     C: Compound<A>,
     W: Walker<C, A>,
-    A: Canon,
 {
-    type Item = Result<&'a C::Leaf, CanonError>;
+    type Item = Result<&'a C::Leaf, ()>;
 
     fn next(&mut self) -> Option<Self::Item> {
         match core::mem::replace(self, BranchIterator::Exhausted) {
@@ -385,7 +372,7 @@ where
     A: Annotation<C::Leaf>,
     M: 'a,
 {
-    type Item = Result<&'a M, CanonError>;
+    type Item = Result<&'a M, ()>;
 
     type IntoIter = MappedBranchIterator<'a, C, A, AllLeaves, M>;
 
@@ -401,7 +388,7 @@ where
     W: Walker<C, A>,
     M: 'a,
 {
-    type Item = Result<&'a M, CanonError>;
+    type Item = Result<&'a M, ()>;
 
     fn next(&mut self) -> Option<Self::Item> {
         match core::mem::replace(self, Self::Exhausted) {
