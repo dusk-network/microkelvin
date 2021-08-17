@@ -9,12 +9,10 @@ use core::cell::{Ref, RefCell, RefMut};
 use core::mem;
 use core::ops::{Deref, DerefMut};
 
-use canonical::{Canon, CanonError, Id, Sink, Source};
-
 #[cfg(feature = "persistence")]
 use crate::persist::{PersistError, Persistence};
 
-use crate::generic::GenericTree;
+use crate::id::Id;
 use crate::{Annotation, Compound};
 
 #[derive(Debug, Clone)]
@@ -56,8 +54,6 @@ impl<C: core::fmt::Debug, A: core::fmt::Debug> core::fmt::Debug for Link<C, A> {
 impl<C, A> Link<C, A>
 where
     C: Compound<A>,
-    C::Leaf: Canon,
-    A: Canon,
 {
     /// Create a new link
     pub fn new(compound: C) -> Self
@@ -108,10 +104,7 @@ where
     /// Gets a reference to the inner compound of the link'
     ///
     /// Can fail when trying to fetch data over i/o
-    pub fn into_compound(self) -> Result<C, CanonError>
-    where
-        C::Leaf: Canon,
-    {
+    pub fn into_compound(self) -> Result<C, ()> {
         // assure inner value is loaded
         let _ = self.inner()?;
 
@@ -131,15 +124,15 @@ where
     /// Computes the Id of the link
     pub fn id(&self) -> Id
     where
-        C::Leaf: Canon,
         A: Annotation<C::Leaf>,
     {
         let borrow = self.inner.borrow();
         match &*borrow {
             LinkInner::Placeholder => unreachable!(),
             LinkInner::C(c) | LinkInner::Ca(c, _) => {
-                let gen = c.generic();
-                Id::new(&gen)
+                // let gen = c.generic();
+                // Id::new(&gen)
+                todo!()
             }
             LinkInner::Ia(id, _) | LinkInner::Ica(id, _, _) => *id,
         }
@@ -147,14 +140,14 @@ where
 
     /// See doc for `inner`
     #[deprecated(since = "0.10.0", note = "Please use `inner` instead")]
-    pub fn compound(&self) -> Result<LinkCompound<C, A>, CanonError> {
+    pub fn compound(&self) -> Result<LinkCompound<C, A>, ()> {
         self.inner()
     }
 
     /// Gets a reference to the inner compound of the link'
     ///
     /// Can fail when trying to fetch data over i/o
-    pub fn inner(&self) -> Result<LinkCompound<C, A>, CanonError> {
+    pub fn inner(&self) -> Result<LinkCompound<C, A>, ()> {
         let borrow = self.inner.borrow();
 
         match *borrow {
@@ -165,7 +158,7 @@ where
             LinkInner::Ia(id, _) => {
                 // First we check if the value is available to be reified
                 // directly
-                match id.reify::<GenericTree>() {
+                match id.reify::<()>() {
                     Ok(generic) => {
                         // re-borrow mutable
                         drop(borrow);
@@ -173,7 +166,7 @@ where
                         if let LinkInner::Ia(id, anno) =
                             mem::replace(&mut *borrow, LinkInner::Placeholder)
                         {
-                            let value = C::from_generic(&generic)?;
+                            let value = todo!();
                             *borrow = LinkInner::Ica(id, Rc::new(value), anno);
 
                             // re-borrow immutable
@@ -187,56 +180,6 @@ where
                             )
                         }
                     }
-                    Err(CanonError::NotFound) => {
-                        // Value was not able to be reified, if we're using
-                        // persistance we look in the backend, otherwise we
-                        // return an `Err(NotFound)`
-
-                        #[cfg(feature = "persistence")]
-                        {
-                            // re-borrow mutable
-                            drop(borrow);
-                            let mut borrow = self.inner.borrow_mut();
-                            if let LinkInner::Ia(id, anno) = mem::replace(
-                                &mut *borrow,
-                                LinkInner::Placeholder,
-                            ) {
-                                match Persistence::get(&id) {
-                                    Ok(generic) => {
-                                        let compound =
-                                            C::from_generic(&generic)?;
-                                        *borrow = LinkInner::Ica(
-                                            id,
-                                            Rc::new(compound),
-                                            anno,
-                                        );
-
-                                        // re-borrow immutable
-                                        drop(borrow);
-                                        let borrow = self.inner.borrow();
-
-                                        Ok(LinkCompound(borrow))
-                                    }
-                                    Err(PersistError::Canon(e)) => Err(e),
-                                    err
-                                    @
-                                    Err(
-                                        PersistError::Io(_)
-                                        | PersistError::Other(_),
-                                    ) => {
-                                        // TODO: log errors to the backend
-                                        Err(CanonError::NotFound)
-                                    }
-                                }
-                            } else {
-                                unreachable!(
-                                    "Guaranteed to match the same as above"
-                                )
-                            }
-                        }
-                        #[cfg(not(feature = "persistence"))]
-                        Err(CanonError::NotFound)
-                    }
                     Err(e) => Err(e),
                 }
             }
@@ -245,10 +188,7 @@ where
 
     /// See doc for `inner_mut`
     #[deprecated(since = "0.10.0", note = "Please use `inner` instead")]
-    pub fn compound_mut(&mut self) -> Result<LinkCompoundMut<C, A>, CanonError>
-    where
-        C: Canon,
-    {
+    pub fn compound_mut(&mut self) -> Result<LinkCompoundMut<C, A>, ()> {
         self.inner_mut()
     }
 
@@ -257,10 +197,7 @@ where
     /// Drops cached annotations and ids
     ///
     /// Can fail when trying to fetch data over i/o
-    pub fn inner_mut(&mut self) -> Result<LinkCompoundMut<C, A>, CanonError>
-    where
-        C: Canon,
-    {
+    pub fn inner_mut(&mut self) -> Result<LinkCompoundMut<C, A>, ()> {
         // assure inner value is loaded
         let _ = self.inner()?;
 
@@ -274,30 +211,6 @@ where
             _ => unreachable!(),
         }
         Ok(LinkCompoundMut(borrow))
-    }
-}
-
-impl<C, A> Canon for Link<C, A>
-where
-    C: Compound<A> + Canon,
-    C::Leaf: Canon,
-    A: Annotation<C::Leaf>,
-{
-    fn encode(&self, sink: &mut Sink) {
-        self.id().encode(sink);
-        self.annotation().encode(sink);
-    }
-
-    fn decode(source: &mut Source) -> Result<Self, CanonError> {
-        let id = Id::decode(source)?;
-        let a = A::decode(source)?;
-        Ok(Link {
-            inner: RefCell::new(LinkInner::Ia(id, a)),
-        })
-    }
-
-    fn encoded_len(&self) -> usize {
-        self.id().encoded_len() + self.annotation().encoded_len()
     }
 }
 

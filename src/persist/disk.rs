@@ -9,10 +9,8 @@ use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::PathBuf;
 
 use appendix::Index;
-use canonical::{Canon, CanonError, Id, Source};
 use tempfile::{tempdir, TempDir};
 
-use crate::generic::GenericTree;
 use crate::persist::{Backend, PersistError, PutResult};
 
 /// A disk-store for persisting microkelvin compound structures
@@ -99,7 +97,7 @@ impl Backend for DiskBackend {
             let mut source = Source::new(&buf);
             Ok(GenericTree::decode(&mut source)?)
         } else {
-            Err(CanonError::NotFound.into())
+            Err(todo!())
         }
     }
 

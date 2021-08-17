@@ -12,7 +12,6 @@ mod persist_tests {
 
     use linked_list::LinkedList;
 
-    use canonical_derive::Canon;
     use microkelvin::{
         BackendCtor, Compound, DiskBackend, Keyed, PersistError, Persistence,
     };
@@ -21,7 +20,7 @@ mod persist_tests {
     use std::thread;
     use std::time;
 
-    #[derive(PartialEq, Clone, Canon, Debug)]
+    #[derive(PartialEq, Clone, Debug)]
     struct TestLeaf {
         key: u64,
         other: (),

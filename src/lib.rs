@@ -6,7 +6,7 @@
 
 //! Microkelvin
 //!
-//! A library for dealing with tree-shaped Canonical data. It has three parts:
+//! A library for dealing with tree-shaped data. It has three parts:
 //!
 //! `Compound`, a trait for a generic way to implement tree structures
 //! `Annotation`, a trait for annotated subtrees used for searching
@@ -23,7 +23,7 @@ mod annotations;
 mod branch;
 mod branch_mut;
 mod compound;
-mod generic;
+mod id;
 mod link;
 mod walk;
 
@@ -37,7 +37,6 @@ pub use branch::Branch;
 pub use branch_mut::BranchMut;
 
 pub use compound::{AnnoIter, Child, ChildMut, Compound, MutableLeaves};
-pub use generic::{GenericAnnotation, GenericChild, GenericLeaf, GenericTree};
 pub use link::{Link, LinkAnnotation, LinkCompound, LinkCompoundMut};
 pub use walk::{First, Step, Walk, Walker};
 

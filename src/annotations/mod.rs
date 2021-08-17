@@ -7,8 +7,6 @@
 use core::borrow::Borrow;
 use core::ops::Deref;
 
-use canonical::Canon;
-
 use crate::{AnnoIter, Compound, LinkAnnotation};
 
 mod cardinality;
@@ -20,7 +18,7 @@ pub use cardinality::{Cardinality, Nth};
 pub use max_key::{GetMaxKey, Keyed, MaxKey};
 
 /// The trait defining an annotation type over a leaf
-pub trait Annotation<Leaf>: Default + Canon + Combine<Self> {
+pub trait Annotation<Leaf>: Default + Combine<Self> {
     /// Creates an annotation from the leaf type
     fn from_leaf(leaf: &Leaf) -> Self;
 }

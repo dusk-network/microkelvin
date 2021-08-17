@@ -9,9 +9,6 @@ use core::borrow::Borrow;
 use core::cmp::Ordering;
 use core::marker::PhantomData;
 
-use canonical::{Canon, CanonError};
-use canonical_derive::Canon;
-
 use crate::annotations::{Annotation, Combine};
 use crate::branch::Branch;
 use crate::branch_mut::BranchMut;
@@ -19,7 +16,7 @@ use crate::compound::{AnnoIter, Child, Compound, MutableLeaves};
 use crate::walk::{Step, Walk, Walker};
 
 /// The maximum value of a collection
-#[derive(Canon, PartialEq, Eq, Debug, Clone, Copy)]
+#[derive(PartialEq, Eq, Debug, Clone, Copy)]
 pub enum MaxKey<K> {
     /// Identity of max, everything else is larger
     NegativeInfinity,
@@ -81,7 +78,7 @@ where
 impl<K, L> Annotation<L> for MaxKey<K>
 where
     L: Keyed<K>,
-    K: Clone + Ord + Canon,
+    K: Clone + Ord,
 {
     fn from_leaf(leaf: &L) -> Self {
         MaxKey::Maximum(leaf.key().clone())
@@ -91,7 +88,7 @@ where
 impl<K, A> Combine<A> for MaxKey<K>
 where
     K: Ord + Clone,
-    A: Borrow<Self> + Canon,
+    A: Borrow<Self>,
 {
     fn combine<C>(iter: AnnoIter<C, A>) -> Self
     where
@@ -166,12 +163,10 @@ where
     K: Ord,
 {
     /// Construct a `Branch` pointing to the element with the largest key
-    fn max_key(&'a self) -> Result<Option<Branch<'a, Self, A>>, CanonError>;
+    fn max_key(&'a self) -> Result<Option<Branch<'a, Self, A>>, ()>;
 
     /// Construct a `BranchMut` pointing to the element with the largest key
-    fn max_key_mut(
-        &'a mut self,
-    ) -> Result<Option<BranchMut<'a, Self, A>>, CanonError>
+    fn max_key_mut(&'a mut self) -> Result<Option<BranchMut<'a, Self, A>>, ()>
     where
         Self: MutableLeaves;
 }
@@ -183,14 +178,12 @@ where
     A: Annotation<C::Leaf> + Borrow<MaxKey<K>>,
     K: Ord + Clone + core::fmt::Debug,
 {
-    fn max_key(&'a self) -> Result<Option<Branch<'a, Self, A>>, CanonError> {
+    fn max_key(&'a self) -> Result<Option<Branch<'a, Self, A>>, ()> {
         // Return the first that satisfies the walk
         Branch::<_, A>::walk(self, FindMaxKey::default())
     }
 
-    fn max_key_mut(
-        &'a mut self,
-    ) -> Result<Option<BranchMut<'a, Self, A>>, CanonError>
+    fn max_key_mut(&'a mut self) -> Result<Option<BranchMut<'a, Self, A>>, ()>
     where
         C: MutableLeaves,
     {

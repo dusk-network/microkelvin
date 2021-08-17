@@ -16,7 +16,6 @@ use std::{
 mod disk;
 
 use crate::Child;
-use canonical::{Canon, CanonError, Id};
 use lazy_static::lazy_static;
 use parking_lot::{RwLock, RwLockWriteGuard};
 
@@ -39,7 +38,6 @@ impl WrappedBackend {
         tree: &C,
     ) -> Result<PersistedId, PersistError>
     where
-        C::Leaf: Canon,
         A: Annotation<C::Leaf>,
     {
         Self::persist_inner(&mut self.0.write(), tree)
@@ -50,7 +48,6 @@ impl WrappedBackend {
         tree: &C,
     ) -> Result<PersistedId, PersistError>
     where
-        C::Leaf: Canon,
         A: Annotation<C::Leaf>,
     {
         let generic = tree.generic();
@@ -124,7 +121,6 @@ impl Persistence {
     ) -> Result<PersistedId, PersistError>
     where
         C: Compound<A>,
-        C::Leaf: Canon,
         A: Annotation<C::Leaf>,
         B: 'static + Backend,
     {
@@ -154,7 +150,7 @@ impl Persistence {
                 return Ok(tree);
             }
         }
-        Err(CanonError::NotFound.into())
+        Err(todo!())
     }
 }
 
@@ -173,8 +169,6 @@ pub trait Backend: Send + Sync {
 pub enum PersistError {
     /// An io-error occured while persisting
     Io(io::Error),
-    /// A CanonError occured while persisting
-    Canon(CanonError),
     /// Other backend specific error
     Other(Box<dyn Error + Send>),
 }
@@ -182,12 +176,6 @@ pub enum PersistError {
 impl From<io::Error> for PersistError {
     fn from(e: io::Error) -> Self {
         PersistError::Io(e)
-    }
-}
-
-impl From<CanonError> for PersistError {
-    fn from(e: CanonError) -> Self {
-        PersistError::Canon(e)
     }
 }
 
