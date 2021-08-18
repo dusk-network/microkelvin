@@ -6,15 +6,13 @@
 
 mod linked_list;
 
-#[cfg(feature = "persistence")]
+#[cfg(feature = "host")]
 mod persist_tests {
     use super::*;
 
     use linked_list::LinkedList;
 
-    use microkelvin::{
-        BackendCtor, Compound, DiskBackend, Keyed, PersistError, Persistence,
-    };
+    use microkelvin::{BackendCtor, DiskBackend, Error, Keyed, Persistence};
 
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::thread;
@@ -37,11 +35,14 @@ mod persist_tests {
     fn testbackend() -> BackendCtor<DiskBackend> {
         BackendCtor::new(|| {
             INIT_COUNTER.fetch_add(1, Ordering::SeqCst);
-            DiskBackend::ephemeral()
+            DiskBackend::ephemeral().map_err(|_e| {
+                // Todo, promote error
+                Error::Missing
+            })
         })
     }
 
-    fn persist() -> Result<(), PersistError> {
+    fn persist() -> Result<(), Error> {
         let n: u64 = 16;
 
         let mut list = LinkedList::<_, ()>::new();
@@ -51,11 +52,7 @@ mod persist_tests {
         }
 
         let persisted = Persistence::persist(&testbackend(), &list)?;
-
-        let restored_generic = persisted.restore()?;
-
-        let mut restored: LinkedList<u64, ()> =
-            LinkedList::from_generic(&restored_generic)?;
+        let mut restored = persisted.reify()?;
 
         // first empty the original
 
@@ -73,26 +70,26 @@ mod persist_tests {
     }
 
     #[test]
-    fn persist_a() -> Result<(), PersistError> {
+    fn persist_a() -> Result<(), Error> {
         persist()
     }
 
     #[test]
-    fn persist_b() -> Result<(), PersistError> {
+    fn persist_b() -> Result<(), Error> {
         persist()
     }
 
     #[test]
-    fn persist_c() -> Result<(), PersistError> {
+    fn persist_c() -> Result<(), Error> {
         persist()
     }
 
     #[test]
-    fn persist_d() -> Result<(), PersistError> {
+    fn persist_d() -> Result<(), Error> {
         persist()
     }
 
-    fn persist_across_threads() -> Result<(), PersistError> {
+    fn persist_across_threads() -> Result<(), Error> {
         let n: u64 = 16;
 
         let mut list = LinkedList::<_, ()>::new();
@@ -106,16 +103,13 @@ mod persist_tests {
         // it should now be available from other threads
 
         std::thread::spawn(move || {
-            let restored_generic = persisted.restore()?;
-
-            let mut restored: LinkedList<u64, ()> =
-                LinkedList::from_generic(&restored_generic)?;
+            let mut restored = persisted.reify()?;
 
             for i in 0..n {
                 assert_eq!(restored.pop()?, Some(n - i - 1));
             }
 
-            Ok(()) as Result<(), PersistError>
+            Ok(()) as Result<(), Error>
         })
         .join()
         .expect("thread to join cleanly")?;
@@ -130,22 +124,22 @@ mod persist_tests {
     }
 
     #[test]
-    fn persist_across_threads_a() -> Result<(), PersistError> {
+    fn persist_across_threads_a() -> Result<(), Error> {
         persist_across_threads()
     }
 
     #[test]
-    fn persist_across_threads_b() -> Result<(), PersistError> {
+    fn persist_across_threads_b() -> Result<(), Error> {
         persist_across_threads()
     }
 
     #[test]
-    fn persist_across_threads_c() -> Result<(), PersistError> {
+    fn persist_across_threads_c() -> Result<(), Error> {
         persist_across_threads()
     }
 
     #[test]
-    fn persist_across_threads_d() -> Result<(), PersistError> {
+    fn persist_across_threads_d() -> Result<(), Error> {
         persist_across_threads()
     }
 

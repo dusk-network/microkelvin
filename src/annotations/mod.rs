@@ -4,7 +4,6 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use core::borrow::Borrow;
 use core::ops::Deref;
 
 use crate::{AnnoIter, Compound, LinkAnnotation};
@@ -23,13 +22,15 @@ pub trait Annotation<Leaf>: Default + Combine<Self> {
     fn from_leaf(leaf: &Leaf) -> Self;
 }
 
+// TODO- move C into the trait, not the method.
+
 /// Trait for defining how to combine Annotations
 pub trait Combine<A> {
     /// Combines multiple annotations
     fn combine<C>(iter: AnnoIter<C, A>) -> Self
     where
         C: Compound<A>,
-        A: Annotation<C::Leaf> + Borrow<Self>;
+        A: Annotation<C::Leaf>;
 }
 
 #[derive(Debug)]

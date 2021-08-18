@@ -5,19 +5,20 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use core::borrow::Borrow;
-use std::error::Error;
-
 use rand::{prelude::SliceRandom, thread_rng};
 
 mod linked_list;
 use linked_list::LinkedList;
 
+use bytecheck::CheckBytes;
+use rkyv::{Archive, Deserialize, Serialize};
+
 use microkelvin::{
-    AnnoIter, Annotation, Cardinality, Combine, Compound, GetMaxKey, Keyed,
-    MaxKey,
+    AnnoIter, Annotation, Cardinality, Combine, Compound, Error, Keyed, MaxKey,
 };
 
-#[derive(Default, Clone)]
+#[derive(Default, Clone, Archive, Serialize, Deserialize)]
+#[archive_attr(derive(CheckBytes))]
 struct Anno<K> {
     max: MaxKey<K>,
     card: Cardinality,
@@ -38,7 +39,7 @@ impl<K> Borrow<Cardinality> for Anno<K> {
 impl<Leaf, K> Annotation<Leaf> for Anno<K>
 where
     Leaf: Keyed<K>,
-    K: Ord + Default,
+    K: Ord + Default + Clone,
 {
     fn from_leaf(leaf: &Leaf) -> Self {
         Anno {
@@ -65,7 +66,8 @@ where
     }
 }
 
-#[derive(PartialEq, Clone, Debug)]
+#[derive(PartialEq, Clone, Debug, Archive, Deserialize)]
+#[archive_attr(derive(CheckBytes))]
 struct TestLeaf {
     key: u64,
     other: (),
@@ -78,7 +80,7 @@ impl Keyed<u64> for TestLeaf {
 }
 
 #[test]
-fn maximum_multiple() -> Result<(), Box<dyn Error>> {
+fn maximum_multiple() -> Result<(), Error> {
     let n: u64 = 1024;
 
     let mut keys = vec![];
