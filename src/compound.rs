@@ -44,7 +44,7 @@ where
 /// A type that can recursively contain itself and leaves.
 pub trait Compound<A>: Sized + Clone {
     /// The leaf type of the Compound collection
-    type Leaf: Clone;
+    type Leaf;
 
     /// Returns a reference to a possible child at specified offset
     fn child(&self, ofs: usize) -> Child<Self, A>;

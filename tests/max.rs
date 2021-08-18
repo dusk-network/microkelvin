@@ -4,13 +4,11 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use std::io::Error;
-
 use rand::{prelude::SliceRandom, thread_rng};
 
 mod linked_list;
 use linked_list::LinkedList;
-use microkelvin::{GetMaxKey, Keyed, MaxKey};
+use microkelvin::{GetMaxKey, Keyed, LinkError, MaxKey};
 
 #[derive(PartialEq, Clone, Debug)]
 struct TestLeaf {
@@ -25,7 +23,7 @@ impl Keyed<u64> for TestLeaf {
 }
 
 #[test]
-fn maximum() -> Result<(), Box<dyn Error>> {
+fn maximum() -> Result<(), LinkError> {
     let n: u64 = 1024;
 
     let mut keys = vec![];

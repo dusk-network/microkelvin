@@ -11,7 +11,7 @@ use alloc::vec::Vec;
 
 use crate::annotations::Annotation;
 use crate::compound::{Child, ChildMut, Compound};
-use crate::link::LinkCompoundMut;
+use crate::link::{LinkCompoundMut, LinkError};
 use crate::walk::{AllLeaves, Step, Walk, Walker};
 
 #[derive(Debug)]
@@ -62,7 +62,7 @@ where
 
 impl<'a, C, A> DerefMut for LevelMut<'a, C, A>
 where
-    C: Compound<A> + Clone,
+    C: Compound<A>,
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut *self.node
@@ -155,7 +155,7 @@ where
         }
     }
 
-    fn walk<W>(&mut self, walker: &mut W) -> Result<Option<()>, ()>
+    fn walk<W>(&mut self, walker: &mut W) -> Result<Option<()>, LinkError>
     where
         W: Walker<C, A>,
     {
@@ -233,7 +233,10 @@ where
 
     /// Performs a tree walk, returning either a valid branch or None if the
     /// walk failed.
-    pub fn walk<W>(root: &'a mut C, mut walker: W) -> Result<Option<Self>, ()>
+    pub fn walk<W>(
+        root: &'a mut C,
+        mut walker: W,
+    ) -> Result<Option<Self>, LinkError>
     where
         W: Walker<C, A>,
     {
@@ -265,7 +268,7 @@ where
 
 impl<'a, C, A> DerefMut for BranchMut<'a, C, A>
 where
-    C: Compound<A> + Clone,
+    C: Compound<A>,
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.0.leaf_mut().expect("Invalid branch")
@@ -321,7 +324,7 @@ impl<'a, C, A> IntoIterator for BranchMut<'a, C, A>
 where
     C: Compound<A>,
 {
-    type Item = Result<&'a mut C::Leaf, ()>;
+    type Item = Result<&'a mut C::Leaf, LinkError>;
 
     type IntoIter = BranchMutIterator<'a, C, A, AllLeaves>;
 
@@ -335,7 +338,7 @@ where
     C: Compound<A>,
     W: Walker<C, A>,
 {
-    type Item = Result<&'a mut C::Leaf, ()>;
+    type Item = Result<&'a mut C::Leaf, LinkError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         match core::mem::replace(self, BranchMutIterator::Exhausted) {
@@ -391,7 +394,7 @@ where
     A: Annotation<C::Leaf>,
     M: 'a,
 {
-    type Item = Result<&'a mut M, ()>;
+    type Item = Result<&'a mut M, LinkError>;
 
     type IntoIter = MappedBranchMutIterator<'a, C, A, AllLeaves, M>;
 
@@ -407,7 +410,7 @@ where
     W: Walker<C, A>,
     M: 'a,
 {
-    type Item = Result<&'a mut M, ()>;
+    type Item = Result<&'a mut M, LinkError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         match core::mem::replace(self, Self::Exhausted) {

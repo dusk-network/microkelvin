@@ -13,7 +13,7 @@ mod persist_tests {
     use linked_list::LinkedList;
 
     use microkelvin::{
-        BackendCtor, Compound, DiskBackend, Keyed, PersistError, Persistence,
+        BackendCtor, Compound, DiskBackend, Keyed, LinkError, Persistence,
     };
 
     use std::sync::atomic::{AtomicUsize, Ordering};
@@ -41,7 +41,7 @@ mod persist_tests {
         })
     }
 
-    fn persist() -> Result<(), PersistError> {
+    fn persist() -> Result<(), LinkError> {
         let n: u64 = 16;
 
         let mut list = LinkedList::<_, ()>::new();
@@ -73,26 +73,26 @@ mod persist_tests {
     }
 
     #[test]
-    fn persist_a() -> Result<(), PersistError> {
+    fn persist_a() -> Result<(), LinkError> {
         persist()
     }
 
     #[test]
-    fn persist_b() -> Result<(), PersistError> {
+    fn persist_b() -> Result<(), LinkError> {
         persist()
     }
 
     #[test]
-    fn persist_c() -> Result<(), PersistError> {
+    fn persist_c() -> Result<(), LinkError> {
         persist()
     }
 
     #[test]
-    fn persist_d() -> Result<(), PersistError> {
+    fn persist_d() -> Result<(), LinkError> {
         persist()
     }
 
-    fn persist_across_threads() -> Result<(), PersistError> {
+    fn persist_across_threads() -> Result<(), LinkError> {
         let n: u64 = 16;
 
         let mut list = LinkedList::<_, ()>::new();
@@ -115,7 +115,7 @@ mod persist_tests {
                 assert_eq!(restored.pop()?, Some(n - i - 1));
             }
 
-            Ok(()) as Result<(), PersistError>
+            Ok(()) as Result<(), LinkError>
         })
         .join()
         .expect("thread to join cleanly")?;
@@ -130,22 +130,22 @@ mod persist_tests {
     }
 
     #[test]
-    fn persist_across_threads_a() -> Result<(), PersistError> {
+    fn persist_across_threads_a() -> Result<(), LinkError> {
         persist_across_threads()
     }
 
     #[test]
-    fn persist_across_threads_b() -> Result<(), PersistError> {
+    fn persist_across_threads_b() -> Result<(), LinkError> {
         persist_across_threads()
     }
 
     #[test]
-    fn persist_across_threads_c() -> Result<(), PersistError> {
+    fn persist_across_threads_c() -> Result<(), LinkError> {
         persist_across_threads()
     }
 
     #[test]
-    fn persist_across_threads_d() -> Result<(), PersistError> {
+    fn persist_across_threads_d() -> Result<(), LinkError> {
         persist_across_threads()
     }
 

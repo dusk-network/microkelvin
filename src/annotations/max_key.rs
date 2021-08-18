@@ -14,6 +14,7 @@ use crate::branch::Branch;
 use crate::branch_mut::BranchMut;
 use crate::compound::{AnnoIter, Child, Compound, MutableLeaves};
 use crate::walk::{Step, Walk, Walker};
+use crate::LinkError;
 
 /// The maximum value of a collection
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
@@ -163,10 +164,12 @@ where
     K: Ord,
 {
     /// Construct a `Branch` pointing to the element with the largest key
-    fn max_key(&'a self) -> Result<Option<Branch<'a, Self, A>>, ()>;
+    fn max_key(&'a self) -> Result<Option<Branch<'a, Self, A>>, LinkError>;
 
     /// Construct a `BranchMut` pointing to the element with the largest key
-    fn max_key_mut(&'a mut self) -> Result<Option<BranchMut<'a, Self, A>>, ()>
+    fn max_key_mut(
+        &'a mut self,
+    ) -> Result<Option<BranchMut<'a, Self, A>>, LinkError>
     where
         Self: MutableLeaves;
 }
@@ -178,12 +181,14 @@ where
     A: Annotation<C::Leaf> + Borrow<MaxKey<K>>,
     K: Ord + Clone + core::fmt::Debug,
 {
-    fn max_key(&'a self) -> Result<Option<Branch<'a, Self, A>>, ()> {
+    fn max_key(&'a self) -> Result<Option<Branch<'a, Self, A>>, LinkError> {
         // Return the first that satisfies the walk
         Branch::<_, A>::walk(self, FindMaxKey::default())
     }
 
-    fn max_key_mut(&'a mut self) -> Result<Option<BranchMut<'a, Self, A>>, ()>
+    fn max_key_mut(
+        &'a mut self,
+    ) -> Result<Option<BranchMut<'a, Self, A>>, LinkError>
     where
         C: MutableLeaves,
     {

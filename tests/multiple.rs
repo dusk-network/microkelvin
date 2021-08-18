@@ -5,8 +5,6 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use core::borrow::Borrow;
-use std::error::Error;
-
 use rand::{prelude::SliceRandom, thread_rng};
 
 mod linked_list;
@@ -14,7 +12,7 @@ use linked_list::LinkedList;
 
 use microkelvin::{
     AnnoIter, Annotation, Cardinality, Combine, Compound, GetMaxKey, Keyed,
-    MaxKey,
+    LinkError, MaxKey,
 };
 
 #[derive(Default, Clone)]
@@ -38,7 +36,7 @@ impl<K> Borrow<Cardinality> for Anno<K> {
 impl<Leaf, K> Annotation<Leaf> for Anno<K>
 where
     Leaf: Keyed<K>,
-    K: Ord + Default,
+    K: Ord + Default + Clone,
 {
     fn from_leaf(leaf: &Leaf) -> Self {
         Anno {
@@ -78,7 +76,7 @@ impl Keyed<u64> for TestLeaf {
 }
 
 #[test]
-fn maximum_multiple() -> Result<(), Box<dyn Error>> {
+fn maximum_multiple() -> Result<(), LinkError> {
     let n: u64 = 1024;
 
     let mut keys = vec![];

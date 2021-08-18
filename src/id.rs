@@ -4,9 +4,10 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use crate::link::LinkError;
 use alloc::vec::Vec;
 
-const VERSION: u8 = 0;
+const _VERSION: u8 = 0;
 
 /// The size of the Id payload, used to store cryptographic hashes or inlined
 /// values
@@ -20,7 +21,7 @@ pub type Payload = [u8; PAYLOAD_BYTES];
 /// Type alias for a payload that is used as a hash
 pub type IdHash = Payload;
 /// Type alias for a payload that is used as an inlined value
-pub type Inlined = Payload;
+pub type _Inlined = Payload;
 
 /// This is the Id type, that uniquely identifies slices of bytes,
 /// in rust equivalent to `&[u8]`. As in the case with `&[u8]` the length is
@@ -43,7 +44,7 @@ pub struct Id {
 
 impl Id {
     /// Creates a new Id from a type
-    pub fn new<T>(t: &T) -> Self {
+    pub fn new<T>(_t: &T) -> Self {
         // let len = t.encoded_len();
         // let payload = if len > PAYLOAD_BYTES {
         //     Store::put(&t.encode_to_vec())
@@ -97,14 +98,14 @@ impl Id {
     }
 
     /// Attempts to reify the Id as an instance of type `T`
-    pub fn reify<T>(&self) -> Result<T, ()> {
+    pub fn reify<T>(&self) -> Result<T, LinkError> {
         todo!()
     }
 
     /// Takes the bytes corresponding to this id out of the underlying store.
     ///
     /// If the Id is inlined, this is a no-op and returns `Ok(None)`
-    pub fn take_bytes(&self) -> Result<Option<Vec<u8>>, ()> {
+    pub fn take_bytes(&self) -> Result<Option<Vec<u8>>, LinkError> {
         // if self.size() <= PAYLOAD_BYTES {
         //     Ok(None)
         // } else {

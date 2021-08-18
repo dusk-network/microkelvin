@@ -12,6 +12,7 @@ use crate::annotations::{Annotation, Combine};
 use crate::branch::Branch;
 use crate::branch_mut::BranchMut;
 use crate::compound::{AnnoIter, Child, Compound, MutableLeaves};
+use crate::link::LinkError;
 use crate::walk::{Step, Walk, Walker};
 
 /// The cardinality of a compound collection
@@ -92,13 +93,13 @@ where
     A: Annotation<Self::Leaf> + Borrow<Cardinality>,
 {
     /// Construct a `Branch` pointing to the `nth` element, if any
-    fn nth(&'a self, n: u64) -> Result<Option<Branch<'a, Self, A>>, ()>;
+    fn nth(&'a self, n: u64) -> Result<Option<Branch<'a, Self, A>>, LinkError>;
 
     /// Construct a `BranchMut` pointing to the `nth` element, if any
     fn nth_mut(
         &'a mut self,
         n: u64,
-    ) -> Result<Option<BranchMut<'a, Self, A>>, ()>
+    ) -> Result<Option<BranchMut<'a, Self, A>>, LinkError>
     where
         Self: MutableLeaves;
 }
@@ -108,7 +109,10 @@ where
     C: Compound<A> + Clone,
     A: Annotation<C::Leaf> + Borrow<Cardinality>,
 {
-    fn nth(&'a self, ofs: u64) -> Result<Option<Branch<'a, Self, A>>, ()> {
+    fn nth(
+        &'a self,
+        ofs: u64,
+    ) -> Result<Option<Branch<'a, Self, A>>, LinkError> {
         // Return the first that satisfies the walk
         Branch::<_, A>::walk(self, Offset(ofs))
     }
@@ -116,7 +120,7 @@ where
     fn nth_mut(
         &'a mut self,
         ofs: u64,
-    ) -> Result<Option<BranchMut<'a, Self, A>>, ()>
+    ) -> Result<Option<BranchMut<'a, Self, A>>, LinkError>
     where
         C: MutableLeaves,
     {

@@ -104,7 +104,10 @@ where
     /// Gets a reference to the inner compound of the link'
     ///
     /// Can fail when trying to fetch data over i/o
-    pub fn into_compound(self) -> Result<C, ()> {
+    pub fn into_compound(self) -> Result<C, LinkError>
+    where
+        C: Clone,
+    {
         // assure inner value is loaded
         let _ = self.inner()?;
 
@@ -129,7 +132,7 @@ where
         let borrow = self.inner.borrow();
         match &*borrow {
             LinkInner::Placeholder => unreachable!(),
-            LinkInner::C(c) | LinkInner::Ca(c, _) => {
+            LinkInner::C(_c) | LinkInner::Ca(_c, _) => {
                 // let gen = c.generic();
                 // Id::new(&gen)
                 todo!()
@@ -140,14 +143,14 @@ where
 
     /// See doc for `inner`
     #[deprecated(since = "0.10.0", note = "Please use `inner` instead")]
-    pub fn compound(&self) -> Result<LinkCompound<C, A>, ()> {
+    pub fn compound(&self) -> Result<LinkCompound<C, A>, LinkError> {
         self.inner()
     }
 
     /// Gets a reference to the inner compound of the link'
     ///
     /// Can fail when trying to fetch data over i/o
-    pub fn inner(&self) -> Result<LinkCompound<C, A>, ()> {
+    pub fn inner(&self) -> Result<LinkCompound<C, A>, LinkError> {
         let borrow = self.inner.borrow();
 
         match *borrow {
@@ -158,22 +161,23 @@ where
             LinkInner::Ia(id, _) => {
                 // First we check if the value is available to be reified
                 // directly
-                match id.reify::<()>() {
-                    Ok(generic) => {
+                match id.reify::<LinkError>() {
+                    Ok(_generic) => {
                         // re-borrow mutable
                         drop(borrow);
                         let mut borrow = self.inner.borrow_mut();
-                        if let LinkInner::Ia(id, anno) =
+                        if let LinkInner::Ia(_id, _anno) =
                             mem::replace(&mut *borrow, LinkInner::Placeholder)
                         {
-                            let value = todo!();
-                            *borrow = LinkInner::Ica(id, Rc::new(value), anno);
+                            let _value = todo!();
+                            // *borrow = LinkInner::Ica(id, Rc::new(value),
+                            // anno);
 
-                            // re-borrow immutable
-                            drop(borrow);
-                            let borrow = self.inner.borrow();
+                            // // re-borrow immutable
+                            // drop(borrow);
+                            // let borrow = self.inner.borrow();
 
-                            Ok(LinkCompound(borrow))
+                            // Ok(LinkCompound(borrow))
                         } else {
                             unreachable!(
                                 "Guaranteed to match the same as above"
@@ -188,7 +192,7 @@ where
 
     /// See doc for `inner_mut`
     #[deprecated(since = "0.10.0", note = "Please use `inner` instead")]
-    pub fn compound_mut(&mut self) -> Result<LinkCompoundMut<C, A>, ()> {
+    pub fn compound_mut(&mut self) -> Result<LinkCompoundMut<C, A>, LinkError> {
         self.inner_mut()
     }
 
@@ -197,7 +201,7 @@ where
     /// Drops cached annotations and ids
     ///
     /// Can fail when trying to fetch data over i/o
-    pub fn inner_mut(&mut self) -> Result<LinkCompoundMut<C, A>, ()> {
+    pub fn inner_mut(&mut self) -> Result<LinkCompoundMut<C, A>, LinkError> {
         // assure inner value is loaded
         let _ = self.inner()?;
 
@@ -276,3 +280,7 @@ where
         }
     }
 }
+
+/// Error resolving a merkle-link
+#[derive(Debug)]
+pub struct LinkError;

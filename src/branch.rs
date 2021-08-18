@@ -10,7 +10,7 @@ use alloc::vec::Vec;
 
 use crate::annotations::Annotation;
 use crate::compound::{Child, Compound};
-use crate::link::LinkCompound;
+use crate::link::{LinkCompound, LinkError};
 use crate::walk::{AllLeaves, Step, Walk, Walker};
 
 #[derive(Debug)]
@@ -125,7 +125,7 @@ where
         }
     }
 
-    fn walk<W>(&mut self, walker: &mut W) -> Result<Option<()>, ()>
+    fn walk<W>(&mut self, walker: &mut W) -> Result<Option<()>, LinkError>
     where
         W: Walker<C, A>,
     {
@@ -244,7 +244,10 @@ where
 
     /// Performs a tree walk, returning either a valid branch or None if the
     /// walk failed.
-    pub fn walk<W>(root: &'a C, mut walker: W) -> Result<Option<Self>, ()>
+    pub fn walk<W>(
+        root: &'a C,
+        mut walker: W,
+    ) -> Result<Option<Self>, LinkError>
     where
         W: Walker<C, A>,
     {
@@ -302,7 +305,7 @@ impl<'a, C, A> IntoIterator for Branch<'a, C, A>
 where
     C: Compound<A>,
 {
-    type Item = Result<&'a C::Leaf, ()>;
+    type Item = Result<&'a C::Leaf, LinkError>;
 
     type IntoIter = BranchIterator<'a, C, A, AllLeaves>;
 
@@ -316,7 +319,7 @@ where
     C: Compound<A>,
     W: Walker<C, A>,
 {
-    type Item = Result<&'a C::Leaf, ()>;
+    type Item = Result<&'a C::Leaf, LinkError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         match core::mem::replace(self, BranchIterator::Exhausted) {
@@ -372,7 +375,7 @@ where
     A: Annotation<C::Leaf>,
     M: 'a,
 {
-    type Item = Result<&'a M, ()>;
+    type Item = Result<&'a M, LinkError>;
 
     type IntoIter = MappedBranchIterator<'a, C, A, AllLeaves, M>;
 
@@ -388,7 +391,7 @@ where
     W: Walker<C, A>,
     M: 'a,
 {
-    type Item = Result<&'a M, ()>;
+    type Item = Result<&'a M, LinkError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         match core::mem::replace(self, Self::Exhausted) {
