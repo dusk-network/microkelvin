@@ -9,29 +9,59 @@ use core::cell::{Ref, RefCell, RefMut};
 use core::mem;
 use core::ops::{Deref, DerefMut};
 
-#[cfg(feature = "persistence")]
-use crate::persist::{PersistError, Persistence};
+use bytecheck::CheckBytes;
+use rkyv::{ser::Serializer, Archive, Serialize};
 
 use crate::id::Id;
 use crate::{Annotation, Compound};
 
 #[derive(Debug, Clone)]
-enum LinkInner<C, A> {
+#[repr(u8)]
+pub enum LinkInner<C, A> {
     Placeholder,
     C(Rc<C>),
     Ca(Rc<C>, A),
     Ia(Id, A),
-    #[allow(unused)]
     Ica(Id, Rc<C>, A),
 }
 
-#[derive(Clone)]
+pub struct ArchivedLink<A>(Id, A);
+
+#[derive(Clone, CheckBytes)]
 /// The Link struct is an annotated merkle link to a compound type
 ///
 /// The link takes care of lazily evaluating the annotation of the inner type,
 /// and to load it from memory or backend when needed.
 pub struct Link<C, A> {
     inner: RefCell<LinkInner<C, A>>,
+}
+
+impl<C, A> Archive for Link<C, A> {
+    type Archived = ArchivedLink<A>;
+    type Resolver = (Id, A);
+
+    unsafe fn resolve(
+        &self,
+        _pos: usize,
+        (id, anno): Self::Resolver,
+        out: *mut Self::Archived,
+    ) {
+        *out = ArchivedLink(id, anno)
+    }
+}
+
+impl<S, C, A> Serialize<S> for Link<C, A>
+where
+    S: Serializer,
+    C: Compound<A>,
+    A: Annotation<C::Leaf> + Clone,
+{
+    fn serialize(
+        &self,
+        _serializer: &mut S,
+    ) -> Result<Self::Resolver, S::Error> {
+        Ok((self.id(), self.annotation().clone()))
+    }
 }
 
 impl<C, A> Default for Link<C, A>
@@ -51,13 +81,11 @@ impl<C: core::fmt::Debug, A: core::fmt::Debug> core::fmt::Debug for Link<C, A> {
     }
 }
 
-impl<C, A> Link<C, A>
-where
-    C: Compound<A>,
-{
+impl<C, A> Link<C, A> {
     /// Create a new link
     pub fn new(compound: C) -> Self
     where
+        C: Compound<A>,
         A: Annotation<C::Leaf>,
     {
         Link {
@@ -75,6 +103,7 @@ where
     /// Returns a reference to to the annotation stored
     pub fn annotation(&self) -> LinkAnnotation<C, A>
     where
+        C: Compound<A>,
         A: Annotation<C::Leaf>,
     {
         let borrow = self.inner.borrow();
@@ -127,6 +156,7 @@ where
     /// Computes the Id of the link
     pub fn id(&self) -> Id
     where
+        C: Compound<A>,
         A: Annotation<C::Leaf>,
     {
         let borrow = self.inner.borrow();
@@ -282,5 +312,5 @@ where
 }
 
 /// Error resolving a merkle-link
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Archive, Serialize)]
 pub struct LinkError;

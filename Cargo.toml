@@ -15,7 +15,8 @@ lazy_static = { version = "1.4.0", optional = true }
 tempfile = { version = "3.2.0", optional = true }
 
 arbitrary = { version = "1.0.1", features = ["derive"], optional = true }
-rkyv = "0.7.11"
+rkyv = "0.7"
+bytecheck = "0.6.5"
 
 [dev-dependencies]
 rand = "0.8.3"
