@@ -12,7 +12,7 @@ use bytecheck::CheckBytes;
 use rkyv::{Archive, Deserialize, Serialize};
 
 use crate::annotations::{Annotation, Combine};
-use crate::backend::Check;
+use crate::backend::Getable;
 use crate::branch::Branch;
 use crate::branch_mut::BranchMut;
 use crate::compound::{AnnoIter, Child, Compound, MutableLeaves};
@@ -62,8 +62,7 @@ pub struct Offset(u64);
 
 impl<C, A> Walker<C, A> for Offset
 where
-    C: Compound<A> + Archive,
-    C::Archived: Check<C>,
+    C: Compound<A> + Getable,
     A: Annotation<C::Leaf> + Borrow<Cardinality>,
 {
     fn walk(&mut self, walk: Walk<C, A>) -> Step {
@@ -95,11 +94,7 @@ where
 
 /// Trait that provides `nth()` and `nth_mut()` methods to any Compound with a
 /// Cardinality annotation
-pub trait Nth<'a, A>
-where
-    Self: Compound<A>,
-    A: Annotation<Self::Leaf> + Borrow<Cardinality>,
-{
+pub trait Nth<'a, A>: Sized {
     /// Construct a `Branch` pointing to the `nth` element, if any
     fn nth(&'a self, n: u64) -> Result<Option<Branch<'a, Self, A>>, Error>;
 
@@ -109,13 +104,12 @@ where
         n: u64,
     ) -> Result<Option<BranchMut<'a, Self, A>>, Error>
     where
-        Self: MutableLeaves;
+        Self: MutableLeaves + Clone;
 }
 
 impl<'a, C, A> Nth<'a, A> for C
 where
-    C: Compound<A> + Archive,
-    C::Archived: Check<C>,
+    C: Compound<A> + Getable,
     A: Annotation<C::Leaf> + Borrow<Cardinality>,
 {
     fn nth(&'a self, ofs: u64) -> Result<Option<Branch<'a, Self, A>>, Error> {
@@ -128,7 +122,7 @@ where
         ofs: u64,
     ) -> Result<Option<BranchMut<'a, Self, A>>, Error>
     where
-        C: MutableLeaves,
+        C: MutableLeaves + Clone,
     {
         // Return the first mutable branch that satisfies the walk
         BranchMut::<_, A>::walk(self, Offset(ofs))

@@ -6,25 +6,35 @@
 
 use core::marker::PhantomData;
 
-use rkyv::Archive;
+use bytecheck::CheckBytes;
 
-use crate::backend::{Check, Portal};
+use crate::backend::{Getable, Portal};
 use crate::error::Error;
 
-#[derive(Debug, Clone, Hash, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Hash, Copy, PartialEq, Eq, CheckBytes)]
 pub struct IdHash([u8; 32]);
 
 impl From<&[u8]> for IdHash {
     fn from(_bytes: &[u8]) -> Self {
+        // FIXME
         IdHash(Default::default())
     }
 }
 
-#[derive(Clone)]
 pub struct Id<C> {
     hash: IdHash,
     portal: Portal,
     _marker: PhantomData<C>,
+}
+
+impl<C> Clone for Id<C> {
+    fn clone(&self) -> Self {
+        Self {
+            hash: self.hash.clone(),
+            portal: self.portal.clone(),
+            _marker: PhantomData,
+        }
+    }
 }
 
 impl<C> core::fmt::Debug for Id<C> {
@@ -46,13 +56,12 @@ impl<C> Id<C> {
 
     pub fn reify(&self) -> Result<C, Error>
     where
-        C: Archive,
-        C::Archived: Check<C>,
+        C: Getable,
     {
-        self.portal.get(self)
+        C::get(&self.hash, self.portal.clone())
     }
 
-    pub fn hash(&self) -> &IdHash {
-        &self.hash
+    pub fn into_hash(self) -> IdHash {
+        self.hash
     }
 }

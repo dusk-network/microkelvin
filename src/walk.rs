@@ -6,14 +6,11 @@
 
 use core::marker::PhantomData;
 
-use rkyv::Archive;
-
-use crate::backend::Check;
+use crate::backend::Getable;
 use crate::branch::Branch;
 use crate::branch_mut::BranchMut;
 use crate::compound::{Child, Compound, MutableLeaves};
 use crate::error::Error;
-use crate::Annotation;
 
 /// The return value from a closure to `walk` the tree.
 ///
@@ -36,10 +33,7 @@ pub struct Walk<'a, C, A> {
     _marker: PhantomData<A>,
 }
 
-impl<'a, C, A> Walk<'a, C, A>
-where
-    C: Compound<A>,
-{
+impl<'a, C, A> Walk<'a, C, A> {
     pub(crate) fn new(compound: &'a C, ofs: usize) -> Self {
         Walk {
             ofs,
@@ -49,16 +43,16 @@ where
     }
 
     /// Returns the child at specific offset relative to the branch offset
-    pub fn child(&self, ofs: usize) -> Child<'a, C, A> {
+    pub fn child(&self, ofs: usize) -> Child<'a, C, A>
+    where
+        C: Compound<A>,
+    {
         self.compound.child(ofs + self.ofs)
     }
 }
 
 /// The trait used to construct a `Branch` or to iterate through a tree.
-pub trait Walker<C, A>
-where
-    C: Compound<A>,
-{
+pub trait Walker<C, A> {
     /// Walk the tree node, returning the appropriate `Step`
     fn walk(&mut self, walk: Walk<C, A>) -> Step;
 }
@@ -100,9 +94,7 @@ where
 
 impl<'a, C, A> First<'a, A> for C
 where
-    C: Compound<A> + Archive,
-    A: Annotation<C::Leaf>,
-    C::Archived: Check<C>,
+    C: Compound<A> + Getable,
 {
     fn first(&'a self) -> Result<Option<Branch<'a, Self, A>>, Error> {
         Branch::<_, A>::walk(self, AllLeaves)

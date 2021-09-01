@@ -7,19 +7,20 @@
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use appendix::Index;
 use tempfile::{tempdir, TempDir};
 
+use crate::backend::Backend;
 use crate::error::Error;
 use crate::id::IdHash;
-use crate::persist::Backend;
 
 /// A disk-store for persisting microkelvin compound structures
 pub struct DiskBackend {
     index: Index<IdHash, u64>,
     data_path: PathBuf,
-    data_ofs: u64,
+    data_ofs: AtomicU64,
     // in the case of an ephemeral store, we need to extend the lifetime of the
     // `TempDir` by storing it in the struct
     #[allow(unused)]
@@ -58,7 +59,7 @@ impl DiskBackend {
 
         data.seek(SeekFrom::End(0))?;
 
-        let data_ofs = data.metadata()?.len();
+        let data_ofs = AtomicU64::new(data.metadata()?.len());
 
         Ok(DiskBackend {
             data_path,
@@ -82,7 +83,7 @@ impl DiskBackend {
         Ok(db)
     }
 
-    fn get(&self, id: &IdHash, into: &mut [u8]) -> Result<(), io::Error> {
+    fn get_inner(&self, id: &IdHash, into: &mut [u8]) -> Result<(), io::Error> {
         if let Some(ofs) = self.index.get(id)? {
             let mut data = File::open(&self.data_path)?;
             data.seek(SeekFrom::Start(*ofs))?;
@@ -92,7 +93,7 @@ impl DiskBackend {
         }
     }
 
-    fn put(&mut self, bytes: &[u8]) -> Result<IdHash, io::Error> {
+    fn put_inner(&self, bytes: &[u8]) -> Result<IdHash, io::Error> {
         let id = IdHash::from(bytes);
         if self.index.get(&id)?.is_some() {
             return Ok(id);
@@ -105,9 +106,11 @@ impl DiskBackend {
 
             data.write_all(bytes)?;
 
-            self.index.insert(id, self.data_ofs)?;
-            self.index.flush()?;
-            self.data_ofs += bytes.len() as u64;
+            let len = bytes.len() as u64;
+            let ofs = self.data_ofs.fetch_add(len, Ordering::SeqCst);
+
+            self.index.insert(id, ofs)?;
+            // self.index.flush()?;
 
             Ok(id)
         }
@@ -116,10 +119,10 @@ impl DiskBackend {
 
 impl Backend for DiskBackend {
     fn get(&self, id: &IdHash, into: &mut [u8]) -> Result<(), Error> {
-        self.get(id, into).map_err(|_e| Error::Missing)
+        self.get_inner(id, into).map_err(|_e| Error::Missing)
     }
 
-    fn put(&mut self, bytes: &[u8]) -> Result<IdHash, Error> {
-        self.put(bytes).map_err(|_e| Error::Missing)
+    fn put(&self, bytes: &[u8]) -> Result<IdHash, Error> {
+        self.put_inner(bytes).map_err(|_e| Error::Missing)
     }
 }

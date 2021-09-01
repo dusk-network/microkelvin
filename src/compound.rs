@@ -42,7 +42,7 @@ where
 }
 
 /// A type that can recursively contain itself and leaves.
-pub trait Compound<A>: Clone {
+pub trait Compound<A>: Sized {
     /// The leaf type of the Compound collection
     type Leaf;
 

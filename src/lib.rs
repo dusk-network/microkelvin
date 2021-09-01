@@ -37,12 +37,10 @@ pub use disk::DiskBackend;
 pub use annotations::{
     Annotation, Cardinality, Combine, GetMaxKey, Keyed, MaxKey, Nth,
 };
+pub use backend::{Backend, Getable};
 pub use branch::Branch;
 pub use branch_mut::BranchMut;
-pub use error::Error;
-
 pub use compound::{AnnoIter, Child, ChildMut, Compound, MutableLeaves};
+pub use error::Error;
 pub use link::{Link, LinkAnnotation, LinkCompound, LinkCompoundMut};
 pub use walk::{First, Step, Walk, Walker};
-
-pub use backend::Check;

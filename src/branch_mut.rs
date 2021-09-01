@@ -8,10 +8,8 @@ use core::mem;
 use core::ops::{Deref, DerefMut};
 
 use alloc::vec::Vec;
-use rkyv::Archive;
 
-use crate::annotations::Annotation;
-use crate::backend::Check;
+use crate::backend::Getable;
 use crate::compound::{Child, ChildMut, Compound};
 use crate::error::Error;
 use crate::link::LinkCompoundMut;
@@ -40,8 +38,8 @@ where
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
         match self {
-            LevelNodeMut::Root(target) => target,
-            LevelNodeMut::Val(val) => &mut *val,
+            LevelNodeMut::Root(target) => *target,
+            LevelNodeMut::Val(val) => val,
         }
     }
 }
@@ -52,10 +50,7 @@ pub struct LevelMut<'a, C, A> {
     node: LevelNodeMut<'a, C, A>,
 }
 
-impl<'a, C, A> Deref for LevelMut<'a, C, A>
-where
-    C: Compound<A>,
-{
+impl<'a, C, A> Deref for LevelMut<'a, C, A> {
     type Target = C;
 
     fn deref(&self) -> &Self::Target {
@@ -65,17 +60,14 @@ where
 
 impl<'a, C, A> DerefMut for LevelMut<'a, C, A>
 where
-    C: Compound<A>,
+    C: Clone,
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut *self.node
     }
 }
 
-impl<'a, C, A> LevelMut<'a, C, A>
-where
-    C: Compound<A>,
-{
+impl<'a, C, A> LevelMut<'a, C, A> {
     fn new_root(root: &'a mut C) -> LevelMut<'a, C, A> {
         LevelMut {
             offset: 0,
@@ -102,12 +94,7 @@ where
 
 pub struct PartialBranchMut<'a, C, A>(Vec<LevelMut<'a, C, A>>);
 
-impl<'a, C, A> PartialBranchMut<'a, C, A>
-where
-    C: Compound<A> + Archive,
-    C::Archived: Check<C>,
-    A: Annotation<C::Leaf>,
-{
+impl<'a, C, A> PartialBranchMut<'a, C, A> {
     fn new(root: &'a mut C) -> Self {
         PartialBranchMut(vec![LevelMut::new_root(root)])
     }
@@ -124,7 +111,10 @@ where
         self.0.last_mut().expect("Never empty")
     }
 
-    fn leaf(&self) -> Option<&C::Leaf> {
+    fn leaf(&self) -> Option<&C::Leaf>
+    where
+        C: Compound<A>,
+    {
         let top = self.top();
         let ofs = top.offset();
 
@@ -136,7 +126,7 @@ where
 
     fn leaf_mut(&mut self) -> Option<&mut C::Leaf>
     where
-        C: Clone,
+        C: Compound<A> + Clone,
     {
         let top = self.top_mut();
         let ofs = top.offset();
@@ -162,6 +152,7 @@ where
 
     fn walk<W>(&mut self, walker: &mut W) -> Result<Option<()>, Error>
     where
+        C: Compound<A> + Getable + Clone,
         W: Walker<C, A>,
     {
         enum State<C> {
@@ -215,12 +206,7 @@ where
     }
 }
 
-impl<'a, C, A> BranchMut<'a, C, A>
-where
-    C: Compound<A> + Archive,
-    C::Archived: Check<C>,
-    A: Annotation<C::Leaf>,
-{
+impl<'a, C, A> BranchMut<'a, C, A> {
     /// Returns the depth of the branch
     pub fn depth(&self) -> usize {
         self.0.depth()
@@ -231,7 +217,10 @@ where
     pub fn map_leaf<M>(
         self,
         closure: for<'b> fn(&'b mut C::Leaf) -> &'b mut M,
-    ) -> MappedBranchMut<'a, C, A, M> {
+    ) -> MappedBranchMut<'a, C, A, M>
+    where
+        C: Compound<A>,
+    {
         MappedBranchMut {
             inner: self,
             closure,
@@ -245,6 +234,7 @@ where
         mut walker: W,
     ) -> Result<Option<Self>, Error>
     where
+        C: Compound<A> + Getable + Clone,
         W: Walker<C, A>,
     {
         let mut partial = PartialBranchMut::new(root);
@@ -264,9 +254,7 @@ pub struct BranchMut<'a, C, A>(PartialBranchMut<'a, C, A>);
 
 impl<'a, C, A> Deref for BranchMut<'a, C, A>
 where
-    C: Compound<A> + Archive,
-    C::Archived: Check<C>,
-    A: Annotation<C::Leaf>,
+    C: Compound<A>,
 {
     type Target = C::Leaf;
 
@@ -277,9 +265,7 @@ where
 
 impl<'a, C, A> DerefMut for BranchMut<'a, C, A>
 where
-    C: Compound<A> + Archive,
-    C::Archived: Check<C>,
-    A: Annotation<C::Leaf>,
+    C: Compound<A> + Clone,
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.0.leaf_mut().expect("Invalid branch")
@@ -290,7 +276,6 @@ where
 pub struct MappedBranchMut<'a, C, A, M>
 where
     C: Compound<A>,
-    A: Annotation<C::Leaf>,
 {
     inner: BranchMut<'a, C, A>,
     closure: for<'b> fn(&'b mut C::Leaf) -> &'b mut M,
@@ -298,9 +283,7 @@ where
 
 impl<'a, C, A, M> Deref for MappedBranchMut<'a, C, A, M>
 where
-    C: Compound<A> + Archive,
-    C::Archived: Check<C>,
-    A: Annotation<C::Leaf>,
+    C: Compound<A> + Clone,
 {
     type Target = M;
 
@@ -316,9 +299,7 @@ where
 
 impl<'a, C, A, M> DerefMut for MappedBranchMut<'a, C, A, M>
 where
-    C: Compound<A> + Archive,
-    C::Archived: Check<C>,
-    A: Annotation<C::Leaf>,
+    C: Compound<A> + Clone,
 {
     fn deref_mut(&mut self) -> &mut M {
         (self.closure)(&mut *self.inner)
@@ -329,8 +310,7 @@ where
 
 pub enum BranchMutIterator<'a, C, A, W>
 where
-    C: Compound<A>,
-    A: Annotation<C::Leaf>,
+    C: Compound<A> + Clone,
 {
     Initial(BranchMut<'a, C, A>, W),
     Intermediate(BranchMut<'a, C, A>, W),
@@ -339,9 +319,7 @@ where
 
 impl<'a, C, A> IntoIterator for BranchMut<'a, C, A>
 where
-    C: Compound<A> + Archive,
-    C::Archived: Check<C>,
-    A: Annotation<C::Leaf>,
+    C: Compound<A> + Getable + Clone,
 {
     type Item = Result<&'a mut C::Leaf, Error>;
 
@@ -354,9 +332,7 @@ where
 
 impl<'a, C, A, W> Iterator for BranchMutIterator<'a, C, A, W>
 where
-    C: Compound<A> + Archive,
-    C::Archived: Check<C>,
-    A: Annotation<C::Leaf>,
+    C: Compound<A> + Getable + Clone,
     W: Walker<C, A>,
 {
     type Item = Result<&'a mut C::Leaf, Error>;
@@ -402,7 +378,6 @@ where
 pub enum MappedBranchMutIterator<'a, C, A, W, M>
 where
     C: Compound<A>,
-    A: Annotation<C::Leaf>,
 {
     Initial(MappedBranchMut<'a, C, A, M>, W),
     Intermediate(MappedBranchMut<'a, C, A, M>, W),
@@ -411,9 +386,7 @@ where
 
 impl<'a, C, A, M> IntoIterator for MappedBranchMut<'a, C, A, M>
 where
-    C: Compound<A> + Archive,
-    C::Archived: Check<C>,
-    A: Annotation<C::Leaf>,
+    C: Compound<A> + Getable + Clone,
     M: 'a,
 {
     type Item = Result<&'a mut M, Error>;
@@ -427,9 +400,7 @@ where
 
 impl<'a, C, A, W, M> Iterator for MappedBranchMutIterator<'a, C, A, W, M>
 where
-    C: Compound<A> + Archive,
-    C::Archived: Check<C>,
-    A: Annotation<C::Leaf>,
+    C: Compound<A> + Getable + Clone,
     W: Walker<C, A>,
     M: 'a,
 {

@@ -13,7 +13,7 @@ use bytecheck::CheckBytes;
 use rkyv::{Archive, Deserialize, Serialize};
 
 use crate::annotations::{Annotation, Combine};
-use crate::backend::Check;
+use crate::backend::Getable;
 use crate::branch::Branch;
 use crate::branch_mut::BranchMut;
 use crate::compound::{AnnoIter, Child, Compound, MutableLeaves};
@@ -124,11 +124,10 @@ impl<K> Default for FindMaxKey<K> {
 
 impl<C, A, K> Walker<C, A> for FindMaxKey<K>
 where
-    C: Compound<A> + Archive,
+    C: Compound<A> + Getable,
     C::Leaf: Keyed<K>,
-    C::Archived: Check<C>,
     A: Annotation<C::Leaf> + Borrow<MaxKey<K>>,
-    K: Ord + Clone + core::fmt::Debug,
+    K: Ord + Clone,
 {
     fn walk(&mut self, walk: Walk<C, A>) -> Step {
         let mut current_max: MaxKey<K> = MaxKey::NegativeInfinity;
@@ -164,7 +163,7 @@ where
 /// annotation
 pub trait GetMaxKey<'a, A, K>
 where
-    Self: Compound<A>,
+    Self: Compound<A> + Getable,
     Self::Leaf: Keyed<K>,
     A: Annotation<Self::Leaf> + Borrow<MaxKey<K>>,
     K: Ord,
@@ -177,16 +176,15 @@ where
         &'a mut self,
     ) -> Result<Option<BranchMut<'a, Self, A>>, Error>
     where
-        Self: MutableLeaves;
+        Self: MutableLeaves + Clone;
 }
 
 impl<'a, C, A, K> GetMaxKey<'a, A, K> for C
 where
-    C: Compound<A> + Archive,
+    C: Compound<A> + Getable,
     C::Leaf: Keyed<K>,
-    C::Archived: Check<C>,
     A: Annotation<C::Leaf> + Borrow<MaxKey<K>>,
-    K: Ord + Clone + core::fmt::Debug,
+    K: Ord + Clone,
 {
     fn max_key(&'a self) -> Result<Option<Branch<'a, Self, A>>, Error> {
         // Return the first that satisfies the walk
@@ -197,7 +195,7 @@ where
         &'a mut self,
     ) -> Result<Option<BranchMut<'a, Self, A>>, Error>
     where
-        C: MutableLeaves,
+        C: MutableLeaves + Clone,
     {
         // Return the first mutable branch that satisfies the walk
         BranchMut::<_, A>::walk(self, FindMaxKey::default())

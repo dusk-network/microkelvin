@@ -7,10 +7,8 @@
 use core::ops::Deref;
 
 use alloc::vec::Vec;
-use rkyv::Archive;
 
-use crate::annotations::Annotation;
-use crate::backend::Check;
+use crate::backend::Getable;
 use crate::compound::{Child, Compound};
 use crate::error::Error;
 use crate::link::LinkCompound;
@@ -28,10 +26,7 @@ pub struct Level<'a, C, A> {
     node: LevelNode<'a, C, A>,
 }
 
-impl<'a, C, A> Deref for Level<'a, C, A>
-where
-    C: Compound<A>,
-{
+impl<'a, C, A> Deref for Level<'a, C, A> {
     type Target = C;
 
     fn deref(&self) -> &Self::Target {
@@ -67,10 +62,7 @@ impl<'a, C, A> Level<'a, C, A> {
 #[derive(Debug)]
 pub struct PartialBranch<'a, C, A>(Vec<Level<'a, C, A>>);
 
-impl<'a, C, A> Deref for LevelNode<'a, C, A>
-where
-    C: Compound<A>,
-{
+impl<'a, C, A> Deref for LevelNode<'a, C, A> {
     type Target = C;
 
     fn deref(&self) -> &Self::Target {
@@ -81,11 +73,7 @@ where
     }
 }
 
-impl<'a, C, A> PartialBranch<'a, C, A>
-where
-    C: Compound<A>,
-    A: Annotation<C::Leaf>,
-{
+impl<'a, C, A> PartialBranch<'a, C, A> {
     fn new(root: &'a C) -> Self {
         PartialBranch(vec![Level::new_root(root)])
     }
@@ -98,7 +86,10 @@ where
         &self.0
     }
 
-    fn leaf(&self) -> Option<&C::Leaf> {
+    fn leaf(&self) -> Option<&C::Leaf>
+    where
+        C: Compound<A>,
+    {
         let top = self.top();
         let ofs = top.offset();
 
@@ -131,8 +122,7 @@ where
 
     fn walk<W>(&mut self, walker: &mut W) -> Result<Option<()>, Error>
     where
-        C: Archive,
-        C::Archived: Check<C>,
+        C: Compound<A> + Getable,
         W: Walker<C, A>,
     {
         enum State<'a, C, A> {
@@ -222,11 +212,7 @@ where
     }
 }
 
-impl<'a, C, A> Branch<'a, C, A>
-where
-    C: Compound<A>,
-    A: Annotation<C::Leaf>,
-{
+impl<'a, C, A> Branch<'a, C, A> {
     /// Returns the depth of the branch
     pub fn depth(&self) -> usize {
         self.0.depth()
@@ -242,7 +228,10 @@ where
     pub fn map_leaf<M>(
         self,
         closure: for<'b> fn(&'b C::Leaf) -> &'b M,
-    ) -> MappedBranch<'a, C, A, M> {
+    ) -> MappedBranch<'a, C, A, M>
+    where
+        C: Compound<A>,
+    {
         MappedBranch {
             inner: self,
             closure,
@@ -253,9 +242,8 @@ where
     /// walk failed.
     pub fn walk<W>(root: &'a C, mut walker: W) -> Result<Option<Self>, Error>
     where
+        C: Compound<A> + Getable,
         W: Walker<C, A>,
-        C: Archive,
-        C::Archived: Check<C>,
     {
         let mut partial = PartialBranch::new(root);
         Ok(partial.walk(&mut walker)?.map(|()| Branch(partial)))
@@ -272,7 +260,6 @@ pub struct Branch<'a, C, A>(PartialBranch<'a, C, A>);
 impl<'a, C, A> Deref for Branch<'a, C, A>
 where
     C: Compound<A>,
-    A: Annotation<C::Leaf>,
 {
     type Target = C::Leaf;
 
@@ -284,7 +271,6 @@ where
 pub struct MappedBranch<'a, C, A, M>
 where
     C: Compound<A>,
-    A: Annotation<C::Leaf>,
 {
     inner: Branch<'a, C, A>,
     closure: for<'b> fn(&'b C::Leaf) -> &'b M,
@@ -294,7 +280,6 @@ impl<'a, C, A, M> Deref for MappedBranch<'a, C, A, M>
 where
     C: Compound<A>,
     C::Leaf: 'a,
-    A: Annotation<C::Leaf>,
 {
     type Target = M;
 
@@ -312,9 +297,7 @@ pub enum BranchIterator<'a, C, A, W> {
 // iterators
 impl<'a, C, A> IntoIterator for Branch<'a, C, A>
 where
-    C: Compound<A> + Archive,
-    C::Archived: Check<C>,
-    A: Annotation<C::Leaf>,
+    C: Compound<A> + Getable,
 {
     type Item = Result<&'a C::Leaf, Error>;
 
@@ -327,10 +310,7 @@ where
 
 impl<'a, C, A, W> Iterator for BranchIterator<'a, C, A, W>
 where
-    C: Compound<A>,
-    C: Archive,
-    C::Archived: Check<C>,
-    A: Annotation<C::Leaf>,
+    C: Compound<A> + Getable,
     W: Walker<C, A>,
 {
     type Item = Result<&'a C::Leaf, Error>;
@@ -376,7 +356,6 @@ where
 pub enum MappedBranchIterator<'a, C, A, W, M>
 where
     C: Compound<A>,
-    A: Annotation<C::Leaf>,
 {
     Initial(MappedBranch<'a, C, A, M>, W),
     Intermediate(MappedBranch<'a, C, A, M>, W),
@@ -385,10 +364,7 @@ where
 
 impl<'a, C, A, M> IntoIterator for MappedBranch<'a, C, A, M>
 where
-    C: Compound<A>,
-    C: Archive,
-    C::Archived: Check<C>,
-    A: Annotation<C::Leaf>,
+    C: Compound<A> + Getable,
     M: 'a,
 {
     type Item = Result<&'a M, Error>;
@@ -402,9 +378,7 @@ where
 
 impl<'a, C, A, W, M> Iterator for MappedBranchIterator<'a, C, A, W, M>
 where
-    C: Compound<A> + Archive,
-    C::Archived: Check<C>,
-    A: Annotation<C::Leaf>,
+    C: Compound<A> + Getable,
     W: Walker<C, A>,
     M: 'a,
 {
