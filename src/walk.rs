@@ -6,10 +6,14 @@
 
 use core::marker::PhantomData;
 
+use rkyv::Archive;
+
+use crate::backend::Check;
 use crate::branch::Branch;
 use crate::branch_mut::BranchMut;
 use crate::compound::{Child, Compound, MutableLeaves};
-use crate::link::LinkError;
+use crate::error::Error;
+use crate::Annotation;
 
 /// The return value from a closure to `walk` the tree.
 ///
@@ -86,27 +90,25 @@ where
     Self: Compound<A>,
 {
     /// Construct a `Branch` pointing to the first element, if not empty
-    fn first(&'a self) -> Result<Option<Branch<'a, Self, A>>, LinkError>;
+    fn first(&'a self) -> Result<Option<Branch<'a, Self, A>>, Error>;
 
     /// Construct a `BranchMut` pointing to the first element, if not empty
-    fn first_mut(
-        &'a mut self,
-    ) -> Result<Option<BranchMut<'a, Self, A>>, LinkError>
+    fn first_mut(&'a mut self) -> Result<Option<BranchMut<'a, Self, A>>, Error>
     where
         Self: MutableLeaves + Clone;
 }
 
 impl<'a, C, A> First<'a, A> for C
 where
-    C: Compound<A>,
+    C: Compound<A> + Archive,
+    A: Annotation<C::Leaf>,
+    C::Archived: Check<C>,
 {
-    fn first(&'a self) -> Result<Option<Branch<'a, Self, A>>, LinkError> {
+    fn first(&'a self) -> Result<Option<Branch<'a, Self, A>>, Error> {
         Branch::<_, A>::walk(self, AllLeaves)
     }
 
-    fn first_mut(
-        &'a mut self,
-    ) -> Result<Option<BranchMut<'a, Self, A>>, LinkError>
+    fn first_mut(&'a mut self) -> Result<Option<BranchMut<'a, Self, A>>, Error>
     where
         C: MutableLeaves + Clone,
     {

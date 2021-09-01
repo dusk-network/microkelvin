@@ -7,10 +7,13 @@
 use core::ops::Deref;
 
 use alloc::vec::Vec;
+use rkyv::Archive;
 
 use crate::annotations::Annotation;
+use crate::backend::Check;
 use crate::compound::{Child, Compound};
-use crate::link::{LinkCompound, LinkError};
+use crate::error::Error;
+use crate::link::LinkCompound;
 use crate::walk::{AllLeaves, Step, Walk, Walker};
 
 #[derive(Debug)]
@@ -81,6 +84,7 @@ where
 impl<'a, C, A> PartialBranch<'a, C, A>
 where
     C: Compound<A>,
+    A: Annotation<C::Leaf>,
 {
     fn new(root: &'a C) -> Self {
         PartialBranch(vec![Level::new_root(root)])
@@ -125,8 +129,10 @@ where
         }
     }
 
-    fn walk<W>(&mut self, walker: &mut W) -> Result<Option<()>, LinkError>
+    fn walk<W>(&mut self, walker: &mut W) -> Result<Option<()>, Error>
     where
+        C: Archive,
+        C::Archived: Check<C>,
         W: Walker<C, A>,
     {
         enum State<'a, C, A> {
@@ -219,6 +225,7 @@ where
 impl<'a, C, A> Branch<'a, C, A>
 where
     C: Compound<A>,
+    A: Annotation<C::Leaf>,
 {
     /// Returns the depth of the branch
     pub fn depth(&self) -> usize {
@@ -244,12 +251,11 @@ where
 
     /// Performs a tree walk, returning either a valid branch or None if the
     /// walk failed.
-    pub fn walk<W>(
-        root: &'a C,
-        mut walker: W,
-    ) -> Result<Option<Self>, LinkError>
+    pub fn walk<W>(root: &'a C, mut walker: W) -> Result<Option<Self>, Error>
     where
         W: Walker<C, A>,
+        C: Archive,
+        C::Archived: Check<C>,
     {
         let mut partial = PartialBranch::new(root);
         Ok(partial.walk(&mut walker)?.map(|()| Branch(partial)))
@@ -266,6 +272,7 @@ pub struct Branch<'a, C, A>(PartialBranch<'a, C, A>);
 impl<'a, C, A> Deref for Branch<'a, C, A>
 where
     C: Compound<A>,
+    A: Annotation<C::Leaf>,
 {
     type Target = C::Leaf;
 
@@ -277,6 +284,7 @@ where
 pub struct MappedBranch<'a, C, A, M>
 where
     C: Compound<A>,
+    A: Annotation<C::Leaf>,
 {
     inner: Branch<'a, C, A>,
     closure: for<'b> fn(&'b C::Leaf) -> &'b M,
@@ -286,6 +294,7 @@ impl<'a, C, A, M> Deref for MappedBranch<'a, C, A, M>
 where
     C: Compound<A>,
     C::Leaf: 'a,
+    A: Annotation<C::Leaf>,
 {
     type Target = M;
 
@@ -303,9 +312,11 @@ pub enum BranchIterator<'a, C, A, W> {
 // iterators
 impl<'a, C, A> IntoIterator for Branch<'a, C, A>
 where
-    C: Compound<A>,
+    C: Compound<A> + Archive,
+    C::Archived: Check<C>,
+    A: Annotation<C::Leaf>,
 {
-    type Item = Result<&'a C::Leaf, LinkError>;
+    type Item = Result<&'a C::Leaf, Error>;
 
     type IntoIter = BranchIterator<'a, C, A, AllLeaves>;
 
@@ -317,9 +328,12 @@ where
 impl<'a, C, A, W> Iterator for BranchIterator<'a, C, A, W>
 where
     C: Compound<A>,
+    C: Archive,
+    C::Archived: Check<C>,
+    A: Annotation<C::Leaf>,
     W: Walker<C, A>,
 {
-    type Item = Result<&'a C::Leaf, LinkError>;
+    type Item = Result<&'a C::Leaf, Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
         match core::mem::replace(self, BranchIterator::Exhausted) {
@@ -372,10 +386,12 @@ where
 impl<'a, C, A, M> IntoIterator for MappedBranch<'a, C, A, M>
 where
     C: Compound<A>,
+    C: Archive,
+    C::Archived: Check<C>,
     A: Annotation<C::Leaf>,
     M: 'a,
 {
-    type Item = Result<&'a M, LinkError>;
+    type Item = Result<&'a M, Error>;
 
     type IntoIter = MappedBranchIterator<'a, C, A, AllLeaves, M>;
 
@@ -386,12 +402,13 @@ where
 
 impl<'a, C, A, W, M> Iterator for MappedBranchIterator<'a, C, A, W, M>
 where
-    C: Compound<A>,
+    C: Compound<A> + Archive,
+    C::Archived: Check<C>,
     A: Annotation<C::Leaf>,
     W: Walker<C, A>,
     M: 'a,
 {
-    type Item = Result<&'a M, LinkError>;
+    type Item = Result<&'a M, Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
         match core::mem::replace(self, Self::Exhausted) {

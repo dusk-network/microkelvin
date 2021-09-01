@@ -13,37 +13,36 @@
 //! `Branch` and `BranchMut`, types for representing branches in tree-formed
 //! data as well as methods of search.
 
-#![cfg_attr(not(feature = "persistence"), no_std)]
+#![cfg_attr(not(feature = "host"), no_std)]
 #![deny(missing_docs)]
 
 #[macro_use]
 extern crate alloc;
 
 mod annotations;
+mod backend;
 mod branch;
 mod branch_mut;
 mod compound;
+mod error;
 mod id;
 mod link;
 mod walk;
 
-#[cfg(feature = "persistence")]
-mod persist;
+#[cfg(feature = "host")]
+mod disk;
+#[cfg(feature = "host")]
+pub use disk::DiskBackend;
 
 pub use annotations::{
     Annotation, Cardinality, Combine, GetMaxKey, Keyed, MaxKey, Nth,
 };
 pub use branch::Branch;
 pub use branch_mut::BranchMut;
+pub use error::Error;
 
 pub use compound::{AnnoIter, Child, ChildMut, Compound, MutableLeaves};
-pub use link::{
-    Link, LinkAnnotation, LinkCompound, LinkCompoundMut, LinkError,
-};
+pub use link::{Link, LinkAnnotation, LinkCompound, LinkCompoundMut};
 pub use walk::{First, Step, Walk, Walker};
 
-#[cfg(feature = "persistence")]
-pub use persist::{
-    Backend, BackendCtor, DiskBackend, PersistError, PersistedId, Persistence,
-    PutResult,
-};
+pub use backend::Check;

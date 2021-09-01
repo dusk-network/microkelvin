@@ -8,15 +8,22 @@
 /// i.e. the amount of elements in a collection
 use core::borrow::Borrow;
 
+use bytecheck::CheckBytes;
+use rkyv::{Archive, Deserialize, Serialize};
+
 use crate::annotations::{Annotation, Combine};
+use crate::backend::Check;
 use crate::branch::Branch;
 use crate::branch_mut::BranchMut;
 use crate::compound::{AnnoIter, Child, Compound, MutableLeaves};
-use crate::link::LinkError;
+use crate::error::Error;
 use crate::walk::{Step, Walk, Walker};
 
 /// The cardinality of a compound collection
-#[derive(PartialEq, Debug, Clone, Default, Copy)]
+#[derive(
+    PartialEq, Debug, Clone, Default, Copy, Archive, Serialize, Deserialize,
+)]
+#[archive_attr(derive(CheckBytes))]
 pub struct Cardinality(pub(crate) u64);
 
 impl From<Cardinality> for u64 {
@@ -55,7 +62,8 @@ pub struct Offset(u64);
 
 impl<C, A> Walker<C, A> for Offset
 where
-    C: Compound<A>,
+    C: Compound<A> + Archive,
+    C::Archived: Check<C>,
     A: Annotation<C::Leaf> + Borrow<Cardinality>,
 {
     fn walk(&mut self, walk: Walk<C, A>) -> Step {
@@ -93,26 +101,24 @@ where
     A: Annotation<Self::Leaf> + Borrow<Cardinality>,
 {
     /// Construct a `Branch` pointing to the `nth` element, if any
-    fn nth(&'a self, n: u64) -> Result<Option<Branch<'a, Self, A>>, LinkError>;
+    fn nth(&'a self, n: u64) -> Result<Option<Branch<'a, Self, A>>, Error>;
 
     /// Construct a `BranchMut` pointing to the `nth` element, if any
     fn nth_mut(
         &'a mut self,
         n: u64,
-    ) -> Result<Option<BranchMut<'a, Self, A>>, LinkError>
+    ) -> Result<Option<BranchMut<'a, Self, A>>, Error>
     where
         Self: MutableLeaves;
 }
 
 impl<'a, C, A> Nth<'a, A> for C
 where
-    C: Compound<A> + Clone,
+    C: Compound<A> + Archive,
+    C::Archived: Check<C>,
     A: Annotation<C::Leaf> + Borrow<Cardinality>,
 {
-    fn nth(
-        &'a self,
-        ofs: u64,
-    ) -> Result<Option<Branch<'a, Self, A>>, LinkError> {
+    fn nth(&'a self, ofs: u64) -> Result<Option<Branch<'a, Self, A>>, Error> {
         // Return the first that satisfies the walk
         Branch::<_, A>::walk(self, Offset(ofs))
     }
@@ -120,7 +126,7 @@ where
     fn nth_mut(
         &'a mut self,
         ofs: u64,
-    ) -> Result<Option<BranchMut<'a, Self, A>>, LinkError>
+    ) -> Result<Option<BranchMut<'a, Self, A>>, Error>
     where
         C: MutableLeaves,
     {

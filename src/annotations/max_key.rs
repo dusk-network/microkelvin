@@ -9,15 +9,20 @@ use core::borrow::Borrow;
 use core::cmp::Ordering;
 use core::marker::PhantomData;
 
+use bytecheck::CheckBytes;
+use rkyv::{Archive, Deserialize, Serialize};
+
 use crate::annotations::{Annotation, Combine};
+use crate::backend::Check;
 use crate::branch::Branch;
 use crate::branch_mut::BranchMut;
 use crate::compound::{AnnoIter, Child, Compound, MutableLeaves};
+use crate::error::Error;
 use crate::walk::{Step, Walk, Walker};
-use crate::LinkError;
 
 /// The maximum value of a collection
-#[derive(PartialEq, Eq, Debug, Clone, Copy)]
+#[derive(PartialEq, Eq, Clone, Debug, Archive, Serialize, Deserialize)]
+#[archive_attr(derive(CheckBytes))]
 pub enum MaxKey<K> {
     /// Identity of max, everything else is larger
     NegativeInfinity,
@@ -119,8 +124,9 @@ impl<K> Default for FindMaxKey<K> {
 
 impl<C, A, K> Walker<C, A> for FindMaxKey<K>
 where
-    C: Compound<A>,
+    C: Compound<A> + Archive,
     C::Leaf: Keyed<K>,
+    C::Archived: Check<C>,
     A: Annotation<C::Leaf> + Borrow<MaxKey<K>>,
     K: Ord + Clone + core::fmt::Debug,
 {
@@ -164,31 +170,32 @@ where
     K: Ord,
 {
     /// Construct a `Branch` pointing to the element with the largest key
-    fn max_key(&'a self) -> Result<Option<Branch<'a, Self, A>>, LinkError>;
+    fn max_key(&'a self) -> Result<Option<Branch<'a, Self, A>>, Error>;
 
     /// Construct a `BranchMut` pointing to the element with the largest key
     fn max_key_mut(
         &'a mut self,
-    ) -> Result<Option<BranchMut<'a, Self, A>>, LinkError>
+    ) -> Result<Option<BranchMut<'a, Self, A>>, Error>
     where
         Self: MutableLeaves;
 }
 
 impl<'a, C, A, K> GetMaxKey<'a, A, K> for C
 where
-    C: Compound<A> + Clone,
+    C: Compound<A> + Archive,
     C::Leaf: Keyed<K>,
+    C::Archived: Check<C>,
     A: Annotation<C::Leaf> + Borrow<MaxKey<K>>,
     K: Ord + Clone + core::fmt::Debug,
 {
-    fn max_key(&'a self) -> Result<Option<Branch<'a, Self, A>>, LinkError> {
+    fn max_key(&'a self) -> Result<Option<Branch<'a, Self, A>>, Error> {
         // Return the first that satisfies the walk
         Branch::<_, A>::walk(self, FindMaxKey::default())
     }
 
     fn max_key_mut(
         &'a mut self,
-    ) -> Result<Option<BranchMut<'a, Self, A>>, LinkError>
+    ) -> Result<Option<BranchMut<'a, Self, A>>, Error>
     where
         C: MutableLeaves,
     {

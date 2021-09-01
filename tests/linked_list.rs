@@ -4,12 +4,15 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use bytecheck::CheckBytes;
 use microkelvin::{
-    Annotation, Child, ChildMut, Compound, First, Link, LinkError,
+    Annotation, Check, Child, ChildMut, Compound, Error, First, Link,
     MutableLeaves,
 };
+use rkyv::{Archive, Deserialize, Serialize};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Archive, Serialize, Debug, Deserialize)]
+#[archive_attr(derive(CheckBytes))]
 pub enum LinkedList<T, A>
 where
     A: Annotation<T>,
@@ -29,6 +32,7 @@ where
 
 impl<T, A> Compound<A> for LinkedList<T, A>
 where
+    Self: Archive,
     T: Clone,
     A: Annotation<T> + Clone,
 {
@@ -63,8 +67,10 @@ impl<T, A> MutableLeaves for LinkedList<T, A> where A: Annotation<T> {}
 
 impl<T, A> LinkedList<T, A>
 where
-    T: Clone,
-    A: Clone + Annotation<T>,
+    T: Clone + Archive,
+    T::Archived: Check<T>,
+    A: Clone + Annotation<T> + Archive,
+    A::Archived: Check<A>,
 {
     pub fn new() -> Self {
         Default::default()
@@ -87,7 +93,7 @@ where
         }
     }
 
-    pub fn pop(&mut self) -> Result<Option<T>, LinkError> {
+    pub fn pop(&mut self) -> Result<Option<T>, Error> {
         match core::mem::take(self) {
             LinkedList::Empty => Ok(None),
             LinkedList::Node { val: t, next } => {
@@ -123,7 +129,7 @@ fn push_cardinality() {
 }
 
 #[test]
-fn push_nth() -> Result<(), LinkError> {
+fn push_nth() -> Result<(), Error> {
     let n: u64 = 1024;
 
     use microkelvin::{Cardinality, Nth};
@@ -142,7 +148,7 @@ fn push_nth() -> Result<(), LinkError> {
 }
 
 #[test]
-fn push_pop() -> Result<(), LinkError> {
+fn push_pop() -> Result<(), Error> {
     let n: u64 = 1024;
 
     let mut list = LinkedList::<_, ()>::new();
@@ -159,7 +165,7 @@ fn push_pop() -> Result<(), LinkError> {
 }
 
 #[test]
-fn push_mut() -> Result<(), LinkError> {
+fn push_mut() -> Result<(), Error> {
     let n: u64 = 1024;
 
     use microkelvin::{Cardinality, Nth};
@@ -182,7 +188,7 @@ fn push_mut() -> Result<(), LinkError> {
 }
 
 #[test]
-fn iterate_immutable() -> Result<(), LinkError> {
+fn iterate_immutable() -> Result<(), Error> {
     let n: u64 = 16;
 
     use microkelvin::{Cardinality, Nth};
@@ -223,7 +229,7 @@ fn iterate_immutable() -> Result<(), LinkError> {
 }
 
 #[test]
-fn iterate_mutable() -> Result<(), LinkError> {
+fn iterate_mutable() -> Result<(), Error> {
     let n: u64 = 32;
 
     use microkelvin::{Cardinality, Nth};
@@ -271,7 +277,7 @@ fn iterate_mutable() -> Result<(), LinkError> {
 }
 
 #[test]
-fn iterate_map() -> Result<(), LinkError> {
+fn iterate_map() -> Result<(), Error> {
     let n: u64 = 32;
 
     let mut list = LinkedList::<_, ()>::new();
@@ -298,7 +304,7 @@ fn iterate_map() -> Result<(), LinkError> {
 }
 
 #[test]
-fn iterate_map_mutable() -> Result<(), LinkError> {
+fn iterate_map_mutable() -> Result<(), Error> {
     let n: u64 = 32;
 
     let mut list = LinkedList::<_, ()>::new();
@@ -325,7 +331,7 @@ fn iterate_map_mutable() -> Result<(), LinkError> {
 }
 
 #[test]
-fn deref_mapped_mutable_branch() -> Result<(), LinkError> {
+fn deref_mapped_mutable_branch() -> Result<(), Error> {
     let n: u64 = 32;
 
     let mut list = LinkedList::<_, ()>::new();

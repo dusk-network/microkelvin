@@ -4,13 +4,16 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use bytecheck::CheckBytes;
 use rand::{prelude::SliceRandom, thread_rng};
+use rkyv::{Archive, Deserialize, Serialize};
 
 mod linked_list;
 use linked_list::LinkedList;
-use microkelvin::{GetMaxKey, Keyed, LinkError, MaxKey};
+use microkelvin::{Error, GetMaxKey, Keyed, MaxKey};
 
-#[derive(PartialEq, Clone, Debug)]
+#[derive(PartialEq, Clone, Debug, Archive, Serialize, Deserialize)]
+#[archive_attr(derive(CheckBytes))]
 struct TestLeaf {
     key: u64,
     other: (),
@@ -23,7 +26,7 @@ impl Keyed<u64> for TestLeaf {
 }
 
 #[test]
-fn maximum() -> Result<(), LinkError> {
+fn maximum() -> Result<(), Error> {
     let n: u64 = 1024;
 
     let mut keys = vec![];

@@ -10,12 +10,16 @@ use rand::{prelude::SliceRandom, thread_rng};
 mod linked_list;
 use linked_list::LinkedList;
 
+use bytecheck::CheckBytes;
+use rkyv::{Archive, Deserialize, Serialize};
+
 use microkelvin::{
-    AnnoIter, Annotation, Cardinality, Combine, Compound, GetMaxKey, Keyed,
-    LinkError, MaxKey,
+    AnnoIter, Annotation, Cardinality, Combine, Compound, Error, GetMaxKey,
+    Keyed, MaxKey,
 };
 
-#[derive(Default, Clone)]
+#[derive(Default, Clone, Archive, Serialize, Deserialize)]
+#[archive_attr(derive(CheckBytes))]
 struct Anno<K> {
     max: MaxKey<K>,
     card: Cardinality,
@@ -63,7 +67,8 @@ where
     }
 }
 
-#[derive(PartialEq, Clone, Debug)]
+#[derive(PartialEq, Clone, Debug, Archive, Deserialize)]
+#[archive_attr(derive(CheckBytes))]
 struct TestLeaf {
     key: u64,
     other: (),
@@ -76,7 +81,7 @@ impl Keyed<u64> for TestLeaf {
 }
 
 #[test]
-fn maximum_multiple() -> Result<(), LinkError> {
+fn maximum_multiple() -> Result<(), Error> {
     let n: u64 = 1024;
 
     let mut keys = vec![];
