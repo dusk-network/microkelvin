@@ -10,3 +10,10 @@ pub enum Error {
     /// Invalid data encountered     
     Invalid,
 }
+
+#[cfg(feature = "host")]
+impl From<std::io::Error> for Error {
+    fn from(_: std::io::Error) -> Self {
+        Error::Missing
+    }
+}

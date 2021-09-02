@@ -6,8 +6,8 @@
 
 use bytecheck::CheckBytes;
 use microkelvin::{
-    Cardinality, Child, ChildMut, Compound, Error, First, Getable, Link,
-    MutableLeaves, Nth, PortalDeserializer,
+    Annotation, Cardinality, Child, ChildMut, Compound, Error, First, Getable,
+    Link, MutableLeaves, Nth, PortalDeserializer, Putable,
 };
 use rkyv::{
     validation::validators::DefaultValidator, Archive, Deserialize, Serialize,
@@ -28,10 +28,10 @@ impl<T, A> Default for LinkedList<T, A> {
 
 impl<T, A> Compound<A> for LinkedList<T, A>
 where
-    T: Getable,
+    T: Getable + Putable,
     T::Archived: for<'a> CheckBytes<DefaultValidator<'a>>
         + Deserialize<T, PortalDeserializer>,
-    A: Getable,
+    A: Annotation<T> + Getable + Putable,
     A::Archived: for<'a> CheckBytes<DefaultValidator<'a>>
         + Deserialize<A, PortalDeserializer>,
 {

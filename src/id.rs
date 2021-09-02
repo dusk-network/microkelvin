@@ -22,7 +22,7 @@ impl Archive for IdHash {
 
     unsafe fn resolve(
         &self,
-        pos: usize,
+        _pos: usize,
         resolver: Self::Resolver,
         out: *mut Self::Archived,
     ) {
@@ -37,6 +37,7 @@ impl From<&[u8]> for IdHash {
     }
 }
 
+/// A marker representing a value of type `C` by hash
 pub struct Id<C> {
     hash: IdHash,
     portal: Portal,
@@ -62,7 +63,7 @@ impl<C> core::fmt::Debug for Id<C> {
 unsafe impl<C> Send for Id<C> {}
 
 impl<C> Id<C> {
-    pub(crate) fn new(hash: IdHash, portal: Portal) -> Self {
+    pub(crate) fn new_from_hash(hash: IdHash, portal: Portal) -> Self {
         Id {
             hash,
             portal,
@@ -70,14 +71,11 @@ impl<C> Id<C> {
         }
     }
 
+    /// Pull out the represented value of the Id
     pub fn reify(&self) -> Result<C, Error>
     where
         C: Getable,
     {
         C::get(&self.hash, self.portal.clone())
-    }
-
-    pub fn into_hash(self) -> IdHash {
-        self.hash
     }
 }

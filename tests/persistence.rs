@@ -12,11 +12,7 @@ mod persist_tests {
 
     use linked_list::LinkedList;
 
-    use microkelvin::{BackendCtor, DiskBackend, Error, Keyed, Persistence};
-
-    use std::sync::atomic::{AtomicUsize, Ordering};
-    use std::thread;
-    use std::time;
+    use microkelvin::{DiskBackend, Error, Keyed, Portal, Putable};
 
     #[derive(PartialEq, Clone, Debug)]
     struct TestLeaf {
@@ -30,18 +26,6 @@ mod persist_tests {
         }
     }
 
-    static INIT_COUNTER: AtomicUsize = AtomicUsize::new(0);
-
-    fn testbackend() -> BackendCtor<DiskBackend> {
-        BackendCtor::new(|| {
-            INIT_COUNTER.fetch_add(1, Ordering::SeqCst);
-            DiskBackend::ephemeral().map_err(|_e| {
-                // Todo, promote error
-                Error::Missing
-            })
-        })
-    }
-
     fn persist() -> Result<(), Error> {
         let n: u64 = 16;
 
@@ -51,8 +35,10 @@ mod persist_tests {
             list.push(i);
         }
 
-        let persisted = Persistence::persist(&testbackend(), &list)?;
-        let mut restored = persisted.reify()?;
+        let portal = Portal::new(DiskBackend::ephemeral()?);
+
+        let id = list.put(portal)?;
+        let mut restored = id.reify()?;
 
         // first empty the original
 
@@ -90,6 +76,8 @@ mod persist_tests {
     }
 
     fn persist_across_threads() -> Result<(), Error> {
+        let portal = Portal::new(DiskBackend::ephemeral()?);
+
         let n: u64 = 16;
 
         let mut list = LinkedList::<_, ()>::new();
@@ -98,7 +86,7 @@ mod persist_tests {
             list.push(i);
         }
 
-        let persisted = Persistence::persist(&testbackend(), &list)?;
+        let persisted = list.put(portal)?;
 
         // it should now be available from other threads
 
@@ -141,18 +129,5 @@ mod persist_tests {
     #[test]
     fn persist_across_threads_d() -> Result<(), Error> {
         persist_across_threads()
-    }
-
-    #[test]
-    fn persist_create_once() {
-        while INIT_COUNTER.load(Ordering::SeqCst) == 0 {}
-
-        for _ in 0..128 {
-            assert_eq!(INIT_COUNTER.load(Ordering::SeqCst), 1);
-
-            thread::sleep(time::Duration::from_millis(1));
-
-            assert_eq!(INIT_COUNTER.load(Ordering::SeqCst), 1);
-        }
     }
 }

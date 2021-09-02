@@ -67,7 +67,7 @@ where
     }
 }
 
-#[derive(PartialEq, Clone, Debug, Archive, Deserialize)]
+#[derive(PartialEq, Clone, Debug, Archive, Serialize, Deserialize)]
 #[archive_attr(derive(CheckBytes))]
 struct TestLeaf {
     key: u64,
