@@ -22,34 +22,42 @@ pub trait PortalProvider {
     fn portal(&self) -> Portal;
 }
 
-pub struct PortalSerializer<S> {
+pub struct PortalSerializer {
     portal: Portal,
-    serializer: S,
+    serializer: AlignedSerializer<AlignedVec>,
 }
 
-impl<S> Fallible for PortalSerializer<S>
-where
-    S: Fallible,
-{
-    type Error = S::Error;
+impl PortalSerializer {
+    fn new(portal: Portal) -> Self {
+        PortalSerializer {
+            portal,
+            serializer: Default::default(),
+        }
+    }
+
+    fn into_inner(self) -> AlignedVec {
+        self.serializer.into_inner()
+    }
 }
 
-impl<S> PortalProvider for PortalSerializer<S> {
+impl Fallible for PortalSerializer {
+    type Error = Error;
+}
+
+impl PortalProvider for PortalSerializer {
     fn portal(&self) -> Portal {
         self.portal.clone()
     }
 }
 
-impl<S> Serializer for PortalSerializer<S>
-where
-    S: Serializer,
-{
+impl Serializer for PortalSerializer {
     fn pos(&self) -> usize {
         self.serializer.pos()
     }
 
-    fn write(&mut self, bytes: &[u8]) -> Result<(), S::Error> {
-        self.serializer.write(bytes)
+    fn write(&mut self, bytes: &[u8]) -> Result<(), Error> {
+        // FIXME: this error handling is non-ideal
+        self.serializer.write(bytes).map_err(|_| Error::Invalid)
     }
 }
 
@@ -70,6 +78,7 @@ impl Portal {
     }
 }
 
+/// Deserializer that can resolve backend values
 pub struct PortalDeserializer(Portal);
 
 impl Fallible for PortalDeserializer {
@@ -85,30 +94,16 @@ impl PortalProvider for PortalDeserializer {
 /// This type can be parsed out of raw bytes
 ///
 /// FIXME: naming
-pub trait Getable: Sized + Archive {
+pub trait Getable: Sized + Archive + Clone {
     /// Get value
     fn get(idhash: &IdHash, portal: Portal) -> Result<Self, Error>;
 }
 
-pub trait Check: Archive {
-    fn from_bytes(bytes: &[u8]) -> Result<&Self::Archived, Error>;
-}
-
-impl<C> Check for C
-where
-    C: Archive,
-    C::Archived: for<'a> CheckBytes<DefaultValidator<'a>>,
-{
-    fn from_bytes(bytes: &[u8]) -> Result<&Self::Archived, Error> {
-        debug_assert!(bytes.len() == core::mem::size_of::<C::Archived>());
-        check_archived_root::<C>(&bytes[..]).map_err(|_| Error::Invalid)
-    }
-}
-
 impl<C> Getable for C
 where
-    C: Archive + Check,
-    C::Archived: Deserialize<C, PortalDeserializer>,
+    C: Archive + Clone,
+    C::Archived: for<'a> CheckBytes<DefaultValidator<'a>>
+        + Deserialize<C, PortalDeserializer>,
 {
     fn get(idhash: &IdHash, portal: Portal) -> Result<Self, Error> {
         // FIXME, this could probably be changed to have the backend provide the
@@ -117,7 +112,8 @@ where
             vec![0u8; core::mem::size_of::<<C as Archive>::Archived>()];
         portal.get(idhash, &mut bytes)?;
 
-        let archived = C::from_bytes(&bytes[..])?;
+        let archived =
+            check_archived_root::<C>(&bytes[..]).map_err(|_| Error::Invalid)?;
 
         if let Ok(val) = archived.deserialize(&mut PortalDeserializer(portal)) {
             Ok(val)
@@ -127,18 +123,16 @@ where
     }
 }
 
-pub type DefaultSerializer = AlignedSerializer<AlignedVec>;
-
 pub trait Putable: Sized {
     fn put(&self, portal: Portal) -> Result<Id<Self>, Error>;
 }
 
 impl<C> Putable for C
 where
-    C: Serialize<DefaultSerializer>,
+    C: Serialize<PortalSerializer>,
 {
     fn put(&self, portal: Portal) -> Result<Id<C>, Error> {
-        let mut ser = AlignedSerializer::new(AlignedVec::new());
+        let mut ser = PortalSerializer::new(portal.clone());
         ser.serialize_value(self).expect("Infallible");
         let bytes = &ser.into_inner()[..];
         let hash = portal.put(&bytes)?;

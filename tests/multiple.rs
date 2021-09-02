@@ -14,7 +14,8 @@ use bytecheck::CheckBytes;
 use rkyv::{Archive, Deserialize, Serialize};
 
 use microkelvin::{
-    AnnoIter, Annotation, Cardinality, Combine, Compound, Error, Keyed, MaxKey,
+    AnnoIter, Annotation, Cardinality, Combine, Compound, Error, GetMaxKey,
+    Keyed, MaxKey,
 };
 
 #[derive(Default, Clone, Archive, Serialize, Deserialize)]
