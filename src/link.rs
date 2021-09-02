@@ -15,7 +15,7 @@ use bytecheck::CheckBytes;
 use rkyv::{Archive, Deserialize, Serialize};
 
 use crate::backend::{
-    Getable, PortalDeserializer, PortalProvider, PortalSerializer, Putable,
+    Getable, PortalDeserializer, PortalProvider, PortalSerializer,
 };
 use crate::error::Error;
 use crate::id::{Id, IdHash};
@@ -55,10 +55,11 @@ where
     unsafe fn resolve(
         &self,
         _pos: usize,
-        resolver: Self::Resolver,
-        out: *mut Self::Archived,
+        _resolver: Self::Resolver,
+        _out: *mut Self::Archived,
     ) {
-        *out = todo!()
+        // *out = todo!();
+        todo!()
     }
 }
 
@@ -71,7 +72,7 @@ where
         &self,
         de: &mut PortalDeserializer,
     ) -> Result<Link<C, A>, Error> {
-        let id = Id::new(self.0, de.portal());
+        let id = Id::new_from_hash(self.0, de.portal());
         let anno = self.1.deserialize(de)?;
         Ok(Link {
             inner: RefCell::new(LinkInner::Ia(id, anno)),
@@ -81,10 +82,10 @@ where
 
 impl<C, A> Serialize<PortalSerializer> for Link<C, A>
 where
-    C: Compound<A> + Archive + Serialize<PortalSerializer>,
+    C: Compound<A> + Archive,
     C::Archived: for<'a> CheckBytes<DefaultValidator<'a>>
         + Deserialize<C, PortalDeserializer>,
-    A: Clone + Archive + Annotation<C::Leaf>,
+    A: Clone + Archive + Annotation<C::Leaf> + Serialize<PortalSerializer>,
     A::Archived: for<'a> CheckBytes<DefaultValidator<'a>>
         + Deserialize<A, PortalDeserializer>,
 {

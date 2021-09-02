@@ -1,3 +1,5 @@
+use alloc::sync::Arc;
+
 use bytecheck::CheckBytes;
 use rkyv::ser::serializers::AlignedSerializer;
 use rkyv::ser::Serializer;
@@ -64,9 +66,14 @@ impl Serializer for PortalSerializer {
 /// Portal to a backend, used to erase the specific type of backend and to allow
 /// efficient cloning of the reference
 #[derive(Clone)]
-pub struct Portal(alloc::sync::Arc<dyn Backend>);
+pub struct Portal(Arc<dyn Backend>);
 
 impl Portal {
+    /// Open a new portal to a backend
+    pub fn new(backend: impl Backend + 'static) -> Self {
+        Portal(Arc::new(backend))
+    }
+
     /// Get get a type stored in the backend from an `Id`
     pub fn get(&self, id: &IdHash, into: &mut [u8]) -> Result<(), Error> {
         self.0.get(id, into)
@@ -123,7 +130,9 @@ where
     }
 }
 
-pub trait Putable: Sized {
+/// Value can be put through a portal
+pub trait Putable: Sized + Serialize<PortalSerializer> {
+    /// Put self into the Portal, returns the generated Id
     fn put(&self, portal: Portal) -> Result<Id<Self>, Error>;
 }
 
@@ -136,6 +145,6 @@ where
         ser.serialize_value(self).expect("Infallible");
         let bytes = &ser.into_inner()[..];
         let hash = portal.put(&bytes)?;
-        Ok(Id::new(hash, portal))
+        Ok(Id::new_from_hash(hash, portal))
     }
 }
