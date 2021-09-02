@@ -163,7 +163,7 @@ where
 /// annotation
 pub trait GetMaxKey<'a, A, K>
 where
-    Self: Compound<A> + Getable,
+    Self: Compound<A>,
     Self::Leaf: Keyed<K>,
     A: Annotation<Self::Leaf> + Borrow<MaxKey<K>>,
     K: Ord,
@@ -181,7 +181,7 @@ where
 
 impl<'a, C, A, K> GetMaxKey<'a, A, K> for C
 where
-    C: Compound<A> + Getable,
+    C: Compound<A>,
     C::Leaf: Keyed<K>,
     A: Annotation<C::Leaf> + Borrow<MaxKey<K>>,
     K: Ord + Clone,

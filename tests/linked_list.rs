@@ -6,19 +6,18 @@
 
 use bytecheck::CheckBytes;
 use microkelvin::{
-    Annotation, Child, ChildMut, Compound, Error, First, Getable, Link,
-    MutableLeaves,
+    Cardinality, Child, ChildMut, Compound, Error, First, Getable, Link,
+    MutableLeaves, Nth, PortalDeserializer,
 };
-use rkyv::{Archive, Deserialize, Serialize};
+use rkyv::{
+    validation::validators::DefaultValidator, Archive, Deserialize, Serialize,
+};
 
 #[derive(Clone, Archive, Serialize, Debug, Deserialize)]
 #[archive_attr(derive(CheckBytes))]
 pub enum LinkedList<T, A> {
     Empty,
-    Node {
-        val: T,
-        next: Link<LinkedList<T, A>, A>,
-    },
+    Node { val: T, next: Link<Self, A> },
 }
 
 impl<T, A> Default for LinkedList<T, A> {
@@ -27,7 +26,15 @@ impl<T, A> Default for LinkedList<T, A> {
     }
 }
 
-impl<T, A> Compound<A> for LinkedList<T, A> {
+impl<T, A> Compound<A> for LinkedList<T, A>
+where
+    T: Getable,
+    T::Archived: for<'a> CheckBytes<DefaultValidator<'a>>
+        + Deserialize<T, PortalDeserializer>,
+    A: Getable,
+    A::Archived: for<'a> CheckBytes<DefaultValidator<'a>>
+        + Deserialize<A, PortalDeserializer>,
+{
     type Leaf = T;
 
     fn child(&self, ofs: usize) -> Child<Self, A> {
@@ -49,7 +56,7 @@ impl<T, A> Compound<A> for LinkedList<T, A> {
     }
 }
 
-impl<T, A> MutableLeaves for LinkedList<T, A> where A: Annotation<T> {}
+impl<T, A> MutableLeaves for LinkedList<T, A> {}
 
 impl<T, A> LinkedList<T, A> {
     pub fn new() -> Self {
@@ -104,8 +111,6 @@ fn push() {
 fn push_cardinality() {
     let n: u64 = 1024;
 
-    use microkelvin::Cardinality;
-
     let mut list = LinkedList::<_, Cardinality>::new();
 
     for i in 0..n {
@@ -116,8 +121,6 @@ fn push_cardinality() {
 #[test]
 fn push_nth() -> Result<(), Error> {
     let n: u64 = 1024;
-
-    use microkelvin::{Cardinality, Nth};
 
     let mut list = LinkedList::<_, Cardinality>::new();
 
@@ -153,8 +156,6 @@ fn push_pop() -> Result<(), Error> {
 fn push_mut() -> Result<(), Error> {
     let n: u64 = 1024;
 
-    use microkelvin::{Cardinality, Nth};
-
     let mut list = LinkedList::<_, Cardinality>::new();
 
     for i in 0..n {
@@ -175,8 +176,6 @@ fn push_mut() -> Result<(), Error> {
 #[test]
 fn iterate_immutable() -> Result<(), Error> {
     let n: u64 = 16;
-
-    use microkelvin::{Cardinality, Nth};
 
     let mut list = LinkedList::<_, Cardinality>::new();
 
@@ -216,8 +215,6 @@ fn iterate_immutable() -> Result<(), Error> {
 #[test]
 fn iterate_mutable() -> Result<(), Error> {
     let n: u64 = 32;
-
-    use microkelvin::{Cardinality, Nth};
 
     let mut list = LinkedList::<_, Cardinality>::new();
 

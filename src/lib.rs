@@ -37,7 +37,7 @@ pub use disk::DiskBackend;
 pub use annotations::{
     Annotation, Cardinality, Combine, GetMaxKey, Keyed, MaxKey, Nth,
 };
-pub use backend::{Backend, Getable};
+pub use backend::{Backend, Getable, Portal, PortalDeserializer};
 pub use branch::Branch;
 pub use branch_mut::BranchMut;
 pub use compound::{AnnoIter, Child, ChildMut, Compound, MutableLeaves};

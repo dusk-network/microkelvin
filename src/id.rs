@@ -7,12 +7,28 @@
 use core::marker::PhantomData;
 
 use bytecheck::CheckBytes;
+use rkyv::Archive;
 
 use crate::backend::{Getable, Portal};
 use crate::error::Error;
 
 #[derive(Debug, Clone, Hash, Copy, PartialEq, Eq, CheckBytes)]
 pub struct IdHash([u8; 32]);
+
+impl Archive for IdHash {
+    type Archived = Self;
+
+    type Resolver = Self;
+
+    unsafe fn resolve(
+        &self,
+        pos: usize,
+        resolver: Self::Resolver,
+        out: *mut Self::Archived,
+    ) {
+        *out = resolver
+    }
+}
 
 impl From<&[u8]> for IdHash {
     fn from(_bytes: &[u8]) -> Self {

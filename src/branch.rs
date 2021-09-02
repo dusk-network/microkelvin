@@ -242,7 +242,7 @@ impl<'a, C, A> Branch<'a, C, A> {
     /// walk failed.
     pub fn walk<W>(root: &'a C, mut walker: W) -> Result<Option<Self>, Error>
     where
-        C: Compound<A> + Getable,
+        C: Compound<A>,
         W: Walker<C, A>,
     {
         let mut partial = PartialBranch::new(root);

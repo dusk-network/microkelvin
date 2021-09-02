@@ -8,12 +8,15 @@ use alloc::rc::Rc;
 use core::cell::{Ref, RefCell, RefMut};
 use core::mem;
 use core::ops::{Deref, DerefMut};
+use rkyv::validation::validators::DefaultValidator;
 use rkyv::Fallible;
 
 use bytecheck::CheckBytes;
-use rkyv::{ser::Serializer, Archive, Deserialize, Serialize};
+use rkyv::{Archive, Deserialize, Serialize};
 
-use crate::backend::{Getable, PortalProvider, Putable};
+use crate::backend::{
+    Getable, PortalDeserializer, PortalProvider, PortalSerializer, Putable,
+};
 use crate::error::Error;
 use crate::id::{Id, IdHash};
 
@@ -40,51 +43,60 @@ pub struct Link<C, A> {
 }
 
 #[derive(CheckBytes)]
-pub struct ArchivedLink<A>(IdHash, A);
+pub struct ArchivedLink<A: Archive>(<IdHash as Archive>::Archived, A::Archived);
 
-impl<C, A> Archive for Link<C, A> {
+impl<C, A> Archive for Link<C, A>
+where
+    A: Archive,
+{
     type Archived = ArchivedLink<A>;
-    type Resolver = (IdHash, A);
+    type Resolver = (Id<C>, A);
 
     unsafe fn resolve(
         &self,
         _pos: usize,
-        (id, anno): Self::Resolver,
+        resolver: Self::Resolver,
         out: *mut Self::Archived,
     ) {
-        *out = ArchivedLink(id, anno)
+        *out = todo!()
     }
 }
 
-impl<D, C, A> Deserialize<Link<C, A>, D> for ArchivedLink<A>
+impl<C, A> Deserialize<Link<C, A>, PortalDeserializer> for ArchivedLink<A>
 where
-    D: Fallible + PortalProvider,
-    A: Clone,
+    A: Archive + Clone,
+    A::Archived: Deserialize<A, PortalDeserializer>,
 {
     fn deserialize(
         &self,
-        deserializer: &mut D,
-    ) -> Result<Link<C, A>, D::Error> {
-        let id = Id::new(self.0, deserializer.portal());
+        de: &mut PortalDeserializer,
+    ) -> Result<Link<C, A>, Error> {
+        let id = Id::new(self.0, de.portal());
+        let anno = self.1.deserialize(de)?;
         Ok(Link {
-            inner: RefCell::new(LinkInner::Ia(id, self.1.clone())),
+            inner: RefCell::new(LinkInner::Ia(id, anno)),
         })
     }
 }
 
-impl<S, C, A> Serialize<S> for Link<C, A>
+impl<C, A> Serialize<PortalSerializer> for Link<C, A>
 where
-    S: Serializer + PortalProvider,
-    S::Error: From<Error>,
-    C: Compound<A> + Putable + Getable,
-    A: Annotation<C::Leaf> + Clone,
+    C: Compound<A> + Archive + Serialize<PortalSerializer>,
+    C::Archived: for<'a> CheckBytes<DefaultValidator<'a>>
+        + Deserialize<C, PortalDeserializer>,
+    A: Clone + Archive + Annotation<C::Leaf>,
+    A::Archived: for<'a> CheckBytes<DefaultValidator<'a>>
+        + Deserialize<A, PortalDeserializer>,
 {
-    fn serialize(&self, provider: &mut S) -> Result<Self::Resolver, S::Error> {
+    fn serialize(
+        &self,
+        provider: &mut PortalSerializer,
+    ) -> Result<Self::Resolver, <PortalSerializer as Fallible>::Error> {
         let anno = self.annotation().clone();
-        let portal = provider.portal().clone();
+        let portal = provider.portal();
         let to_put = &*self.inner()?;
         let id = to_put.put(portal)?;
-        Ok((id.into_hash(), anno))
+        Ok((id, anno))
     }
 }
 
