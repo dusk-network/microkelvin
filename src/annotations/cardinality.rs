@@ -12,11 +12,9 @@ use bytecheck::CheckBytes;
 use rkyv::{Archive, Deserialize, Serialize};
 
 use crate::annotations::{Annotation, Combine};
-use crate::backend::Getable;
 use crate::branch::Branch;
 use crate::branch_mut::BranchMut;
 use crate::compound::{AnnoIter, Child, Compound, MutableLeaves};
-use crate::error::Error;
 use crate::walk::{Step, Walk, Walker};
 
 /// The cardinality of a compound collection
@@ -62,7 +60,7 @@ pub struct Offset(u64);
 
 impl<C, A> Walker<C, A> for Offset
 where
-    C: Compound<A> + Getable,
+    C: Compound<A>,
     A: Annotation<C::Leaf> + Borrow<Cardinality>,
 {
     fn walk(&mut self, walk: Walk<C, A>) -> Step {
@@ -96,31 +94,25 @@ where
 /// Cardinality annotation
 pub trait Nth<'a, A>: Sized {
     /// Construct a `Branch` pointing to the `nth` element, if any
-    fn nth(&'a self, n: u64) -> Result<Option<Branch<'a, Self, A>>, Error>;
+    fn nth(&'a self, n: u64) -> Option<Branch<'a, Self, A>>;
 
     /// Construct a `BranchMut` pointing to the `nth` element, if any
-    fn nth_mut(
-        &'a mut self,
-        n: u64,
-    ) -> Result<Option<BranchMut<'a, Self, A>>, Error>
+    fn nth_mut(&'a mut self, n: u64) -> Option<BranchMut<'a, Self, A>>
     where
         Self: MutableLeaves + Clone;
 }
 
 impl<'a, C, A> Nth<'a, A> for C
 where
-    C: Compound<A> + Getable,
+    C: Compound<A>,
     A: Annotation<C::Leaf> + Borrow<Cardinality>,
 {
-    fn nth(&'a self, ofs: u64) -> Result<Option<Branch<'a, Self, A>>, Error> {
+    fn nth(&'a self, ofs: u64) -> Option<Branch<'a, Self, A>> {
         // Return the first that satisfies the walk
         Branch::<_, A>::walk(self, Offset(ofs))
     }
 
-    fn nth_mut(
-        &'a mut self,
-        ofs: u64,
-    ) -> Result<Option<BranchMut<'a, Self, A>>, Error>
+    fn nth_mut(&'a mut self, ofs: u64) -> Option<BranchMut<'a, Self, A>>
     where
         C: MutableLeaves + Clone,
     {

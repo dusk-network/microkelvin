@@ -13,11 +13,9 @@ use bytecheck::CheckBytes;
 use rkyv::{Archive, Deserialize, Serialize};
 
 use crate::annotations::{Annotation, Combine};
-use crate::backend::Getable;
 use crate::branch::Branch;
 use crate::branch_mut::BranchMut;
 use crate::compound::{AnnoIter, Child, Compound, MutableLeaves};
-use crate::error::Error;
 use crate::walk::{Step, Walk, Walker};
 
 /// The maximum value of a collection
@@ -124,7 +122,7 @@ impl<K> Default for FindMaxKey<K> {
 
 impl<C, A, K> Walker<C, A> for FindMaxKey<K>
 where
-    C: Compound<A> + Getable,
+    C: Compound<A>,
     C::Leaf: Keyed<K>,
     A: Annotation<C::Leaf> + Borrow<MaxKey<K>>,
     K: Ord + Clone,
@@ -169,12 +167,10 @@ where
     K: Ord,
 {
     /// Construct a `Branch` pointing to the element with the largest key
-    fn max_key(&'a self) -> Result<Option<Branch<'a, Self, A>>, Error>;
+    fn max_key(&'a self) -> Option<Branch<'a, Self, A>>;
 
     /// Construct a `BranchMut` pointing to the element with the largest key
-    fn max_key_mut(
-        &'a mut self,
-    ) -> Result<Option<BranchMut<'a, Self, A>>, Error>
+    fn max_key_mut(&'a mut self) -> Option<BranchMut<'a, Self, A>>
     where
         Self: MutableLeaves + Clone;
 }
@@ -186,14 +182,12 @@ where
     A: Annotation<C::Leaf> + Borrow<MaxKey<K>>,
     K: Ord + Clone,
 {
-    fn max_key(&'a self) -> Result<Option<Branch<'a, Self, A>>, Error> {
+    fn max_key(&'a self) -> Option<Branch<'a, Self, A>> {
         // Return the first that satisfies the walk
         Branch::<_, A>::walk(self, FindMaxKey::default())
     }
 
-    fn max_key_mut(
-        &'a mut self,
-    ) -> Result<Option<BranchMut<'a, Self, A>>, Error>
+    fn max_key_mut(&'a mut self) -> Option<BranchMut<'a, Self, A>>
     where
         C: MutableLeaves + Clone,
     {

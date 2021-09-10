@@ -9,11 +9,19 @@ use core::marker::PhantomData;
 use bytecheck::CheckBytes;
 use rkyv::Archive;
 
-use crate::backend::{Getable, Portal};
-use crate::error::Error;
+use crate::backend::Portal;
 
 #[derive(Debug, Clone, Hash, Copy, PartialEq, Eq, CheckBytes)]
 pub struct IdHash([u8; 32]);
+
+impl IdHash {
+    pub fn new(from: &[u8]) -> Self {
+        assert_eq!(from.len(), 32);
+        let mut bytes = [0u8; 32];
+        bytes.copy_from_slice(from);
+        IdHash(bytes)
+    }
+}
 
 impl Archive for IdHash {
     type Archived = Self;
@@ -72,10 +80,12 @@ impl<C> Id<C> {
     }
 
     /// Pull out the represented value of the Id
-    pub fn reify(&self) -> Result<C, Error>
-    where
-        C: Getable,
-    {
-        C::get(&self.hash, self.portal.clone())
+    pub fn reify(&self) -> C {
+        todo!()
+    }
+
+    /// Pull out the represented value of the Id
+    pub fn hash(&self) -> &IdHash {
+        &self.hash
     }
 }

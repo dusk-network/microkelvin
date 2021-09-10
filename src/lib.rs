@@ -24,24 +24,22 @@ mod backend;
 mod branch;
 mod branch_mut;
 mod compound;
-mod error;
 mod id;
 mod link;
 mod walk;
+
+pub use annotations::{
+    Annotation, Cardinality, Combine, GetMaxKey, Keyed, MaxKey, Nth,
+};
+pub use backend::{Backend, Portal, PortalDeserializer, PortalProvider};
+pub use branch::Branch;
+pub use branch_mut::BranchMut;
+pub use compound::{AnnoIter, Child, ChildMut, Compound, MutableLeaves};
+pub use id::Id;
+pub use link::{Link, LinkAnnotation, LinkCompound, LinkCompoundMut};
+pub use walk::{First, Step, Walk, Walker};
 
 #[cfg(feature = "host")]
 mod disk;
 #[cfg(feature = "host")]
 pub use disk::DiskBackend;
-
-pub use annotations::{
-    Annotation, Cardinality, Combine, GetMaxKey, Keyed, MaxKey, Nth,
-};
-pub use backend::{Backend, Getable, Portal, PortalDeserializer, Putable};
-pub use branch::Branch;
-pub use branch_mut::BranchMut;
-pub use compound::{AnnoIter, Child, ChildMut, Compound, MutableLeaves};
-pub use error::Error;
-pub use id::Id;
-pub use link::{Link, LinkAnnotation, LinkCompound, LinkCompoundMut};
-pub use walk::{First, Step, Walk, Walker};

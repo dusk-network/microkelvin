@@ -7,7 +7,6 @@
 use core::marker::PhantomData;
 
 use crate::annotations::{Annotation, WrappedAnnotation};
-use crate::backend::{Getable, Putable};
 use crate::link::Link;
 
 /// The response of the `child` method on a `Compound` node.
@@ -43,7 +42,7 @@ where
 }
 
 /// A type that can recursively contain itself and leaves.
-pub trait Compound<A>: Sized + Getable + Putable {
+pub trait Compound<A>: Sized {
     /// The leaf type of the Compound collection
     type Leaf;
 

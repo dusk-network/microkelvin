@@ -6,11 +6,9 @@
 
 use core::marker::PhantomData;
 
-use crate::backend::Getable;
 use crate::branch::Branch;
 use crate::branch_mut::BranchMut;
 use crate::compound::{Child, Compound, MutableLeaves};
-use crate::error::Error;
 
 /// The return value from a closure to `walk` the tree.
 ///
@@ -84,23 +82,23 @@ where
     Self: Compound<A>,
 {
     /// Construct a `Branch` pointing to the first element, if not empty
-    fn first(&'a self) -> Result<Option<Branch<'a, Self, A>>, Error>;
+    fn first(&'a self) -> Option<Branch<'a, Self, A>>;
 
     /// Construct a `BranchMut` pointing to the first element, if not empty
-    fn first_mut(&'a mut self) -> Result<Option<BranchMut<'a, Self, A>>, Error>
+    fn first_mut(&'a mut self) -> Option<BranchMut<'a, Self, A>>
     where
         Self: MutableLeaves + Clone;
 }
 
 impl<'a, C, A> First<'a, A> for C
 where
-    C: Compound<A> + Getable,
+    C: Compound<A>,
 {
-    fn first(&'a self) -> Result<Option<Branch<'a, Self, A>>, Error> {
+    fn first(&'a self) -> Option<Branch<'a, Self, A>> {
         Branch::<_, A>::walk(self, AllLeaves)
     }
 
-    fn first_mut(&'a mut self) -> Result<Option<BranchMut<'a, Self, A>>, Error>
+    fn first_mut(&'a mut self) -> Option<BranchMut<'a, Self, A>>
     where
         C: MutableLeaves + Clone,
     {

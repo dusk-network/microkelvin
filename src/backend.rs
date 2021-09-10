@@ -1,26 +1,25 @@
 use alloc::sync::Arc;
 
+use crate::id::{Id, IdHash};
 use bytecheck::CheckBytes;
-use rkyv::ser::serializers::AlignedSerializer;
-use rkyv::ser::Serializer;
+use rkyv::ser::{serializers::AlignedSerializer, Serializer};
 use rkyv::validation::validators::DefaultValidator;
 use rkyv::{
-    check_archived_root, AlignedVec, Archive, Deserialize, Fallible, Serialize,
+    check_archived_root, AlignedVec, Archive, Fallible, Infallible, Serialize,
 };
-
-use crate::error::Error;
-use crate::id::{Id, IdHash};
 
 /// The trait defining a disk or network backend for microkelvin structures.
 pub trait Backend {
     /// Get get a type stored in the backend from an `Id`
-    fn get(&self, id: &IdHash, into: &mut [u8]) -> Result<(), Error>;
+    fn get(&self, id: &IdHash, len: usize) -> &[u8];
 
-    /// Write encoded bytes with a corresponding `Id` into the backend
-    fn put(&self, serialized: &[u8]) -> Result<IdHash, Error>;
+    /// Write encoded bytes into the backend
+    fn put(&self, id: IdHash, serialized: &[u8]);
 }
 
+/// This type can provide a `Portal`
 pub trait PortalProvider {
+    /// Return a clone of the contained portal
     fn portal(&self) -> Portal;
 }
 
@@ -30,20 +29,20 @@ pub struct PortalSerializer {
 }
 
 impl PortalSerializer {
-    fn new(portal: Portal) -> Self {
+    pub fn new(portal: Portal) -> Self {
         PortalSerializer {
             portal,
             serializer: Default::default(),
         }
     }
 
-    fn into_inner(self) -> AlignedVec {
+    pub fn into_inner(self) -> AlignedVec {
         self.serializer.into_inner()
     }
 }
 
 impl Fallible for PortalSerializer {
-    type Error = Error;
+    type Error = Infallible;
 }
 
 impl PortalProvider for PortalSerializer {
@@ -57,9 +56,8 @@ impl Serializer for PortalSerializer {
         self.serializer.pos()
     }
 
-    fn write(&mut self, bytes: &[u8]) -> Result<(), Error> {
-        // FIXME: this error handling is non-ideal
-        self.serializer.write(bytes).map_err(|_| Error::Invalid)
+    fn write(&mut self, bytes: &[u8]) -> Result<(), <Self as Fallible>::Error> {
+        Ok(self.serializer.write(bytes).expect("Infallible"))
     }
 }
 
@@ -75,13 +73,28 @@ impl Portal {
     }
 
     /// Get get a type stored in the backend from an `Id`
-    pub fn get(&self, id: &IdHash, into: &mut [u8]) -> Result<(), Error> {
-        self.0.get(id, into)
+    pub fn get<C>(&self, id: &Id<C>) -> &C::Archived
+    where
+        C: Archive,
+        C::Archived: for<'a> CheckBytes<DefaultValidator<'a>>,
+    {
+        let len = core::mem::size_of::<C::Archived>();
+        let bytes = self.0.get(id.hash(), len);
+        check_archived_root::<C>(bytes).expect("Invalid data")
     }
 
-    /// Write encoded bytes with a corresponding `Id` into the backend
-    pub fn put(&self, serialized: &[u8]) -> Result<IdHash, Error> {
-        self.0.put(serialized)
+    /// Encode value into the backend, returns the Id
+    pub fn put<C, S>(&self, c: &C) -> Id<C>
+    where
+        C: Serialize<S>,
+        S: Fallible + PortalProvider + From<Portal>,
+    {
+        let mut ser = PortalSerializer::new(self.clone());
+        ser.serialize_value(c).expect("Infallible");
+        let bytes = &ser.into_inner()[..];
+        let hash = IdHash::new(blake3::hash(bytes).as_bytes());
+        self.0.put(hash.clone(), &bytes);
+        Id::new_from_hash(hash, self.clone())
     }
 }
 
@@ -89,62 +102,11 @@ impl Portal {
 pub struct PortalDeserializer(Portal);
 
 impl Fallible for PortalDeserializer {
-    type Error = Error;
+    type Error = Infallible;
 }
 
 impl PortalProvider for PortalDeserializer {
     fn portal(&self) -> Portal {
         self.0.clone()
-    }
-}
-
-/// This type can be parsed out of raw bytes
-///
-/// FIXME: naming
-pub trait Getable: Sized + Archive + Clone {
-    /// Get value
-    fn get(idhash: &IdHash, portal: Portal) -> Result<Self, Error>;
-}
-
-impl<C> Getable for C
-where
-    C: Archive + Clone,
-    C::Archived: for<'a> CheckBytes<DefaultValidator<'a>>
-        + Deserialize<C, PortalDeserializer>,
-{
-    fn get(idhash: &IdHash, portal: Portal) -> Result<Self, Error> {
-        // FIXME, this could probably be changed to have the backend provide the
-        // byte slice.
-        let mut bytes =
-            vec![0u8; core::mem::size_of::<<C as Archive>::Archived>()];
-        portal.get(idhash, &mut bytes)?;
-
-        let archived =
-            check_archived_root::<C>(&bytes[..]).map_err(|_| Error::Invalid)?;
-
-        if let Ok(val) = archived.deserialize(&mut PortalDeserializer(portal)) {
-            Ok(val)
-        } else {
-            unreachable!()
-        }
-    }
-}
-
-/// Value can be put through a portal
-pub trait Putable: Sized + Serialize<PortalSerializer> {
-    /// Put self into the Portal, returns the generated Id
-    fn put(&self, portal: Portal) -> Result<Id<Self>, Error>;
-}
-
-impl<C> Putable for C
-where
-    C: Serialize<PortalSerializer>,
-{
-    fn put(&self, portal: Portal) -> Result<Id<C>, Error> {
-        let mut ser = PortalSerializer::new(portal.clone());
-        ser.serialize_value(self).expect("Infallible");
-        let bytes = &ser.into_inner()[..];
-        let hash = portal.put(&bytes)?;
-        Ok(Id::new_from_hash(hash, portal))
     }
 }

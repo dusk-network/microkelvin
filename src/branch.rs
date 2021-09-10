@@ -8,9 +8,7 @@ use core::ops::Deref;
 
 use alloc::vec::Vec;
 
-use crate::backend::Getable;
 use crate::compound::{Child, Compound};
-use crate::error::Error;
 use crate::link::LinkCompound;
 use crate::walk::{AllLeaves, Step, Walk, Walker};
 
@@ -120,9 +118,9 @@ impl<'a, C, A> PartialBranch<'a, C, A> {
         }
     }
 
-    fn walk<W>(&mut self, walker: &mut W) -> Result<Option<()>, Error>
+    fn walk<W>(&mut self, walker: &mut W) -> Option<()>
     where
-        C: Compound<A> + Getable,
+        C: Compound<A>,
         W: Walker<C, A>,
     {
         enum State<'a, C, A> {
@@ -140,7 +138,7 @@ impl<'a, C, A> PartialBranch<'a, C, A> {
                     Some(_) => {
                         self.advance();
                     }
-                    None => return Ok(None),
+                    None => return None,
                 },
             }
 
@@ -150,14 +148,14 @@ impl<'a, C, A> PartialBranch<'a, C, A> {
             match step {
                 Step::Found(walk_ofs) => {
                     *top.offset_mut() += walk_ofs;
-                    return Ok(Some(()));
+                    return Some(());
                 }
                 Step::Into(walk_ofs) => {
                     *top.offset_mut() += walk_ofs;
                     let ofs = top.offset();
                     let top_child = top.child(ofs);
                     if let Child::Node(n) = top_child {
-                        let level: Level<'_, C, A> = Level::new_val(n.inner()?);
+                        let level: Level<'_, C, A> = Level::new_val(n.inner());
                         // Extend the lifetime of the Level.
                         //
                         // JUSTIFICATION
@@ -205,7 +203,7 @@ impl<'a, C, A> PartialBranch<'a, C, A> {
                 }
                 Step::Advance => state = State::Pop,
                 Step::Abort => {
-                    return Ok(None);
+                    return None;
                 }
             }
         }
@@ -240,13 +238,13 @@ impl<'a, C, A> Branch<'a, C, A> {
 
     /// Performs a tree walk, returning either a valid branch or None if the
     /// walk failed.
-    pub fn walk<W>(root: &'a C, mut walker: W) -> Result<Option<Self>, Error>
+    pub fn walk<W>(root: &'a C, mut walker: W) -> Option<Self>
     where
         C: Compound<A>,
         W: Walker<C, A>,
     {
         let mut partial = PartialBranch::new(root);
-        Ok(partial.walk(&mut walker)?.map(|()| Branch(partial)))
+        partial.walk(&mut walker).map(|()| Branch(partial))
     }
 }
 
@@ -297,9 +295,9 @@ pub enum BranchIterator<'a, C, A, W> {
 // iterators
 impl<'a, C, A> IntoIterator for Branch<'a, C, A>
 where
-    C: Compound<A> + Getable,
+    C: Compound<A>,
 {
-    type Item = Result<&'a C::Leaf, Error>;
+    type Item = &'a C::Leaf;
 
     type IntoIter = BranchIterator<'a, C, A, AllLeaves>;
 
@@ -310,10 +308,10 @@ where
 
 impl<'a, C, A, W> Iterator for BranchIterator<'a, C, A, W>
 where
-    C: Compound<A> + Getable,
+    C: Compound<A>,
     W: Walker<C, A>,
 {
-    type Item = Result<&'a C::Leaf, Error>;
+    type Item = &'a C::Leaf;
 
     fn next(&mut self) -> Option<Self::Item> {
         match core::mem::replace(self, BranchIterator::Exhausted) {
@@ -324,15 +322,12 @@ where
                 branch.0.advance();
                 // access partialbranch
                 match branch.0.walk(&mut walker) {
-                    Ok(None) => {
+                    None => {
                         *self = BranchIterator::Exhausted;
                         return None;
                     }
-                    Ok(Some(..)) => {
+                    Some(_) => {
                         *self = BranchIterator::Intermediate(branch, walker);
-                    }
-                    Err(e) => {
-                        return Some(Err(e));
                     }
                 }
             }
@@ -346,7 +341,7 @@ where
                 let leaf: &C::Leaf = &*branch;
                 let leaf_extended: &'a C::Leaf =
                     unsafe { core::mem::transmute(leaf) };
-                Some(Ok(leaf_extended))
+                Some(leaf_extended)
             }
             _ => unreachable!(),
         }
@@ -364,10 +359,10 @@ where
 
 impl<'a, C, A, M> IntoIterator for MappedBranch<'a, C, A, M>
 where
-    C: Compound<A> + Getable,
+    C: Compound<A>,
     M: 'a,
 {
-    type Item = Result<&'a M, Error>;
+    type Item = &'a M;
 
     type IntoIter = MappedBranchIterator<'a, C, A, AllLeaves, M>;
 
@@ -378,11 +373,11 @@ where
 
 impl<'a, C, A, W, M> Iterator for MappedBranchIterator<'a, C, A, W, M>
 where
-    C: Compound<A> + Getable,
+    C: Compound<A>,
     W: Walker<C, A>,
     M: 'a,
 {
-    type Item = Result<&'a M, Error>;
+    type Item = &'a M;
 
     fn next(&mut self) -> Option<Self::Item> {
         match core::mem::replace(self, Self::Exhausted) {
@@ -393,15 +388,12 @@ where
                 branch.inner.0.advance();
                 // access partialbranch
                 match branch.inner.0.walk(&mut walker) {
-                    Ok(None) => {
+                    None => {
                         *self = Self::Exhausted;
                         return None;
                     }
-                    Ok(Some(..)) => {
+                    Some(_) => {
                         *self = Self::Intermediate(branch, walker);
-                    }
-                    Err(e) => {
-                        return Some(Err(e));
                     }
                 }
             }
@@ -415,7 +407,7 @@ where
                 let leaf: &M = &*branch;
                 let leaf_extended: &'a M =
                     unsafe { core::mem::transmute(leaf) };
-                Some(Ok(leaf_extended))
+                Some(leaf_extended)
             }
             _ => unreachable!(),
         }

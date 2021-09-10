@@ -14,8 +14,8 @@ use bytecheck::CheckBytes;
 use rkyv::{Archive, Deserialize, Serialize};
 
 use microkelvin::{
-    AnnoIter, Annotation, Cardinality, Combine, Compound, Error, GetMaxKey,
-    Keyed, MaxKey,
+    AnnoIter, Annotation, Cardinality, Combine, Compound, GetMaxKey, Keyed,
+    MaxKey,
 };
 
 #[derive(Default, Clone, Archive, Serialize, Deserialize)]
@@ -81,7 +81,7 @@ impl Keyed<u64> for TestLeaf {
 }
 
 #[test]
-fn maximum_multiple() -> Result<(), Error> {
+fn maximum_multiple() {
     let n: u64 = 1024;
 
     let mut keys = vec![];
@@ -98,7 +98,7 @@ fn maximum_multiple() -> Result<(), Error> {
         list.push(TestLeaf { key, other: () });
     }
 
-    let max = list.max_key()?.expect("Some(branch)");
+    let max = list.max_key().expect("Some(branch)");
 
     assert_eq!(
         *max,
@@ -107,6 +107,4 @@ fn maximum_multiple() -> Result<(), Error> {
             other: ()
         }
     );
-
-    Ok(())
 }
