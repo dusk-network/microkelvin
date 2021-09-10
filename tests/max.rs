@@ -10,7 +10,7 @@ use rkyv::{Archive, Deserialize, Serialize};
 
 mod linked_list;
 use linked_list::LinkedList;
-use microkelvin::{Error, GetMaxKey, Keyed, MaxKey};
+use microkelvin::{GetMaxKey, Keyed, MaxKey};
 
 #[derive(PartialEq, Clone, Debug, Archive, Serialize, Deserialize)]
 #[archive_attr(derive(CheckBytes))]
@@ -26,7 +26,7 @@ impl Keyed<u64> for TestLeaf {
 }
 
 #[test]
-fn maximum() -> Result<(), Error> {
+fn maximum() {
     let n: u64 = 1024;
 
     let mut keys = vec![];
@@ -43,7 +43,7 @@ fn maximum() -> Result<(), Error> {
         list.push(TestLeaf { key, other: () });
     }
 
-    let max = list.max_key()?.expect("Some(branch)");
+    let max = list.max_key().expect("Some(branch)");
 
     assert_eq!(
         *max,
@@ -52,6 +52,4 @@ fn maximum() -> Result<(), Error> {
             other: ()
         }
     );
-
-    Ok(())
 }

@@ -17,7 +17,6 @@ use rkyv::{Archive, Deserialize, Serialize};
 use crate::backend::{
     Getable, PortalDeserializer, PortalProvider, PortalSerializer,
 };
-use crate::error::Error;
 use crate::id::{Id, IdHash};
 
 use crate::{Annotation, Compound};
@@ -71,7 +70,7 @@ where
     fn deserialize(
         &self,
         de: &mut PortalDeserializer,
-    ) -> Result<Link<C, A>, Error> {
+    ) -> Result<Link<C, A>, <PortalDeserializer as Fallible>::Error> {
         let id = Id::new_from_hash(self.0, de.portal());
         let anno = self.1.deserialize(de)?;
         Ok(Link {
@@ -95,8 +94,8 @@ where
     ) -> Result<Self::Resolver, <PortalSerializer as Fallible>::Error> {
         let anno = self.annotation().clone();
         let portal = provider.portal();
-        let to_put = &*self.inner()?;
-        let id = to_put.put(portal)?;
+        let to_put = &*self.inner();
+        let id = to_put.put(portal);
         Ok((id, anno))
     }
 }
@@ -159,20 +158,20 @@ impl<C, A> Link<C, A> {
     /// Consumes the link and returns the inner Compound value
     ///
     /// Can fail when trying to fetch data over i/o
-    pub fn unlink(self) -> Result<C, Error>
+    pub fn unlink(self) -> C
     where
         C: Getable + Clone,
     {
         // assure inner value is loaded
-        let _ = self.inner()?;
+        let _ = self.inner();
 
         let inner = self.inner.into_inner();
         match inner {
             LinkInner::C(rc)
             | LinkInner::Ca(rc, _)
             | LinkInner::Ica(_, rc, _) => match Rc::try_unwrap(rc) {
-                Ok(c) => Ok(c),
-                Err(rc) => Ok((&*rc).clone()),
+                Ok(c) => c,
+                Err(rc) => (&*rc).clone(),
             },
             _ => unreachable!(),
         }
@@ -180,7 +179,7 @@ impl<C, A> Link<C, A> {
 
     /// See doc for `inner`
     #[deprecated(since = "0.10.0", note = "Please use `inner` instead")]
-    pub fn compound(&self) -> Result<LinkCompound<C, A>, Error>
+    pub fn compound(&self) -> LinkCompound<C, A>
     where
         C: Getable,
     {
@@ -190,7 +189,7 @@ impl<C, A> Link<C, A> {
     /// Gets a reference to the inner compound of the link'
     ///
     /// Can fail when trying to fetch data over i/o
-    pub fn inner(&self) -> Result<LinkCompound<C, A>, Error>
+    pub fn inner(&self) -> LinkCompound<C, A>
     where
         C: Getable,
     {
@@ -199,10 +198,10 @@ impl<C, A> Link<C, A> {
         match *borrow {
             LinkInner::Placeholder => unreachable!(),
             LinkInner::C(_) | LinkInner::Ca(_, _) | LinkInner::Ica(_, _, _) => {
-                return Ok(LinkCompound(borrow))
+                return LinkCompound(borrow)
             }
             LinkInner::Ia(ref id, _) => {
-                let inner = id.reify()?;
+                let inner = id.reify();
                 // re-borrow mutable
                 drop(borrow);
                 let mut borrow = self.inner.borrow_mut();
@@ -215,7 +214,7 @@ impl<C, A> Link<C, A> {
                     drop(borrow);
                     let borrow = self.inner.borrow();
 
-                    Ok(LinkCompound(borrow))
+                    LinkCompound(borrow)
                 } else {
                     unreachable!("Guaranteed to match the same as above")
                 }
@@ -225,7 +224,7 @@ impl<C, A> Link<C, A> {
 
     /// See doc for `inner_mut`
     #[deprecated(since = "0.10.0", note = "Please use `inner` instead")]
-    pub fn compound_mut(&mut self) -> Result<LinkCompoundMut<C, A>, Error>
+    pub fn compound_mut(&mut self) -> LinkCompoundMut<C, A>
     where
         C: Getable,
     {
@@ -237,12 +236,12 @@ impl<C, A> Link<C, A> {
     /// Drops cached annotations and ids
     ///
     /// Can fail when trying to fetch data over i/o
-    pub fn inner_mut(&mut self) -> Result<LinkCompoundMut<C, A>, Error>
+    pub fn inner_mut(&mut self) -> LinkCompoundMut<C, A>
     where
         C: Getable,
     {
         // assure inner value is loaded
-        let _ = self.inner()?;
+        let _ = self.inner();
         let mut borrow: RefMut<LinkInner<C, A>> = self.inner.borrow_mut();
 
         match mem::replace(&mut *borrow, LinkInner::Placeholder) {
@@ -252,7 +251,7 @@ impl<C, A> Link<C, A> {
             }
             _ => unreachable!(),
         }
-        Ok(LinkCompoundMut(borrow))
+        LinkCompoundMut(borrow)
     }
 }
 

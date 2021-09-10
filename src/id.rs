@@ -10,7 +10,6 @@ use bytecheck::CheckBytes;
 use rkyv::Archive;
 
 use crate::backend::{Getable, Portal};
-use crate::error::Error;
 
 #[derive(Debug, Clone, Hash, Copy, PartialEq, Eq, CheckBytes)]
 pub struct IdHash([u8; 32]);
@@ -72,7 +71,7 @@ impl<C> Id<C> {
     }
 
     /// Pull out the represented value of the Id
-    pub fn reify(&self) -> Result<C, Error>
+    pub fn reify(&self) -> C
     where
         C: Getable,
     {

@@ -12,7 +12,7 @@ mod persist_tests {
 
     use linked_list::LinkedList;
 
-    use microkelvin::{DiskBackend, Error, Keyed, Portal, Putable};
+    use microkelvin::{DiskBackend, Keyed, Portal, Putable};
 
     #[derive(PartialEq, Clone, Debug)]
     struct TestLeaf {
@@ -26,7 +26,7 @@ mod persist_tests {
         }
     }
 
-    fn persist() -> Result<(), Error> {
+    fn persist() -> Result<(), io::Error> {
         let n: u64 = 16;
 
         let mut list = LinkedList::<_, ()>::new();
