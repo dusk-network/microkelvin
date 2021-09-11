@@ -14,6 +14,15 @@ use crate::backend::{Getable, Portal};
 #[derive(Debug, Clone, Hash, Copy, PartialEq, Eq, CheckBytes)]
 pub struct IdHash([u8; 32]);
 
+impl IdHash {
+    pub fn new(from: &[u8]) -> Self {
+        assert_eq!(from.len(), 32);
+        let mut bytes = [0u8; 32];
+        bytes.copy_from_slice(from);
+        IdHash(bytes)
+    }
+}
+
 impl Archive for IdHash {
     type Archived = Self;
 
@@ -76,5 +85,10 @@ impl<C> Id<C> {
         C: Getable,
     {
         C::get(&self.hash, self.portal.clone())
+    }
+
+    /// Pull out the represented value of the Id
+    pub fn hash(&self) -> IdHash {
+        self.hash.clone()
     }
 }

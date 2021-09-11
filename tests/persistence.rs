@@ -12,6 +12,10 @@ mod persist_tests {
 
     use linked_list::LinkedList;
 
+    use std::io;
+
+    use tempfile::tempdir;
+
     use microkelvin::{DiskBackend, Keyed, Portal, Putable};
 
     #[derive(PartialEq, Clone, Debug)]
@@ -35,48 +39,52 @@ mod persist_tests {
             list.push(i);
         }
 
-        let portal = Portal::new(DiskBackend::ephemeral()?);
+        let dir = tempdir()?;
+        let db = DiskBackend::new(dir.path())?;
+        let portal = Portal::new(db);
 
-        let id = list.put(portal)?;
-        let mut restored = id.reify()?;
+        let id = list.put(portal);
+        let mut restored = id.reify();
 
         // first empty the original
 
         for i in 0..n {
-            assert_eq!(list.pop()?, Some(n - i - 1));
+            assert_eq!(list.pop(), Some(n - i - 1));
         }
 
         // then the restored copy
 
         for i in 0..n {
-            assert_eq!(restored.pop()?, Some(n - i - 1));
+            assert_eq!(restored.pop(), Some(n - i - 1));
         }
 
         Ok(())
     }
 
     #[test]
-    fn persist_a() -> Result<(), Error> {
+    fn persist_a() -> Result<(), io::Error> {
         persist()
     }
 
     #[test]
-    fn persist_b() -> Result<(), Error> {
+    fn persist_b() -> Result<(), io::Error> {
         persist()
     }
 
     #[test]
-    fn persist_c() -> Result<(), Error> {
+    fn persist_c() -> Result<(), io::Error> {
         persist()
     }
 
     #[test]
-    fn persist_d() -> Result<(), Error> {
+    fn persist_d() -> Result<(), io::Error> {
         persist()
     }
 
-    fn persist_across_threads() -> Result<(), Error> {
-        let portal = Portal::new(DiskBackend::ephemeral()?);
+    fn persist_across_threads() -> Result<(), io::Error> {
+        let dir = tempdir()?;
+        let db = DiskBackend::new(dir.path())?;
+        let portal = Portal::new(db);
 
         let n: u64 = 16;
 
@@ -86,48 +94,48 @@ mod persist_tests {
             list.push(i);
         }
 
-        let persisted = list.put(portal)?;
+        let persisted = list.put(portal);
 
         // it should now be available from other threads
 
         std::thread::spawn(move || {
-            let mut restored = persisted.reify()?;
+            let mut restored = persisted.reify();
 
             for i in 0..n {
-                assert_eq!(restored.pop()?, Some(n - i - 1));
+                assert_eq!(restored.pop(), Some(n - i - 1));
             }
 
-            Ok(()) as Result<(), Error>
+            Ok(()) as Result<(), io::Error>
         })
         .join()
-        .expect("thread to join cleanly")?;
+        .expect("thread to join cleanly");
 
         // then empty the original
 
         for i in 0..n {
-            assert_eq!(list.pop()?, Some(n - i - 1));
+            assert_eq!(list.pop(), Some(n - i - 1));
         }
 
         Ok(())
     }
 
     #[test]
-    fn persist_across_threads_a() -> Result<(), Error> {
+    fn persist_across_threads_a() -> Result<(), io::Error> {
         persist_across_threads()
     }
 
     #[test]
-    fn persist_across_threads_b() -> Result<(), Error> {
+    fn persist_across_threads_b() -> Result<(), io::Error> {
         persist_across_threads()
     }
 
     #[test]
-    fn persist_across_threads_c() -> Result<(), Error> {
+    fn persist_across_threads_c() -> Result<(), io::Error> {
         persist_across_threads()
     }
 
     #[test]
-    fn persist_across_threads_d() -> Result<(), Error> {
+    fn persist_across_threads_d() -> Result<(), io::Error> {
         persist_across_threads()
     }
 }

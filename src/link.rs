@@ -9,7 +9,7 @@ use core::cell::{Ref, RefCell, RefMut};
 use core::mem;
 use core::ops::{Deref, DerefMut};
 use rkyv::validation::validators::DefaultValidator;
-use rkyv::Fallible;
+use rkyv::{out_field, Fallible};
 
 use bytecheck::CheckBytes;
 use rkyv::{Archive, Deserialize, Serialize};
@@ -42,23 +42,26 @@ pub struct Link<C, A> {
 }
 
 #[derive(CheckBytes)]
-pub struct ArchivedLink<A: Archive>(<IdHash as Archive>::Archived, A::Archived);
+pub struct ArchivedLink<A: Archive>(IdHash, A::Archived);
 
 impl<C, A> Archive for Link<C, A>
 where
-    A: Archive,
+    C: Compound<A>,
+    A: Archive + Annotation<C::Leaf>,
 {
     type Archived = ArchivedLink<A>;
-    type Resolver = (Id<C>, A);
+    type Resolver = (IdHash, A::Resolver);
 
     unsafe fn resolve(
         &self,
-        _pos: usize,
-        _resolver: Self::Resolver,
-        _out: *mut Self::Archived,
+        pos: usize,
+        resolver: Self::Resolver,
+        out: *mut Self::Archived,
     ) {
-        // *out = todo!();
-        todo!()
+        (*out).0 = resolver.0;
+        let (fp, fo) = out_field!(out.1);
+        let a = &*self.annotation();
+        a.resolve(pos + fp, resolver.1, fo);
     }
 }
 
@@ -92,11 +95,14 @@ where
         &self,
         provider: &mut PortalSerializer,
     ) -> Result<Self::Resolver, <PortalSerializer as Fallible>::Error> {
-        let anno = self.annotation().clone();
+        let anno = &*self.annotation();
+
+        let a_resolver = anno.serialize(provider).expect("Infallible");
+
         let portal = provider.portal();
         let to_put = &*self.inner();
         let id = to_put.put(portal);
-        Ok((id, anno))
+        Ok((id.hash(), a_resolver))
     }
 }
 

@@ -38,3 +38,8 @@ pub use compound::{AnnoIter, Child, ChildMut, Compound, MutableLeaves};
 pub use id::Id;
 pub use link::{Link, LinkAnnotation, LinkCompound, LinkCompoundMut};
 pub use walk::{First, Step, Walk, Walker};
+
+#[cfg(feature = "host")]
+mod disk;
+#[cfg(feature = "host")]
+pub use disk::DiskBackend;

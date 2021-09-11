@@ -16,8 +16,8 @@ pub trait Backend {
     /// Get get a type stored in the backend from an `Id`
     fn get(&self, id: &IdHash, len: usize) -> &[u8];
 
-    /// Write encoded bytes with a corresponding `Id` into the backend
-    fn put(&self, serialized: &[u8]) -> IdHash;
+    /// Write encoded bytes into the backend
+    fn put(&self, id: IdHash, serialized: &[u8]);
 }
 
 pub trait PortalProvider {
@@ -74,13 +74,16 @@ impl Portal {
     }
 
     /// Get get a type stored in the backend from an `Id`
-    pub fn get(&self, _id: &IdHash, _len: usize) -> &[u8] {
+    pub fn get<C: Archive>(&self, id: &Id<C>) -> &C::Archived {
         todo!()
     }
 
     /// Write encoded bytes with a corresponding `Id` into the backend
-    pub fn put(&self, serialized: &[u8]) -> IdHash {
-        self.0.put(serialized)
+    pub fn put<C>(&self, c: &C) -> Id<C> {
+        todo!()
+        // let id_hash = IdHash::new(blake3::hash(serialized).as_bytes());
+        // self.0.put(id_hash, serialized);
+        // id_hash
     }
 }
 
