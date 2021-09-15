@@ -7,14 +7,13 @@
 use bytecheck::CheckBytes;
 use microkelvin::{
     Annotation, Cardinality, Child, ChildMut, Compound, First, Link,
-    MutableLeaves, Nth, PortalProvider,
+    MutableLeaves, Nth,
 };
 use rkyv::{Archive, Deserialize, Serialize};
 
 #[derive(Clone, Archive, Serialize, Debug, Deserialize)]
 #[archive_attr(derive(CheckBytes))]
 #[archive(bound(serialize = "A: Archive"))]
-#[archive(bound(deserialize = "__D: PortalProvider"))]
 pub enum LinkedList<T, A> {
     Empty,
     Node {

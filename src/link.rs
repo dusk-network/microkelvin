@@ -8,7 +8,8 @@ use alloc::rc::Rc;
 use core::cell::{Ref, RefCell, RefMut};
 use core::mem;
 use core::ops::{Deref, DerefMut};
-use rkyv::{out_field, Fallible};
+use rkyv::ser::Serializer;
+use rkyv::{out_field, AlignedVec, Fallible};
 
 use bytecheck::CheckBytes;
 use rkyv::{Archive, Deserialize, Serialize};
@@ -43,22 +44,22 @@ pub struct ArchivedLink<A: Archive>(IdHash, A::Archived);
 
 impl<C, A> Archive for Link<C, A>
 where
-    C: Compound<A>,
-    A: Archive + Annotation<C::Leaf>,
+    A: Archive,
 {
     type Archived = ArchivedLink<A>;
     type Resolver = (IdHash, A::Resolver);
 
     unsafe fn resolve(
         &self,
-        pos: usize,
+        _pos: usize,
         resolver: Self::Resolver,
         out: *mut Self::Archived,
     ) {
         (*out).0 = resolver.0;
-        let (fp, fo) = out_field!(out.1);
-        let a = &*self.annotation();
-        a.resolve(pos + fp, resolver.1, fo);
+        todo!()
+        // let (fp, fo) = out_field!(out.1);
+        // // let a = &*self.annotation();
+        // a.resolve(pos + fp, resolver.1, fo);
     }
 }
 
@@ -84,7 +85,8 @@ impl<C, A, S> Serialize<S> for Link<C, A>
 where
     C: Compound<A> + Archive + Serialize<S>,
     A: Clone + Archive + Annotation<C::Leaf> + Serialize<S>,
-    S: Fallible + PortalProvider + From<Portal>,
+    S: Serializer + Fallible + PortalProvider + From<Portal> + Into<AlignedVec>,
+    S::Error: core::fmt::Debug,
 {
     fn serialize(
         &self,

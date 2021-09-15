@@ -23,21 +23,27 @@ pub trait PortalProvider {
     fn portal(&self) -> Portal;
 }
 
+pub trait IntoAlignedVec {
+    fn into_inner(self) -> AlignedVec;
+}
+
 pub struct PortalSerializer {
     portal: Portal,
     serializer: AlignedSerializer<AlignedVec>,
 }
 
-impl PortalSerializer {
-    pub fn new(portal: Portal) -> Self {
+impl Into<AlignedVec> for PortalSerializer {
+    fn into(self) -> AlignedVec {
+        self.serializer.into_inner()
+    }
+}
+
+impl From<Portal> for PortalSerializer {
+    fn from(portal: Portal) -> Self {
         PortalSerializer {
             portal,
             serializer: Default::default(),
         }
-    }
-
-    pub fn into_inner(self) -> AlignedVec {
-        self.serializer.into_inner()
     }
 }
 
@@ -87,11 +93,16 @@ impl Portal {
     pub fn put<C, S>(&self, c: &C) -> Id<C>
     where
         C: Serialize<S>,
-        S: Fallible + PortalProvider + From<Portal>,
+        S: Serializer
+            + Fallible
+            + PortalProvider
+            + From<Portal>
+            + Into<AlignedVec>,
+        S::Error: core::fmt::Debug,
     {
-        let mut ser = PortalSerializer::new(self.clone());
+        let mut ser = S::from(self.clone());
         ser.serialize_value(c).expect("Infallible");
-        let bytes = &ser.into_inner()[..];
+        let bytes = &ser.into()[..];
         let hash = IdHash::new(blake3::hash(bytes).as_bytes());
         self.0.put(hash.clone(), &bytes);
         Id::new_from_hash(hash, self.clone())
