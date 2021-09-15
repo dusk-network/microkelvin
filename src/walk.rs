@@ -6,7 +6,6 @@
 
 use core::marker::PhantomData;
 
-use crate::backend::Getable;
 use crate::branch::Branch;
 use crate::branch_mut::BranchMut;
 use crate::compound::{Child, Compound, MutableLeaves};
@@ -93,7 +92,7 @@ where
 
 impl<'a, C, A> First<'a, A> for C
 where
-    C: Compound<A> + Getable,
+    C: Compound<A>,
 {
     fn first(&'a self) -> Option<Branch<'a, Self, A>> {
         Branch::<_, A>::walk(self, AllLeaves)

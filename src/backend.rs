@@ -1,15 +1,12 @@
 use alloc::sync::Arc;
 
+use crate::id::{Id, IdHash};
 use bytecheck::CheckBytes;
-use rkyv::ser::serializers::AlignedSerializer;
-use rkyv::ser::Serializer;
+use rkyv::ser::{serializers::AlignedSerializer, Serializer};
 use rkyv::validation::validators::DefaultValidator;
 use rkyv::{
-    check_archived_root, AlignedVec, Archive, Deserialize, Fallible,
-    Infallible, Serialize,
+    check_archived_root, AlignedVec, Archive, Fallible, Infallible, Serialize,
 };
-
-use crate::id::{Id, IdHash};
 
 /// The trait defining a disk or network backend for microkelvin structures.
 pub trait Backend {
@@ -20,7 +17,9 @@ pub trait Backend {
     fn put(&self, id: IdHash, serialized: &[u8]);
 }
 
+/// This type can provide a `Portal`
 pub trait PortalProvider {
+    /// Return a clone of the contained portal
     fn portal(&self) -> Portal;
 }
 
@@ -30,14 +29,14 @@ pub struct PortalSerializer {
 }
 
 impl PortalSerializer {
-    fn new(portal: Portal) -> Self {
+    pub fn new(portal: Portal) -> Self {
         PortalSerializer {
             portal,
             serializer: Default::default(),
         }
     }
 
-    fn into_inner(self) -> AlignedVec {
+    pub fn into_inner(self) -> AlignedVec {
         self.serializer.into_inner()
     }
 }
@@ -74,16 +73,28 @@ impl Portal {
     }
 
     /// Get get a type stored in the backend from an `Id`
-    pub fn get<C: Archive>(&self, id: &Id<C>) -> &C::Archived {
-        todo!()
+    pub fn get<C>(&self, id: &Id<C>) -> &C::Archived
+    where
+        C: Archive,
+        C::Archived: for<'a> CheckBytes<DefaultValidator<'a>>,
+    {
+        let len = core::mem::size_of::<C::Archived>();
+        let bytes = self.0.get(id.hash(), len);
+        check_archived_root::<C>(bytes).expect("Invalid data")
     }
 
-    /// Write encoded bytes with a corresponding `Id` into the backend
-    pub fn put<C>(&self, c: &C) -> Id<C> {
-        todo!()
-        // let id_hash = IdHash::new(blake3::hash(serialized).as_bytes());
-        // self.0.put(id_hash, serialized);
-        // id_hash
+    /// Encode value into the backend, returns the Id
+    pub fn put<C, S>(&self, c: &C) -> Id<C>
+    where
+        C: Serialize<S>,
+        S: Fallible + PortalProvider + From<Portal>,
+    {
+        let mut ser = PortalSerializer::new(self.clone());
+        ser.serialize_value(c).expect("Infallible");
+        let bytes = &ser.into_inner()[..];
+        let hash = IdHash::new(blake3::hash(bytes).as_bytes());
+        self.0.put(hash.clone(), &bytes);
+        Id::new_from_hash(hash, self.clone())
     }
 }
 
@@ -97,53 +108,5 @@ impl Fallible for PortalDeserializer {
 impl PortalProvider for PortalDeserializer {
     fn portal(&self) -> Portal {
         self.0.clone()
-    }
-}
-
-/// This type can be parsed out of raw bytes
-///
-/// FIXME: naming
-pub trait Getable: Sized + Archive + Clone {
-    /// Get value
-    fn get(idhash: &IdHash, portal: Portal) -> Self;
-}
-
-impl<C> Getable for C
-where
-    C: Archive + Clone,
-    C::Archived: for<'a> CheckBytes<DefaultValidator<'a>>
-        + Deserialize<C, PortalDeserializer>,
-{
-    fn get(idhash: &IdHash, portal: Portal) -> Self {
-        let len = core::mem::size_of::<C::Archived>();
-        let pcl = portal.clone();
-        let bytes = pcl.get(idhash, len);
-
-        let archived = check_archived_root::<C>(bytes).expect("Invalid data");
-
-        if let Ok(val) = archived.deserialize(&mut PortalDeserializer(portal)) {
-            val
-        } else {
-            unreachable!()
-        }
-    }
-}
-
-/// Value can be put through a portal
-pub trait Putable: Sized + Serialize<PortalSerializer> {
-    /// Put self into the Portal, returns the generated Id
-    fn put(&self, portal: Portal) -> Id<Self>;
-}
-
-impl<C> Putable for C
-where
-    C: Serialize<PortalSerializer>,
-{
-    fn put(&self, portal: Portal) -> Id<C> {
-        let mut ser = PortalSerializer::new(portal.clone());
-        ser.serialize_value(self).expect("Infallible");
-        let bytes = &ser.into_inner()[..];
-        let hash = portal.put(&bytes);
-        Id::new_from_hash(hash, portal)
     }
 }

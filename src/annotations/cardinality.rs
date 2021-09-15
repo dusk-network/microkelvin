@@ -12,7 +12,6 @@ use bytecheck::CheckBytes;
 use rkyv::{Archive, Deserialize, Serialize};
 
 use crate::annotations::{Annotation, Combine};
-use crate::backend::Getable;
 use crate::branch::Branch;
 use crate::branch_mut::BranchMut;
 use crate::compound::{AnnoIter, Child, Compound, MutableLeaves};
@@ -61,7 +60,7 @@ pub struct Offset(u64);
 
 impl<C, A> Walker<C, A> for Offset
 where
-    C: Compound<A> + Getable,
+    C: Compound<A>,
     A: Annotation<C::Leaf> + Borrow<Cardinality>,
 {
     fn walk(&mut self, walk: Walk<C, A>) -> Step {
@@ -105,7 +104,7 @@ pub trait Nth<'a, A>: Sized {
 
 impl<'a, C, A> Nth<'a, A> for C
 where
-    C: Compound<A> + Getable,
+    C: Compound<A>,
     A: Annotation<C::Leaf> + Borrow<Cardinality>,
 {
     fn nth(&'a self, ofs: u64) -> Option<Branch<'a, Self, A>> {

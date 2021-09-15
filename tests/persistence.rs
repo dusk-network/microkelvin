@@ -16,7 +16,7 @@ mod persist_tests {
 
     use tempfile::tempdir;
 
-    use microkelvin::{DiskBackend, Keyed, Portal, Putable};
+    use microkelvin::{DiskBackend, Keyed, Portal};
 
     #[derive(PartialEq, Clone, Debug)]
     struct TestLeaf {
@@ -43,7 +43,8 @@ mod persist_tests {
         let db = DiskBackend::new(dir.path())?;
         let portal = Portal::new(db);
 
-        let id = list.put(portal);
+        let id = portal.put(&list);
+
         let mut restored = id.reify();
 
         // first empty the original
@@ -94,7 +95,7 @@ mod persist_tests {
             list.push(i);
         }
 
-        let persisted = list.put(portal);
+        let persisted = portal.put(&list);
 
         // it should now be available from other threads
 

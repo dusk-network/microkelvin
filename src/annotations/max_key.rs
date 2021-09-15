@@ -13,7 +13,6 @@ use bytecheck::CheckBytes;
 use rkyv::{Archive, Deserialize, Serialize};
 
 use crate::annotations::{Annotation, Combine};
-use crate::backend::Getable;
 use crate::branch::Branch;
 use crate::branch_mut::BranchMut;
 use crate::compound::{AnnoIter, Child, Compound, MutableLeaves};
@@ -123,7 +122,7 @@ impl<K> Default for FindMaxKey<K> {
 
 impl<C, A, K> Walker<C, A> for FindMaxKey<K>
 where
-    C: Compound<A> + Getable,
+    C: Compound<A>,
     C::Leaf: Keyed<K>,
     A: Annotation<C::Leaf> + Borrow<MaxKey<K>>,
     K: Ord + Clone,

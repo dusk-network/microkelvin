@@ -9,7 +9,6 @@ use core::ops::{Deref, DerefMut};
 
 use alloc::vec::Vec;
 
-use crate::backend::Getable;
 use crate::compound::{Child, ChildMut, Compound};
 use crate::link::LinkCompoundMut;
 use crate::walk::{AllLeaves, Step, Walk, Walker};
@@ -151,7 +150,7 @@ impl<'a, C, A> PartialBranchMut<'a, C, A> {
 
     fn walk<W>(&mut self, walker: &mut W) -> Option<()>
     where
-        C: Compound<A> + Getable + Clone,
+        C: Compound<A> + Clone,
         W: Walker<C, A>,
     {
         enum State<C> {
@@ -230,7 +229,7 @@ impl<'a, C, A> BranchMut<'a, C, A> {
     /// walk failed.
     pub fn walk<W>(root: &'a mut C, mut walker: W) -> Option<Self>
     where
-        C: Compound<A> + Getable + Clone,
+        C: Compound<A> + Clone,
         W: Walker<C, A>,
     {
         let mut partial = PartialBranchMut::new(root);
@@ -315,7 +314,7 @@ where
 
 impl<'a, C, A> IntoIterator for BranchMut<'a, C, A>
 where
-    C: Compound<A> + Getable + Clone,
+    C: Compound<A> + Clone,
 {
     type Item = &'a mut C::Leaf;
 
@@ -328,7 +327,7 @@ where
 
 impl<'a, C, A, W> Iterator for BranchMutIterator<'a, C, A, W>
 where
-    C: Compound<A> + Getable + Clone,
+    C: Compound<A> + Clone,
     W: Walker<C, A>,
 {
     type Item = &'a mut C::Leaf;
@@ -379,7 +378,7 @@ where
 
 impl<'a, C, A, M> IntoIterator for MappedBranchMut<'a, C, A, M>
 where
-    C: Compound<A> + Getable + Clone,
+    C: Compound<A> + Clone,
     M: 'a,
 {
     type Item = &'a mut M;
@@ -393,7 +392,7 @@ where
 
 impl<'a, C, A, W, M> Iterator for MappedBranchMutIterator<'a, C, A, W, M>
 where
-    C: Compound<A> + Getable + Clone,
+    C: Compound<A> + Clone,
     W: Walker<C, A>,
     M: 'a,
 {

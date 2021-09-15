@@ -6,18 +6,22 @@
 
 use bytecheck::CheckBytes;
 use microkelvin::{
-    Annotation, Cardinality, Child, ChildMut, Compound, First, Getable, Link,
-    MutableLeaves, Nth, PortalDeserializer, Putable,
+    Annotation, Cardinality, Child, ChildMut, Compound, First, Link,
+    MutableLeaves, Nth, PortalProvider,
 };
-use rkyv::{
-    validation::validators::DefaultValidator, Archive, Deserialize, Serialize,
-};
+use rkyv::{Archive, Deserialize, Serialize};
 
 #[derive(Clone, Archive, Serialize, Debug, Deserialize)]
 #[archive_attr(derive(CheckBytes))]
+#[archive(bound(serialize = "A: Archive"))]
+#[archive(bound(deserialize = "__D: PortalProvider"))]
 pub enum LinkedList<T, A> {
     Empty,
-    Node { val: T, next: Link<Self, A> },
+    Node {
+        val: T,
+        #[omit_bounds]
+        next: Link<Self, A>,
+    },
 }
 
 impl<T, A> Default for LinkedList<T, A> {
@@ -26,15 +30,7 @@ impl<T, A> Default for LinkedList<T, A> {
     }
 }
 
-impl<T, A> Compound<A> for LinkedList<T, A>
-where
-    T: Getable + Putable,
-    T::Archived: for<'a> CheckBytes<DefaultValidator<'a>>
-        + Deserialize<T, PortalDeserializer>,
-    A: Annotation<T> + Getable + Putable,
-    A::Archived: for<'a> CheckBytes<DefaultValidator<'a>>
-        + Deserialize<A, PortalDeserializer>,
-{
+impl<T, A> Compound<A> for LinkedList<T, A> {
     type Leaf = T;
 
     fn child(&self, ofs: usize) -> Child<Self, A> {
@@ -56,7 +52,7 @@ where
     }
 }
 
-impl<T, A> MutableLeaves for LinkedList<T, A> {}
+impl<T, A> MutableLeaves for LinkedList<T, A> where A: Archive + Annotation<T> {}
 
 impl<T, A> LinkedList<T, A> {
     pub fn new() -> Self {
@@ -82,9 +78,8 @@ impl<T, A> LinkedList<T, A> {
 
     pub fn pop(&mut self) -> Option<T>
     where
-        T: Getable + Clone,
-        A: Getable + Clone,
-        Self: Getable + Clone,
+        T: Clone,
+        A: Clone,
     {
         match core::mem::take(self) {
             LinkedList::Empty => None,

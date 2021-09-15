@@ -8,7 +8,6 @@ use core::ops::Deref;
 
 use alloc::vec::Vec;
 
-use crate::backend::Getable;
 use crate::compound::{Child, Compound};
 use crate::link::LinkCompound;
 use crate::walk::{AllLeaves, Step, Walk, Walker};
@@ -121,7 +120,7 @@ impl<'a, C, A> PartialBranch<'a, C, A> {
 
     fn walk<W>(&mut self, walker: &mut W) -> Option<()>
     where
-        C: Compound<A> + Getable,
+        C: Compound<A>,
         W: Walker<C, A>,
     {
         enum State<'a, C, A> {
@@ -296,7 +295,7 @@ pub enum BranchIterator<'a, C, A, W> {
 // iterators
 impl<'a, C, A> IntoIterator for Branch<'a, C, A>
 where
-    C: Compound<A> + Getable,
+    C: Compound<A>,
 {
     type Item = &'a C::Leaf;
 
@@ -309,7 +308,7 @@ where
 
 impl<'a, C, A, W> Iterator for BranchIterator<'a, C, A, W>
 where
-    C: Compound<A> + Getable,
+    C: Compound<A>,
     W: Walker<C, A>,
 {
     type Item = &'a C::Leaf;
@@ -360,7 +359,7 @@ where
 
 impl<'a, C, A, M> IntoIterator for MappedBranch<'a, C, A, M>
 where
-    C: Compound<A> + Getable,
+    C: Compound<A>,
     M: 'a,
 {
     type Item = &'a M;
@@ -374,7 +373,7 @@ where
 
 impl<'a, C, A, W, M> Iterator for MappedBranchIterator<'a, C, A, W, M>
 where
-    C: Compound<A> + Getable,
+    C: Compound<A>,
     W: Walker<C, A>,
     M: 'a,
 {
