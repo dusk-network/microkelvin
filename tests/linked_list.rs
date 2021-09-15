@@ -13,7 +13,7 @@ use rkyv::{Archive, Deserialize, Serialize};
 
 #[derive(Clone, Archive, Serialize, Debug, Deserialize)]
 #[archive_attr(derive(CheckBytes))]
-#[archive(bound(serialize = "A: Archive"))]
+#[archive(bound(serialize = "A: Archive + Annotation<T>"))]
 pub enum LinkedList<T, A> {
     Empty,
     Node {
