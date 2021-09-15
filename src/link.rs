@@ -44,22 +44,22 @@ pub struct ArchivedLink<A: Archive>(IdHash, A::Archived);
 
 impl<C, A> Archive for Link<C, A>
 where
-    A: Archive,
+    C: Compound<A>,
+    A: Archive + Annotation<C::Leaf>,
 {
     type Archived = ArchivedLink<A>;
     type Resolver = (IdHash, A::Resolver);
 
     unsafe fn resolve(
         &self,
-        _pos: usize,
+        pos: usize,
         resolver: Self::Resolver,
         out: *mut Self::Archived,
     ) {
         (*out).0 = resolver.0;
-        todo!()
-        // let (fp, fo) = out_field!(out.1);
-        // // let a = &*self.annotation();
-        // a.resolve(pos + fp, resolver.1, fo);
+        let (fp, fo) = out_field!(out.1);
+        let a = &*self.annotation();
+        a.resolve(pos + fp, resolver.1, fo);
     }
 }
 
