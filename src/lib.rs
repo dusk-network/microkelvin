@@ -31,7 +31,9 @@ mod walk;
 pub use annotations::{
     Annotation, Cardinality, Combine, GetMaxKey, Keyed, MaxKey, Nth,
 };
-pub use backend::{Backend, Portal, PortalDeserializer, PortalProvider};
+pub use backend::{
+    Backend, Portal, PortalDeserializer, PortalProvider, PortalSerializer,
+};
 pub use branch::Branch;
 pub use branch_mut::BranchMut;
 pub use compound::{AnnoIter, Child, ChildMut, Compound, MutableLeaves};

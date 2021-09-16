@@ -27,6 +27,7 @@ pub trait IntoAlignedVec {
     fn into_inner(self) -> AlignedVec;
 }
 
+/// A serializer with access to a backend portal
 pub struct PortalSerializer {
     portal: Portal,
     serializer: AlignedSerializer<AlignedVec>,
@@ -90,8 +91,9 @@ impl Portal {
     }
 
     /// Encode value into the backend, returns the Id
-    pub fn put<C>(&self, c: &C) -> Id<C>
+    pub fn put<C, S>(&self, c: &C) -> Id<C>
     where
+        C: Serialize<S>,
         S: Serializer
             + Fallible
             + PortalProvider
