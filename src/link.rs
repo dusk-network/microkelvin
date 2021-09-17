@@ -26,8 +26,6 @@ pub enum LinkInner<C, A> {
     C(Rc<C>),
     Ca(Rc<C>, A),
     Ia(Id<C>, A),
-    #[allow(unused)]
-    Ica(Id<C>, Rc<C>, A),
 }
 
 #[derive(Clone)]
@@ -39,7 +37,7 @@ pub struct Link<C, A> {
     inner: RefCell<LinkInner<C, A>>,
 }
 
-#[derive(CheckBytes)]
+#[derive(CheckBytes, Debug)]
 pub struct ArchivedLink<A: Archive>(IdHash, A::Archived);
 
 impl<C, A> Archive for Link<C, A>
@@ -83,7 +81,7 @@ where
 
 impl<C, A, S> Serialize<S> for Link<C, A>
 where
-    C: Compound<A> + Archive + Serialize<S>,
+    C: Compound<A> + Serialize<S>,
     A: Clone + Archive + Annotation<C::Leaf> + Serialize<S>,
     S: Serializer + Fallible + PortalProvider + From<Portal> + Into<AlignedVec>,
     S::Error: core::fmt::Debug,
@@ -98,8 +96,7 @@ where
             _ => unreachable!(),
         };
         let portal = serializer.portal();
-        let to_put = &*self.inner();
-        let id = portal.put(to_put);
+        let id = self.id();
         Ok((id.hash().clone(), a_resolver))
     }
 }
@@ -121,6 +118,14 @@ impl<C: core::fmt::Debug, A: core::fmt::Debug> core::fmt::Debug for Link<C, A> {
     }
 }
 
+enum LinkRef<'a, C, A>
+where
+    C: Archive,
+{
+    InMemory(LinkCompound<'a, C, A>),
+    Archived(&'a C::Archived),
+}
+
 impl<C, A> Link<C, A> {
     /// Create a new link
     pub fn new(compound: C) -> Self {
@@ -137,9 +142,9 @@ impl<C, A> Link<C, A> {
     {
         let borrow = self.inner.borrow();
         let a = match *borrow {
-            LinkInner::Ca(_, _)
-            | LinkInner::Ica(_, _, _)
-            | LinkInner::Ia(_, _) => return LinkAnnotation(borrow),
+            LinkInner::Ca(_, _) | LinkInner::Ia(_, _) => {
+                return LinkAnnotation(borrow)
+            }
             LinkInner::C(ref c) => A::combine(c.annotations()),
             LinkInner::Placeholder => unreachable!(),
         };
@@ -166,64 +171,36 @@ impl<C, A> Link<C, A> {
     where
         C: Clone,
     {
-        // assure inner value is loaded
-        let _ = self.inner();
-
         let inner = self.inner.into_inner();
         match inner {
-            LinkInner::C(rc)
-            | LinkInner::Ca(rc, _)
-            | LinkInner::Ica(_, rc, _) => match Rc::try_unwrap(rc) {
+            LinkInner::C(rc) | LinkInner::Ca(rc, _) => match Rc::try_unwrap(rc)
+            {
                 Ok(c) => c,
                 Err(rc) => (&*rc).clone(),
             },
+            LinkInner::Ia(id, _) => {
+                todo!()
+            }
             _ => unreachable!(),
         }
     }
 
-    /// See doc for `inner`
-    #[deprecated(since = "0.10.0", note = "Please use `inner` instead")]
-    pub fn compound(&self) -> LinkCompound<C, A> {
-        self.inner()
+    pub fn id(&self) -> Id<C> {
+        todo!()
     }
 
     /// Gets a reference to the inner compound of the link'
-    ///
-    /// Can fail when trying to fetch data over i/o
-    pub fn inner(&self) -> LinkCompound<C, A> {
+    pub fn inner(&self) -> LinkRef<C, A>
+    where
+        C: Archive,
+    {
         let borrow = self.inner.borrow();
 
         match *borrow {
             LinkInner::Placeholder => unreachable!(),
-            LinkInner::C(_) | LinkInner::Ca(_, _) | LinkInner::Ica(_, _, _) => {
-                return LinkCompound(borrow)
-            }
-            LinkInner::Ia(ref id, _) => {
-                let inner = id.reify();
-                // re-borrow mutable
-                drop(borrow);
-                let mut borrow = self.inner.borrow_mut();
-                if let LinkInner::Ia(id, anno) =
-                    mem::replace(&mut *borrow, LinkInner::Placeholder)
-                {
-                    *borrow = LinkInner::Ica(id, Rc::new(inner), anno);
-
-                    // re-borrow immutable
-                    drop(borrow);
-                    let borrow = self.inner.borrow();
-
-                    LinkCompound(borrow)
-                } else {
-                    unreachable!("Guaranteed to match the same as above")
-                }
-            }
+            LinkInner::C(c) | LinkInner::Ca(c, _) => LinkRef::rc(c.clone()),
+            LinkInner::Ia(ref id, _) => LinkRef::archived(id.resolve()),
         }
-    }
-
-    /// See doc for `inner_mut`
-    #[deprecated(since = "0.10.0", note = "Please use `inner` instead")]
-    pub fn compound_mut(&mut self) -> LinkCompoundMut<C, A> {
-        self.inner_mut()
     }
 
     /// Returns a Mutable reference to the underlying compound node
@@ -237,7 +214,7 @@ impl<C, A> Link<C, A> {
         let mut borrow: RefMut<LinkInner<C, A>> = self.inner.borrow_mut();
 
         match mem::replace(&mut *borrow, LinkInner::Placeholder) {
-            LinkInner::C(c) | LinkInner::Ca(c, _) | LinkInner::Ica(_, c, _) => {
+            LinkInner::C(c) | LinkInner::Ca(c, _) => {
                 // clear all cached data
                 *borrow = LinkInner::C(c);
             }

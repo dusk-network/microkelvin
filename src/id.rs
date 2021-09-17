@@ -7,7 +7,7 @@
 use core::marker::PhantomData;
 
 use bytecheck::CheckBytes;
-use rkyv::Archive;
+use rkyv::{validation::validators::DefaultValidator, Archive};
 
 use crate::backend::Portal;
 
@@ -79,9 +79,18 @@ impl<C> Id<C> {
         }
     }
 
+    // /// Pull out the represented value of the Id
+    // pub fn reify(&self) -> C {
+    // 	self.portal.get()
+    // }
+
     /// Pull out the represented value of the Id
-    pub fn reify(&self) -> C {
-        todo!()
+    pub fn resolve(&self) -> &C::Archived
+    where
+        C: Archive,
+        C::Archived: for<'a> CheckBytes<DefaultValidator<'a>>,
+    {
+        self.portal.get::<C>(&self.hash)
     }
 
     /// Pull out the represented value of the Id

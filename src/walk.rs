@@ -9,6 +9,7 @@ use core::marker::PhantomData;
 use crate::branch::Branch;
 use crate::branch_mut::BranchMut;
 use crate::compound::{Child, Compound, MutableLeaves};
+use crate::Annotation;
 
 /// The return value from a closure to `walk` the tree.
 ///
@@ -44,6 +45,7 @@ impl<'a, C, A> Walk<'a, C, A> {
     pub fn child(&self, ofs: usize) -> Child<'a, C, A>
     where
         C: Compound<A>,
+        A: Annotation<C::Leaf>,
     {
         self.compound.child(ofs + self.ofs)
     }
@@ -61,6 +63,7 @@ pub struct AllLeaves;
 impl<C, A> Walker<C, A> for AllLeaves
 where
     C: Compound<A>,
+    A: Annotation<C::Leaf>,
 {
     fn walk(&mut self, walk: Walk<C, A>) -> Step {
         for i in 0.. {
@@ -80,6 +83,7 @@ where
 pub trait First<'a, A>
 where
     Self: Compound<A>,
+    A: Annotation<Self::Leaf>,
 {
     /// Construct a `Branch` pointing to the first element, if not empty
     fn first(&'a self) -> Option<Branch<'a, Self, A>>;
@@ -93,6 +97,7 @@ where
 impl<'a, C, A> First<'a, A> for C
 where
     C: Compound<A>,
+    A: Annotation<C::Leaf>,
 {
     fn first(&'a self) -> Option<Branch<'a, Self, A>> {
         Branch::<_, A>::walk(self, AllLeaves)

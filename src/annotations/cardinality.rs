@@ -61,7 +61,7 @@ pub struct Offset(u64);
 impl<C, A> Walker<C, A> for Offset
 where
     C: Compound<A>,
-    A: Annotation<C::Leaf> + Borrow<Cardinality>,
+    A: Annotation<C::Leaf> + Borrow<Cardinality> + Archive,
 {
     fn walk(&mut self, walk: Walk<C, A>) -> Step {
         for i in 0.. {
@@ -105,7 +105,7 @@ pub trait Nth<'a, A>: Sized {
 impl<'a, C, A> Nth<'a, A> for C
 where
     C: Compound<A>,
-    A: Annotation<C::Leaf> + Borrow<Cardinality>,
+    A: Annotation<C::Leaf> + Borrow<Cardinality> + Archive,
 {
     fn nth(&'a self, ofs: u64) -> Option<Branch<'a, Self, A>> {
         // Return the first that satisfies the walk
