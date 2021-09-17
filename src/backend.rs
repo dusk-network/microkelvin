@@ -79,14 +79,14 @@ impl Portal {
         Portal(Arc::new(backend))
     }
 
-    /// Get get a type stored in the backend from an `Id`
-    pub fn get<C>(&self, id: &Id<C>) -> &C::Archived
+    /// Get get a type stored in the backend from a hash
+    pub fn get<C>(&self, hash: &IdHash) -> &C::Archived
     where
         C: Archive,
         C::Archived: for<'a> CheckBytes<DefaultValidator<'a>>,
     {
         let len = core::mem::size_of::<C::Archived>();
-        let bytes = self.0.get(id.hash(), len);
+        let bytes = self.0.get(hash, len);
         check_archived_root::<C>(bytes).expect("Invalid data")
     }
 

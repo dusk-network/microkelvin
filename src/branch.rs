@@ -11,6 +11,7 @@ use alloc::vec::Vec;
 use crate::compound::{Child, Compound};
 use crate::link::LinkCompound;
 use crate::walk::{AllLeaves, Step, Walk, Walker};
+use crate::Annotation;
 
 #[derive(Debug)]
 enum LevelNode<'a, C, A> {
@@ -87,6 +88,7 @@ impl<'a, C, A> PartialBranch<'a, C, A> {
     fn leaf(&self) -> Option<&C::Leaf>
     where
         C: Compound<A>,
+        A: Annotation<C::Leaf>,
     {
         let top = self.top();
         let ofs = top.offset();
@@ -121,6 +123,7 @@ impl<'a, C, A> PartialBranch<'a, C, A> {
     fn walk<W>(&mut self, walker: &mut W) -> Option<()>
     where
         C: Compound<A>,
+        A: Annotation<C::Leaf>,
         W: Walker<C, A>,
     {
         enum State<'a, C, A> {
@@ -229,6 +232,7 @@ impl<'a, C, A> Branch<'a, C, A> {
     ) -> MappedBranch<'a, C, A, M>
     where
         C: Compound<A>,
+        A: Annotation<C::Leaf>,
     {
         MappedBranch {
             inner: self,
@@ -241,6 +245,7 @@ impl<'a, C, A> Branch<'a, C, A> {
     pub fn walk<W>(root: &'a C, mut walker: W) -> Option<Self>
     where
         C: Compound<A>,
+        A: Annotation<C::Leaf>,
         W: Walker<C, A>,
     {
         let mut partial = PartialBranch::new(root);
@@ -258,6 +263,7 @@ pub struct Branch<'a, C, A>(PartialBranch<'a, C, A>);
 impl<'a, C, A> Deref for Branch<'a, C, A>
 where
     C: Compound<A>,
+    A: Annotation<C::Leaf>,
 {
     type Target = C::Leaf;
 
@@ -269,6 +275,7 @@ where
 pub struct MappedBranch<'a, C, A, M>
 where
     C: Compound<A>,
+    A: Annotation<C::Leaf>,
 {
     inner: Branch<'a, C, A>,
     closure: for<'b> fn(&'b C::Leaf) -> &'b M,
@@ -278,6 +285,7 @@ impl<'a, C, A, M> Deref for MappedBranch<'a, C, A, M>
 where
     C: Compound<A>,
     C::Leaf: 'a,
+    A: Annotation<C::Leaf>,
 {
     type Target = M;
 
@@ -296,6 +304,7 @@ pub enum BranchIterator<'a, C, A, W> {
 impl<'a, C, A> IntoIterator for Branch<'a, C, A>
 where
     C: Compound<A>,
+    A: Annotation<C::Leaf>,
 {
     type Item = &'a C::Leaf;
 
@@ -309,6 +318,7 @@ where
 impl<'a, C, A, W> Iterator for BranchIterator<'a, C, A, W>
 where
     C: Compound<A>,
+    A: Annotation<C::Leaf>,
     W: Walker<C, A>,
 {
     type Item = &'a C::Leaf;
@@ -351,6 +361,7 @@ where
 pub enum MappedBranchIterator<'a, C, A, W, M>
 where
     C: Compound<A>,
+    A: Annotation<C::Leaf>,
 {
     Initial(MappedBranch<'a, C, A, M>, W),
     Intermediate(MappedBranch<'a, C, A, M>, W),
@@ -360,6 +371,7 @@ where
 impl<'a, C, A, M> IntoIterator for MappedBranch<'a, C, A, M>
 where
     C: Compound<A>,
+    A: Annotation<C::Leaf>,
     M: 'a,
 {
     type Item = &'a M;
@@ -374,6 +386,7 @@ where
 impl<'a, C, A, W, M> Iterator for MappedBranchIterator<'a, C, A, W, M>
 where
     C: Compound<A>,
+    A: Annotation<C::Leaf>,
     W: Walker<C, A>,
     M: 'a,
 {

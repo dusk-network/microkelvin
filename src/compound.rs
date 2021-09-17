@@ -6,19 +6,24 @@
 
 use core::marker::PhantomData;
 
+use rkyv::Archive;
+
 use crate::annotations::{Annotation, WrappedAnnotation};
-use crate::link::Link;
+use crate::link::{ArchivedLink, Link};
 
 /// The response of the `child` method on a `Compound` node.
 #[derive(Debug)]
 pub enum Child<'a, C, A>
 where
     C: Compound<A>,
+    A: Annotation<C::Leaf>,
 {
     /// Child is a leaf
     Leaf(&'a C::Leaf),
     /// Child is an annotated subtree node
     Node(&'a Link<C, A>),
+    /// Child is an annotated subtree node
+    ArchivedNode(&'a ArchivedLink<A>),
     /// Empty slot
     Empty,
     /// No more children
@@ -30,6 +35,7 @@ where
 pub enum ChildMut<'a, C, A>
 where
     C: Compound<A>,
+    A: Annotation<C::Leaf>,
 {
     /// Child is a leaf
     Leaf(&'a mut C::Leaf),
@@ -42,7 +48,10 @@ where
 }
 
 /// A type that can recursively contain itself and leaves.
-pub trait Compound<A>: Sized {
+pub trait Compound<A>: Sized + Archive
+where
+    A: Annotation<Self::Leaf>,
+{
     /// The leaf type of the Compound collection
     type Leaf;
 
