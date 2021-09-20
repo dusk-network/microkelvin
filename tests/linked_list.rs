@@ -11,13 +11,12 @@ use microkelvin::{
 };
 use rkyv::{ser::Serializer, AlignedVec, Archive, Deserialize, Serialize};
 
-#[derive(Clone, Archive, Serialize, Debug, Deserialize)]
+#[derive(Clone, Archive, Serialize, Deserialize)]
 #[archive_attr(derive(CheckBytes))]
 #[archive(bound(archive = "A: Archive + Annotation<T> + Clone"))]
 #[archive(bound(serialize = "
   A: Archive + Serialize<__S>, 
-  __S: Serializer + PortalProvider + From<Portal> + Into<AlignedVec>,
-  __S::Error: core::fmt::Debug"))]
+  __S: Serializer + PortalProvider + From<Portal> + Into<AlignedVec>"))]
 #[archive(bound(deserialize = "
   A: Archive,
   A::Archived: Deserialize<A, __D>,

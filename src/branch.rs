@@ -13,19 +13,30 @@ use crate::link::LinkCompound;
 use crate::walk::{AllLeaves, Step, Walk, Walker};
 use crate::Annotation;
 
-#[derive(Debug)]
-enum LevelNode<'a, C, A> {
+enum LevelNode<'a, C, A>
+where
+    C: Compound<A>,
+    A: Annotation<C::Leaf>,
+{
     Root(&'a C),
     Val(LinkCompound<'a, C, A>),
+    Archived(&'a C::Archived),
 }
 
-#[derive(Debug)]
-pub struct Level<'a, C, A> {
+pub struct Level<'a, C, A>
+where
+    C: Compound<A>,
+    A: Annotation<C::Leaf>,
+{
     offset: usize,
     node: LevelNode<'a, C, A>,
 }
 
-impl<'a, C, A> Deref for Level<'a, C, A> {
+impl<'a, C, A> Deref for Level<'a, C, A>
+where
+    C: Compound<A>,
+    A: Annotation<C::Leaf>,
+{
     type Target = C;
 
     fn deref(&self) -> &Self::Target {
@@ -33,7 +44,11 @@ impl<'a, C, A> Deref for Level<'a, C, A> {
     }
 }
 
-impl<'a, C, A> Level<'a, C, A> {
+impl<'a, C, A> Level<'a, C, A>
+where
+    C: Compound<A>,
+    A: Annotation<C::Leaf>,
+{
     pub fn new_root(root: &'a C) -> Level<'a, C, A> {
         Level {
             offset: 0,
@@ -48,6 +63,13 @@ impl<'a, C, A> Level<'a, C, A> {
         }
     }
 
+    pub fn new_archived(link_ref: &'a C::Archived) -> Level<'a, C, A> {
+        Level {
+            offset: 0,
+            node: LevelNode::Archived(link_ref),
+        }
+    }
+
     /// Returns the offset of the branch level
     pub fn offset(&self) -> usize {
         self.offset
@@ -58,10 +80,16 @@ impl<'a, C, A> Level<'a, C, A> {
     }
 }
 
-#[derive(Debug)]
-pub struct PartialBranch<'a, C, A>(Vec<Level<'a, C, A>>);
+pub struct PartialBranch<'a, C, A>(Vec<Level<'a, C, A>>)
+where
+    C: Compound<A>,
+    A: Annotation<C::Leaf>;
 
-impl<'a, C, A> Deref for LevelNode<'a, C, A> {
+impl<'a, C, A> Deref for LevelNode<'a, C, A>
+where
+    C: Compound<A>,
+    A: Annotation<C::Leaf>,
+{
     type Target = C;
 
     fn deref(&self) -> &Self::Target {
@@ -72,7 +100,11 @@ impl<'a, C, A> Deref for LevelNode<'a, C, A> {
     }
 }
 
-impl<'a, C, A> PartialBranch<'a, C, A> {
+impl<'a, C, A> PartialBranch<'a, C, A>
+where
+    C: Compound<A>,
+    A: Annotation<C::Leaf>,
+{
     fn new(root: &'a C) -> Self {
         PartialBranch(vec![Level::new_root(root)])
     }
@@ -122,11 +154,13 @@ impl<'a, C, A> PartialBranch<'a, C, A> {
 
     fn walk<W>(&mut self, walker: &mut W) -> Option<()>
     where
-        C: Compound<A>,
-        A: Annotation<C::Leaf>,
         W: Walker<C, A>,
     {
-        enum State<'a, C, A> {
+        enum State<'a, C, A>
+        where
+            C: Compound<A>,
+            A: Annotation<C::Leaf>,
+        {
             Init,
             Push(Level<'a, C, A>),
             Pop,
@@ -213,7 +247,11 @@ impl<'a, C, A> PartialBranch<'a, C, A> {
     }
 }
 
-impl<'a, C, A> Branch<'a, C, A> {
+impl<'a, C, A> Branch<'a, C, A>
+where
+    C: Compound<A>,
+    A: Annotation<C::Leaf>,
+{
     /// Returns the depth of the branch
     pub fn depth(&self) -> usize {
         self.0.depth()
@@ -257,8 +295,10 @@ impl<'a, C, A> Branch<'a, C, A> {
 ///
 /// Branche are always guaranteed to point at a leaf, and can be dereferenced
 /// to the pointed-at leaf.
-#[derive(Debug)]
-pub struct Branch<'a, C, A>(PartialBranch<'a, C, A>);
+pub struct Branch<'a, C, A>(PartialBranch<'a, C, A>)
+where
+    C: Compound<A>,
+    A: Annotation<C::Leaf>;
 
 impl<'a, C, A> Deref for Branch<'a, C, A>
 where
@@ -294,7 +334,11 @@ where
     }
 }
 
-pub enum BranchIterator<'a, C, A, W> {
+pub enum BranchIterator<'a, C, A, W>
+where
+    C: Compound<A>,
+    A: Annotation<C::Leaf>,
+{
     Initial(Branch<'a, C, A>, W),
     Intermediate(Branch<'a, C, A>, W),
     Exhausted,

@@ -12,7 +12,6 @@ use crate::annotations::{Annotation, WrappedAnnotation};
 use crate::link::{ArchivedLink, Link};
 
 /// The response of the `child` method on a `Compound` node.
-#[derive(Debug)]
 pub enum Child<'a, C, A>
 where
     C: Compound<A>,
@@ -31,7 +30,6 @@ where
 }
 
 /// The response of the `child_mut` method on a `Compound` node.
-#[derive(Debug)]
 pub enum ChildMut<'a, C, A>
 where
     C: Compound<A>,

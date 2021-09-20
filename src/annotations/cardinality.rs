@@ -92,7 +92,11 @@ where
 
 /// Trait that provides `nth()` and `nth_mut()` methods to any Compound with a
 /// Cardinality annotation
-pub trait Nth<'a, A>: Sized {
+pub trait Nth<'a, A>
+where
+    Self: Compound<A>,
+    A: Annotation<Self::Leaf>,
+{
     /// Construct a `Branch` pointing to the `nth` element, if any
     fn nth(&'a self, n: u64) -> Option<Branch<'a, Self, A>>;
 
@@ -105,7 +109,7 @@ pub trait Nth<'a, A>: Sized {
 impl<'a, C, A> Nth<'a, A> for C
 where
     C: Compound<A>,
-    A: Annotation<C::Leaf> + Borrow<Cardinality> + Archive,
+    A: Annotation<C::Leaf> + Borrow<Cardinality>,
 {
     fn nth(&'a self, ofs: u64) -> Option<Branch<'a, Self, A>> {
         // Return the first that satisfies the walk

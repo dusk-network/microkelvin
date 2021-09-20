@@ -19,8 +19,7 @@ use crate::id::{Id, IdHash};
 
 use crate::{Annotation, Compound, Portal};
 
-#[derive(Debug, Clone)]
-#[repr(u8)]
+#[derive(Clone)]
 pub enum LinkInner<C, A> {
     Placeholder,
     C(Rc<C>),
@@ -37,7 +36,7 @@ pub struct Link<C, A> {
     inner: RefCell<LinkInner<C, A>>,
 }
 
-#[derive(CheckBytes, Debug)]
+#[derive(CheckBytes)]
 pub struct ArchivedLink<A: Archive>(IdHash, A::Archived);
 
 impl<C, A> Archive for Link<C, A>
@@ -84,7 +83,6 @@ where
     C: Compound<A> + Serialize<S>,
     A: Clone + Archive + Annotation<C::Leaf> + Serialize<S>,
     S: Serializer + Fallible + PortalProvider + From<Portal> + Into<AlignedVec>,
-    S::Error: core::fmt::Debug,
 {
     fn serialize(
         &self,
@@ -112,12 +110,6 @@ where
     }
 }
 
-impl<C: core::fmt::Debug, A: core::fmt::Debug> core::fmt::Debug for Link<C, A> {
-    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        write!(f, "{:?}", self.inner)
-    }
-}
-
 enum LinkRef<'a, C, A>
 where
     C: Archive,
@@ -126,7 +118,11 @@ where
     Archived(&'a C::Archived),
 }
 
-impl<C, A> Link<C, A> {
+impl<C, A> Link<C, A>
+where
+    C: Compound<A>,
+    A: Annotation<C::Leaf>,
+{
     /// Create a new link
     pub fn new(compound: C) -> Self {
         Link {
@@ -135,11 +131,7 @@ impl<C, A> Link<C, A> {
     }
 
     /// Returns a reference to to the annotation stored
-    pub fn annotation(&self) -> LinkAnnotation<C, A>
-    where
-        C: Compound<A>,
-        A: Annotation<C::Leaf>,
-    {
+    pub fn annotation(&self) -> LinkAnnotation<C, A> {
         let borrow = self.inner.borrow();
         let a = match *borrow {
             LinkInner::Ca(_, _) | LinkInner::Ia(_, _) => {
@@ -190,7 +182,7 @@ impl<C, A> Link<C, A> {
     }
 
     /// Gets a reference to the inner compound of the link'
-    pub fn inner(&self) -> LinkRef<C, A>
+    pub fn inner(&self) -> LinkCompound<C, A>
     where
         C: Archive,
     {
@@ -198,8 +190,8 @@ impl<C, A> Link<C, A> {
 
         match *borrow {
             LinkInner::Placeholder => unreachable!(),
-            LinkInner::C(c) | LinkInner::Ca(c, _) => LinkRef::rc(c.clone()),
-            LinkInner::Ia(ref id, _) => LinkRef::archived(id.resolve()),
+            LinkInner::C(_) | LinkInner::Ca(_, _) => LinkCompound(borrow),
+            LinkInner::Ia(ref id, _) => LinkCompound(borrow),
         }
     }
 
@@ -226,16 +218,13 @@ impl<C, A> Link<C, A> {
 
 /// A wrapped borrow of an inner link guaranteed to contain a computed
 /// annotation
-#[derive(Debug)]
 pub struct LinkAnnotation<'a, C, A>(Ref<'a, LinkInner<C, A>>);
 
 /// A wrapped borrow of an inner node guaranteed to contain a compound node
-#[derive(Debug)]
 pub struct LinkCompound<'a, C, A>(Ref<'a, LinkInner<C, A>>);
 
 /// A wrapped mutable borrow of an inner node guaranteed to contain a compound
 /// node
-#[derive(Debug)]
 pub struct LinkCompoundMut<'a, C, A>(RefMut<'a, LinkInner<C, A>>);
 
 impl<'a, C, A> Deref for LinkAnnotation<'a, C, A> {
@@ -243,9 +232,7 @@ impl<'a, C, A> Deref for LinkAnnotation<'a, C, A> {
 
     fn deref(&self) -> &Self::Target {
         match *self.0 {
-            LinkInner::Ica(_, _, ref a)
-            | LinkInner::Ia(_, ref a)
-            | LinkInner::Ca(_, ref a) => a,
+            LinkInner::Ia(_, ref a) | LinkInner::Ca(_, ref a) => a,
             _ => unreachable!(),
         }
     }
@@ -256,9 +243,7 @@ impl<'a, C, A> Deref for LinkCompound<'a, C, A> {
 
     fn deref(&self) -> &Self::Target {
         match *self.0 {
-            LinkInner::C(ref c)
-            | LinkInner::Ca(ref c, _)
-            | LinkInner::Ica(_, ref c, _) => c,
+            LinkInner::C(ref c) | LinkInner::Ca(ref c, _) => c,
             _ => unreachable!(),
         }
     }
