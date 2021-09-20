@@ -14,7 +14,6 @@ use crate::link::LinkCompoundMut;
 use crate::walk::{AllLeaves, Step, Walk, Walker};
 use crate::Annotation;
 
-#[derive(Debug)]
 enum LevelNodeMut<'a, C, A> {
     Root(&'a mut C),
     Val(LinkCompoundMut<'a, C, A>),
@@ -43,7 +42,6 @@ where
     }
 }
 
-#[derive(Debug)]
 pub struct LevelMut<'a, C, A> {
     offset: usize,
     node: LevelNodeMut<'a, C, A>,

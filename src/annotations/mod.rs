@@ -35,7 +35,6 @@ pub trait Combine<A> {
         A: Annotation<C::Leaf>;
 }
 
-#[derive(Debug)]
 /// Custom pointer type, like a lightweight `std::borrow::Cow` since it
 /// is not available in `core`
 pub enum WrappedAnnotation<'a, C, A> {
