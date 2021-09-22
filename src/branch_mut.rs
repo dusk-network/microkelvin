@@ -175,7 +175,7 @@ impl<'a, C, A> PartialBranchMut<'a, C, A> {
             }
 
             let top = self.top_mut();
-            let step = walker.walk(Walk::new(&**top, top.offset()));
+            let step = walker.walk(Walk::new_mut(top));
 
             match step {
                 Step::Found(walk_ofs) => {

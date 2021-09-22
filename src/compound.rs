@@ -9,7 +9,7 @@ use core::marker::PhantomData;
 use rkyv::Archive;
 
 use crate::annotations::{Annotation, WrappedAnnotation};
-use crate::link::{ArchivedLink, Link};
+use crate::link::Link;
 
 /// The response of the `child` method on a `Compound` node.
 pub enum Child<'a, C, A>
@@ -21,8 +21,6 @@ where
     Leaf(&'a C::Leaf),
     /// Child is an annotated subtree node
     Node(&'a Link<C, A>),
-    /// Child is an annotated subtree node
-    ArchivedNode(&'a ArchivedLink<A>),
     /// Empty slot
     Empty,
     /// No more children

@@ -40,7 +40,7 @@ impl<K> Borrow<Cardinality> for Anno<K> {
 impl<Leaf, K> Annotation<Leaf> for Anno<K>
 where
     Leaf: Keyed<K>,
-    K: Ord + Default + Clone,
+    K: Ord + Default + Clone + Archive,
 {
     fn from_leaf(leaf: &Leaf) -> Self {
         Anno {

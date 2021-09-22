@@ -4,11 +4,9 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use core::marker::PhantomData;
-
-use crate::branch::Branch;
-use crate::branch_mut::BranchMut;
-use crate::compound::{Child, Compound, MutableLeaves};
+use crate::branch::{Branch, Level};
+use crate::branch_mut::{BranchMut, LevelMut};
+use crate::compound::{Compound, MutableLeaves};
 use crate::Annotation;
 
 /// The return value from a closure to `walk` the tree.
@@ -25,36 +23,65 @@ pub enum Step {
     Abort,
 }
 
-/// The argument given to a `Walker` to traverse through nodes.
-pub struct Walk<'a, C, A> {
-    ofs: usize,
-    compound: &'a C,
-    _marker: PhantomData<A>,
+/// Type to handle the walking over datastructures
+pub enum Walk<'a, C, A>
+where
+    C: Compound<A>,
+    A: Annotation<C::Leaf>,
+{
+    /// Walk over an immutable tree
+    Level(&'a Level<'a, C, A>),
+    /// Walk over a mutable tree
+    LevelMut(&'a LevelMut<'a, C, A>),
 }
 
-impl<'a, C, A> Walk<'a, C, A> {
-    pub(crate) fn new(compound: &'a C, ofs: usize) -> Self {
-        Walk {
-            ofs,
-            compound,
-            _marker: PhantomData,
-        }
+// /// The argument given to a `Walker` to traverse through nodes.
+// pub struct Walk<'a, C, A> {
+//     compound: &'a C,
+//     _marker: PhantomData<A>,
+// }
+
+impl<'a, C, A> Walk<'a, C, A>
+where
+    C: Compound<A>,
+    A: Annotation<C::Leaf>,
+{
+    pub(crate) fn new(level: &'a Level<C, A>) -> Self {
+        Walk::Level(level)
     }
 
-    /// Returns the child at specific offset relative to the branch offset
-    pub fn child(&self, ofs: usize) -> Child<'a, C, A>
+    pub(crate) fn new_mut(level: &'a LevelMut<C, A>) -> Self {
+        Walk::LevelMut(level)
+    }
+
+    /// Returns the child at specific offset relative to the level offset
+    pub fn child(&self, _ofs: usize) -> WalkChild<'a, C::Leaf, A>
     where
         C: Compound<A>,
         A: Annotation<C::Leaf>,
     {
-        self.compound.child(ofs + self.ofs)
+        match self {
+            Walk::Level(_) => todo!(),
+            Walk::LevelMut(_) => todo!(),
+        }
     }
 }
 
 /// The trait used to construct a `Branch` or to iterate through a tree.
-pub trait Walker<C, A> {
+pub trait Walker<C, A>
+where
+    C: Compound<A>,
+    A: Annotation<C::Leaf>,
+{
     /// Walk the tree node, returning the appropriate `Step`
     fn walk(&mut self, walk: Walk<C, A>) -> Step;
+}
+
+pub enum WalkChild<'a, T, A> {
+    Leaf(T),
+    Annotation(&'a A),
+    Empty,
+    EndOfNode,
 }
 
 /// Walker that visits all leaves
@@ -68,10 +95,10 @@ where
     fn walk(&mut self, walk: Walk<C, A>) -> Step {
         for i in 0.. {
             match walk.child(i) {
-                Child::Leaf(_) => return Step::Found(i),
-                Child::Node(_) => return Step::Into(i),
-                Child::Empty => (),
-                Child::EndOfNode => return Step::Advance,
+                WalkChild::Leaf(_) => return Step::Found(i),
+                WalkChild::Annotation(_) => return Step::Into(i),
+                WalkChild::Empty => (),
+                WalkChild::EndOfNode => return Step::Advance,
             }
         }
         unreachable!()

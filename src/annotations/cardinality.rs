@@ -14,8 +14,8 @@ use rkyv::{Archive, Deserialize, Serialize};
 use crate::annotations::{Annotation, Combine};
 use crate::branch::Branch;
 use crate::branch_mut::BranchMut;
-use crate::compound::{AnnoIter, Child, Compound, MutableLeaves};
-use crate::walk::{Step, Walk, Walker};
+use crate::compound::{AnnoIter, Compound, MutableLeaves};
+use crate::walk::{Step, Walk, WalkChild, Walker};
 
 /// The cardinality of a compound collection
 #[derive(
@@ -66,15 +66,15 @@ where
     fn walk(&mut self, walk: Walk<C, A>) -> Step {
         for i in 0.. {
             match walk.child(i) {
-                Child::Leaf(_) => {
+                WalkChild::Leaf(_) => {
                     if self.0 == 0 {
                         return Step::Found(i);
                     } else {
                         self.0 -= 1
                     }
                 }
-                Child::Node(node) => {
-                    let card: u64 = (*node.annotation()).borrow().into();
+                WalkChild::Annotation(a) => {
+                    let card: u64 = a.borrow().into();
 
                     if card <= self.0 {
                         self.0 -= card;
@@ -82,8 +82,8 @@ where
                         return Step::Into(i);
                     }
                 }
-                Child::Empty => (),
-                Child::EndOfNode => return Step::Abort,
+                WalkChild::Empty => (),
+                WalkChild::EndOfNode => return Step::Abort,
             }
         }
         unreachable!()

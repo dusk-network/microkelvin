@@ -23,6 +23,16 @@ where
     Archived(&'a C::Archived),
 }
 
+impl<'a, C, A> LevelNode<'a, C, A>
+where
+    C: Compound<A>,
+    A: Annotation<C::Leaf>,
+{
+    fn child(&'a self, _ofs: usize) -> Child<C, A> {
+        todo!()
+    }
+}
+
 pub struct Level<'a, C, A>
 where
     C: Compound<A>,
@@ -30,18 +40,6 @@ where
 {
     offset: usize,
     node: LevelNode<'a, C, A>,
-}
-
-impl<'a, C, A> Deref for Level<'a, C, A>
-where
-    C: Compound<A>,
-    A: Annotation<C::Leaf>,
-{
-    type Target = C;
-
-    fn deref(&self) -> &Self::Target {
-        &*self.node
-    }
 }
 
 impl<'a, C, A> Level<'a, C, A>
@@ -78,27 +76,16 @@ where
     fn offset_mut(&mut self) -> &mut usize {
         &mut self.offset
     }
+
+    fn child(&'a self) -> Child<'a, C, A> {
+        self.node.child(self.offset)
+    }
 }
 
 pub struct PartialBranch<'a, C, A>(Vec<Level<'a, C, A>>)
 where
     C: Compound<A>,
     A: Annotation<C::Leaf>;
-
-impl<'a, C, A> Deref for LevelNode<'a, C, A>
-where
-    C: Compound<A>,
-    A: Annotation<C::Leaf>,
-{
-    type Target = C;
-
-    fn deref(&self) -> &Self::Target {
-        match self {
-            LevelNode::Root(target) => target,
-            LevelNode::Val(val) => &**val,
-        }
-    }
-}
 
 impl<'a, C, A> PartialBranch<'a, C, A>
 where
@@ -123,12 +110,14 @@ where
         A: Annotation<C::Leaf>,
     {
         let top = self.top();
-        let ofs = top.offset();
+        let _ofs = top.offset();
 
-        match (**top).child(ofs) {
-            Child::Leaf(l) => Some(l),
-            _ => None,
-        }
+        todo!();
+
+        // match (**top).child(ofs) {
+        //     Child::Leaf(l) => Some(l),
+        //     _ => None,
+        // }
     }
 
     fn top(&self) -> &Level<C, A> {
@@ -180,7 +169,7 @@ where
             }
 
             let top = self.top_mut();
-            let step = walker.walk(Walk::new(&**top, top.offset()));
+            let step = walker.walk(Walk::new(top));
 
             match step {
                 Step::Found(walk_ofs) => {
@@ -189,8 +178,8 @@ where
                 }
                 Step::Into(walk_ofs) => {
                     *top.offset_mut() += walk_ofs;
-                    let ofs = top.offset();
-                    let top_child = top.child(ofs);
+                    //let ofs = top.offset();
+                    let top_child = top.child();
                     if let Child::Node(n) = top_child {
                         let level: Level<'_, C, A> = Level::new_val(n.inner());
                         // Extend the lifetime of the Level.

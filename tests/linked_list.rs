@@ -37,7 +37,11 @@ impl<T, A> Default for LinkedList<T, A> {
     }
 }
 
-impl<T, A> Compound<A> for LinkedList<T, A> {
+impl<T, A> Compound<A> for LinkedList<T, A>
+where
+    T: Archive,
+    A: Annotation<T>,
+{
     type Leaf = T;
 
     fn child(&self, ofs: usize) -> Child<Self, A> {
@@ -61,7 +65,11 @@ impl<T, A> Compound<A> for LinkedList<T, A> {
 
 impl<T, A> MutableLeaves for LinkedList<T, A> where A: Archive + Annotation<T> {}
 
-impl<T, A> LinkedList<T, A> {
+impl<T, A> LinkedList<T, A>
+where
+    T: Archive,
+    A: Annotation<T>,
+{
     pub fn new() -> Self {
         Default::default()
     }

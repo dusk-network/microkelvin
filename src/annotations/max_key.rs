@@ -15,8 +15,8 @@ use rkyv::{Archive, Deserialize, Serialize};
 use crate::annotations::{Annotation, Combine};
 use crate::branch::Branch;
 use crate::branch_mut::BranchMut;
-use crate::compound::{AnnoIter, Child, Compound, MutableLeaves};
-use crate::walk::{Step, Walk, Walker};
+use crate::compound::{AnnoIter, Compound, MutableLeaves};
+use crate::walk::{Step, Walk, WalkChild, Walker};
 
 /// The maximum value of a collection
 #[derive(PartialEq, Eq, Clone, Debug, Archive, Serialize, Deserialize)]
@@ -133,7 +133,7 @@ where
 
         for i in 0.. {
             match walk.child(i) {
-                Child::Leaf(l) => {
+                WalkChild::Leaf(l) => {
                     let leaf_max: MaxKey<K> = MaxKey::Maximum(l.key().clone());
 
                     if leaf_max > current_max {
@@ -141,16 +141,15 @@ where
                         current_step = Step::Found(i);
                     }
                 }
-                Child::Node(n) => {
-                    let ann = n.annotation();
+                WalkChild::Annotation(ann) => {
                     let node_max: &MaxKey<K> = (*ann).borrow();
                     if node_max > &current_max {
                         current_max = node_max.clone();
                         current_step = Step::Into(i);
                     }
                 }
-                Child::Empty => (),
-                Child::EndOfNode => return current_step,
+                WalkChild::Empty => (),
+                WalkChild::EndOfNode => return current_step,
             }
         }
         unreachable!()
