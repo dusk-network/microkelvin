@@ -6,8 +6,8 @@
 
 use bytecheck::CheckBytes;
 use microkelvin::{
-    Annotation, Cardinality, Child, ChildMut, Compound, First, Link,
-    MutableLeaves, Nth, Portal, PortalProvider,
+    Annotation, ArchivedChild, ArchivedChildren, Cardinality, Child, ChildMut,
+    Compound, First, Link, MutableLeaves, Nth, Portal, PortalProvider,
 };
 use rkyv::{ser::Serializer, AlignedVec, Archive, Deserialize, Serialize};
 
@@ -37,7 +37,21 @@ impl<T, A> Default for LinkedList<T, A> {
     }
 }
 
-impl<T, A> Compound<A> for LinkedList<T, A> {
+impl<T, A> ArchivedChildren<LinkedList<T, A>, A> for ArchivedLinkedList<T, A>
+where
+    T: Archive,
+    A: Annotation<T>,
+{
+    fn archived_child(&self, ofs: usize) -> ArchivedChild<LinkedList<T, A>, A> {
+        todo!()
+    }
+}
+
+impl<T, A> Compound<A> for LinkedList<T, A>
+where
+    T: Archive,
+    A: Annotation<T>,
+{
     type Leaf = T;
 
     fn child(&self, ofs: usize) -> Child<Self, A> {
@@ -61,7 +75,11 @@ impl<T, A> Compound<A> for LinkedList<T, A> {
 
 impl<T, A> MutableLeaves for LinkedList<T, A> where A: Archive + Annotation<T> {}
 
-impl<T, A> LinkedList<T, A> {
+impl<T, A> LinkedList<T, A>
+where
+    T: Archive,
+    A: Annotation<T>,
+{
     pub fn new() -> Self {
         Default::default()
     }

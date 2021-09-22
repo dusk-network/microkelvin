@@ -36,7 +36,10 @@ pub use backend::{
 };
 pub use branch::Branch;
 pub use branch_mut::BranchMut;
-pub use compound::{AnnoIter, Child, ChildMut, Compound, MutableLeaves};
+pub use compound::{
+    AnnoIter, ArchivedChild, ArchivedChildren, Child, ChildMut, Compound,
+    MutableLeaves,
+};
 pub use id::Id;
 pub use link::{Link, LinkAnnotation, LinkCompound, LinkCompoundMut};
 pub use walk::{First, Step, Walk, Walker};

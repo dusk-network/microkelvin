@@ -93,9 +93,9 @@ where
             Ok(r) => r,
             _ => unreachable!(),
         };
-        let portal = serializer.portal();
+        let _portal = serializer.portal();
         let id = self.id();
-        Ok((id.hash().clone(), a_resolver))
+        Ok((*id.hash(), a_resolver))
     }
 }
 
@@ -108,14 +108,6 @@ where
             inner: RefCell::new(LinkInner::C(Rc::new(C::default()))),
         }
     }
-}
-
-enum LinkRef<'a, C, A>
-where
-    C: Archive,
-{
-    InMemory(LinkCompound<'a, C, A>),
-    Archived(&'a C::Archived),
 }
 
 impl<C, A> Link<C, A>
@@ -170,13 +162,14 @@ where
                 Ok(c) => c,
                 Err(rc) => (&*rc).clone(),
             },
-            LinkInner::Ia(id, _) => {
+            LinkInner::Ia(_id, _) => {
                 todo!()
             }
             _ => unreachable!(),
         }
     }
 
+    /// Computes and returns the id of the compound link is pointing to
     pub fn id(&self) -> Id<C> {
         todo!()
     }
@@ -191,7 +184,7 @@ where
         match *borrow {
             LinkInner::Placeholder => unreachable!(),
             LinkInner::C(_) | LinkInner::Ca(_, _) => LinkCompound(borrow),
-            LinkInner::Ia(ref id, _) => LinkCompound(borrow),
+            LinkInner::Ia(ref _id, _) => LinkCompound(borrow),
         }
     }
 

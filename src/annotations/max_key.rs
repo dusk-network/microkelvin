@@ -15,7 +15,7 @@ use rkyv::{Archive, Deserialize, Serialize};
 use crate::annotations::{Annotation, Combine};
 use crate::branch::Branch;
 use crate::branch_mut::BranchMut;
-use crate::compound::{AnnoIter, Child, Compound, MutableLeaves};
+use crate::compound::{AnnoIter, ArchivedChildren, Compound, MutableLeaves};
 use crate::walk::{Step, Walk, Walker};
 
 /// The maximum value of a collection
@@ -123,37 +123,39 @@ impl<K> Default for FindMaxKey<K> {
 impl<C, A, K> Walker<C, A> for FindMaxKey<K>
 where
     C: Compound<A>,
+    C::Archived: ArchivedChildren<C, A>,
     C::Leaf: Keyed<K>,
     A: Annotation<C::Leaf> + Borrow<MaxKey<K>>,
     K: Ord + Clone,
 {
-    fn walk(&mut self, walk: Walk<C, A>) -> Step {
-        let mut current_max: MaxKey<K> = MaxKey::NegativeInfinity;
-        let mut current_step = Step::Abort;
+    fn walk(&mut self, _walk: Walk<C, A>) -> Step {
+        // let mut current_max: MaxKey<K> = MaxKey::NegativeInfinity;
+        // let mut current_step = Step::Abort;
 
-        for i in 0.. {
-            match walk.child(i) {
-                Child::Leaf(l) => {
-                    let leaf_max: MaxKey<K> = MaxKey::Maximum(l.key().clone());
+        // for i in 0.. {
+        //     match walk.child(i) {
+        //         WalkChild::Leaf(l) => {
+        //             let leaf_max: MaxKey<K> =
+        // MaxKey::Maximum(l.key().clone());
 
-                    if leaf_max > current_max {
-                        current_max = leaf_max;
-                        current_step = Step::Found(i);
-                    }
-                }
-                Child::Node(n) => {
-                    let ann = n.annotation();
-                    let node_max: &MaxKey<K> = (*ann).borrow();
-                    if node_max > &current_max {
-                        current_max = node_max.clone();
-                        current_step = Step::Into(i);
-                    }
-                }
-                Child::Empty => (),
-                Child::EndOfNode => return current_step,
-            }
-        }
-        unreachable!()
+        //             if leaf_max > current_max {
+        //                 current_max = leaf_max;
+        //                 current_step = Step::Found(i);
+        //             }
+        //         }
+        //         WalkChild::Annotation(ann) => {
+        //             let node_max: &MaxKey<K> = (*ann).borrow();
+        //             if node_max > &current_max {
+        //                 current_max = node_max.clone();
+        //                 current_step = Step::Into(i);
+        //             }
+        //         }
+        //         WalkChild::Empty => (),
+        //         WalkChild::EndOfNode => return current_step,
+        //     }
+        // }
+        // unreachable!()
+        todo!()
     }
 }
 
@@ -162,7 +164,8 @@ where
 pub trait GetMaxKey<'a, A, K>
 where
     Self: Compound<A>,
-    Self::Leaf: Keyed<K>,
+    Self::Leaf: Keyed<K> + Archive,
+    Self::Archived: ArchivedChildren<Self, A>,
     A: Annotation<Self::Leaf> + Borrow<MaxKey<K>>,
     K: Ord,
 {
@@ -179,6 +182,7 @@ impl<'a, C, A, K> GetMaxKey<'a, A, K> for C
 where
     C: Compound<A>,
     C::Leaf: Keyed<K>,
+    C::Archived: ArchivedChildren<C, A>,
     A: Annotation<C::Leaf> + Borrow<MaxKey<K>>,
     K: Ord + Clone,
 {

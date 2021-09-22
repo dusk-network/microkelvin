@@ -21,8 +21,22 @@ where
     Leaf(&'a C::Leaf),
     /// Child is an annotated subtree node
     Node(&'a Link<C, A>),
+    /// Empty slot
+    Empty,
+    /// No more children
+    EndOfNode,
+}
+
+/// The response of the `child` method on a `Compound` node.
+pub enum ArchivedChild<'a, C, A>
+where
+    C: Compound<A>,
+    A: Annotation<C::Leaf>,
+{
+    /// Child is a leaf
+    Leaf(&'a <<C as Compound<A>>::Leaf as Archive>::Archived),
     /// Child is an annotated subtree node
-    ArchivedNode(&'a ArchivedLink<A>),
+    Node(&'a ArchivedLink<A>),
     /// Empty slot
     Empty,
     /// No more children
@@ -45,18 +59,28 @@ where
     EndOfNode,
 }
 
+/// Trait to support branch traversal in archived nodes
+pub trait ArchivedChildren<C, A>
+where
+    C: Compound<A>,
+    A: Annotation<C::Leaf>,
+{
+    /// Returns an archived child
+    fn archived_child(&self, ofs: usize) -> ArchivedChild<C, A>;
+}
+
 /// A type that can recursively contain itself and leaves.
 pub trait Compound<A>: Sized + Archive
 where
     A: Annotation<Self::Leaf>,
 {
     /// The leaf type of the Compound collection
-    type Leaf;
+    type Leaf: Archive;
 
-    /// Returns a reference to a possible child at specified offset
+    /// Get a reference to a child    
     fn child(&self, ofs: usize) -> Child<Self, A>;
 
-    /// Returns a mutable reference to a possible child at specified offset
+    /// Get a mutable reference to a child
     fn child_mut(&mut self, ofs: usize) -> ChildMut<Self, A>;
 
     /// Provides an iterator over all sub-annotations of the compound node

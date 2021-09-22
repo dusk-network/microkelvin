@@ -9,20 +9,21 @@
 use core::borrow::Borrow;
 
 use bytecheck::CheckBytes;
+use rend::LittleEndian;
 use rkyv::{Archive, Deserialize, Serialize};
 
 use crate::annotations::{Annotation, Combine};
 use crate::branch::Branch;
 use crate::branch_mut::BranchMut;
-use crate::compound::{AnnoIter, Child, Compound, MutableLeaves};
-use crate::walk::{Step, Walk, Walker};
+use crate::compound::{AnnoIter, ArchivedChildren, Compound, MutableLeaves};
+use crate::walk::{Step, Walk, WalkChild, Walker};
 
 /// The cardinality of a compound collection
 #[derive(
     PartialEq, Debug, Clone, Default, Copy, Archive, Serialize, Deserialize,
 )]
 #[archive_attr(derive(CheckBytes))]
-pub struct Cardinality(pub(crate) u64);
+pub struct Cardinality(pub(crate) LittleEndian<u64>);
 
 impl From<Cardinality> for u64 {
     fn from(c: Cardinality) -> Self {
@@ -61,30 +62,33 @@ pub struct Offset(u64);
 impl<C, A> Walker<C, A> for Offset
 where
     C: Compound<A>,
+    C::Archived: ArchivedChildren<C, A>,
+    <C::Leaf as Archive>::Archived: Borrow<C::Leaf>,
     A: Annotation<C::Leaf> + Borrow<Cardinality> + Archive,
 {
     fn walk(&mut self, walk: Walk<C, A>) -> Step {
         for i in 0.. {
-            match walk.child(i) {
-                Child::Leaf(_) => {
+            walk.with_child(i, |child| match child {
+                WalkChild::Leaf(_) => {
                     if self.0 == 0 {
-                        return Step::Found(i);
+                        Some(Step::Found(i))
                     } else {
-                        self.0 -= 1
+                        self.0 -= 1;
+                        None
                     }
                 }
-                Child::Node(node) => {
-                    let card: u64 = (*node.annotation()).borrow().into();
-
+                WalkChild::Annotation(a) => {
+                    let card: u64 = a.borrow().into();
                     if card <= self.0 {
                         self.0 -= card;
+                        None
                     } else {
-                        return Step::Into(i);
+                        Some(Step::Into(i))
                     }
                 }
-                Child::Empty => (),
-                Child::EndOfNode => return Step::Abort,
-            }
+                WalkChild::Empty => None,
+                WalkChild::EndOfNode => Some(Step::Abort),
+            });
         }
         unreachable!()
     }
@@ -95,6 +99,9 @@ where
 pub trait Nth<'a, A>
 where
     Self: Compound<A>,
+    Self::Archived: ArchivedChildren<Self, A>,
+    Self::Leaf: Archive,
+    <Self::Leaf as Archive>::Archived: Borrow<Self::Leaf>,
     A: Annotation<Self::Leaf>,
 {
     /// Construct a `Branch` pointing to the `nth` element, if any
@@ -109,6 +116,8 @@ where
 impl<'a, C, A> Nth<'a, A> for C
 where
     C: Compound<A>,
+    C::Archived: ArchivedChildren<C, A>,
+    <C::Leaf as Archive>::Archived: Borrow<C::Leaf>,
     A: Annotation<C::Leaf> + Borrow<Cardinality>,
 {
     fn nth(&'a self, ofs: u64) -> Option<Branch<'a, Self, A>> {
