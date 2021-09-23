@@ -6,8 +6,8 @@
 
 use bytecheck::CheckBytes;
 use microkelvin::{
-    Annotation, Cardinality, Child, ChildMut, Compound, First, Link,
-    MutableLeaves, Nth, Portal, PortalProvider,
+    Annotation, ArchivedChild, ArchivedChildren, Cardinality, Child, ChildMut,
+    Compound, First, Link, MutableLeaves, Nth, Portal, PortalProvider,
 };
 use rkyv::{ser::Serializer, AlignedVec, Archive, Deserialize, Serialize};
 
@@ -34,6 +34,16 @@ pub enum LinkedList<T, A> {
 impl<T, A> Default for LinkedList<T, A> {
     fn default() -> Self {
         LinkedList::Empty
+    }
+}
+
+impl<T, A> ArchivedChildren<LinkedList<T, A>, A> for ArchivedLinkedList<T, A>
+where
+    T: Archive,
+    A: Annotation<T>,
+{
+    fn archived_child(&self, ofs: usize) -> ArchivedChild<LinkedList<T, A>, A> {
+        todo!()
     }
 }
 

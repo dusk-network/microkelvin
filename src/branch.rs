@@ -4,16 +4,18 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use core::borrow::Borrow;
 use core::ops::Deref;
 
 use alloc::vec::Vec;
+use rkyv::Archive;
 
 use crate::compound::{ArchivedChildren, Child, Compound};
 use crate::link::LinkCompound;
 use crate::walk::{AllLeaves, Step, Walk, Walker};
 use crate::Annotation;
 
-enum LevelNode<'a, C, A>
+pub(crate) enum LevelNode<'a, C, A>
 where
     C: Compound<A>,
     C::Archived: ArchivedChildren<C, A>,
@@ -24,21 +26,6 @@ where
     Archived(&'a C::Archived),
 }
 
-impl<'a, C, A> LevelNode<'a, C, A>
-where
-    C: Compound<A>,
-    C::Archived: ArchivedChildren<C, A>,
-    A: Annotation<C::Leaf>,
-{
-    fn child(&'a self, ofs: usize) -> Child<C, A> {
-        match self {
-            LevelNode::Root(root) => root.child(ofs),
-            LevelNode::Val(lc) => lc.child(ofs),
-            LevelNode::Archived(arch) => arch.archived_child(ofs),
-        }
-    }
-}
-
 pub struct Level<'a, C, A>
 where
     C: Compound<A>,
@@ -46,7 +33,8 @@ where
     A: Annotation<C::Leaf>,
 {
     offset: usize,
-    node: LevelNode<'a, C, A>,
+    // pub to be accesible from `walk.rs`
+    pub(crate) node: LevelNode<'a, C, A>,
 }
 
 impl<'a, C, A> Level<'a, C, A>
@@ -69,13 +57,6 @@ where
         }
     }
 
-    pub fn new_archived(link_ref: &'a C::Archived) -> Level<'a, C, A> {
-        Level {
-            offset: 0,
-            node: LevelNode::Archived(link_ref),
-        }
-    }
-
     /// Returns the offset of the branch level
     pub fn offset(&self) -> usize {
         self.offset
@@ -83,10 +64,6 @@ where
 
     fn offset_mut(&mut self) -> &mut usize {
         &mut self.offset
-    }
-
-    pub(crate) fn child(&'a self, ofs: usize) -> Child<'a, C, A> {
-        self.node.child(self.offset + ofs)
     }
 }
 
@@ -189,52 +166,33 @@ where
                 }
                 Step::Into(walk_ofs) => {
                     *top.offset_mut() += walk_ofs;
-                    let top_child = top.child(0);
-                    if let Child::Node(n) = top_child {
-                        let level: Level<'_, C, A> = Level::new_val(n.inner());
-                        // Extend the lifetime of the Level.
-                        //
-                        // JUSTIFICATION
-                        //
-                        // The `Vec<Level<'a, C, A>>` used here cannot be
-                        // expressed in safe rust, since it relies on the
-                        // elements of the `Vec` refering to prior elements in
-                        // the same `Vec`.
-                        //
-                        // This vec from the start contains one single `Level`
-                        // of variant in turn containing a `LevelNode::Root(&'a
-                        // C)`
-                        //
-                        // The first step `Into` will add a `Level` with the
-                        // following reference structure
-                        // `LevelNode::Val(AnnRef<'a, C, A>)` -> `Val<'a, C>` ->
-                        // ReprInner (from canonical) which in turns contains
-                        // the value of the next node behind an `Rc<C>`.
-                        //
-                        // The address of the pointed-to `C` thus remains
-                        // unchanged, even if the `Vec` in `PartialBranch`
-                        // re-allocates.
-                        //
-                        // The same is true of `LevelNode::Root` since it is a
-                        // reference that just gets copied over to the new
-                        // allocation.
-                        //
-                        // Additionally, the `Vec` is only ever changed at its
-                        // end, either pushed or popped, so any reference "Up"
-                        // the branch will always remain valid.
-                        //
-                        // Since `'a` controls the whole lifetime of the access
-                        // to the tree, there is also no
-                        // way for the tree to change in
-                        // the meantime, thus invalidating the pointers is
-                        // not possible, and this extension of the lifetime of
-                        // the level is safe.
+                    let ofs = top.offset();
 
-                        let extended: Level<'a, C, A> =
-                            unsafe { core::mem::transmute(level) };
-                        state = State::Push(extended);
-                    } else {
-                        panic!("Attempted descent into non-node")
+                    match &top.node {
+                        LevelNode::Root(root) => {
+                            if let Child::Node(n) = root.child(ofs) {
+                                let level: Level<'_, C, A> =
+                                    Level::new_val(n.inner());
+                                let extended: Level<'a, C, A> =
+                                    unsafe { core::mem::transmute(level) };
+                                state = State::Push(extended);
+                            } else {
+                                panic!("Attempted descent into non-node")
+                            }
+                        }
+                        LevelNode::Val(val) => {
+                            if let Child::Node(n) = val.child(ofs) {
+                                let level: Level<'_, C, A> =
+                                    Level::new_val(n.inner());
+                                let extended: Level<'a, C, A> =
+                                    unsafe { core::mem::transmute(level) };
+                                state = State::Push(extended);
+                            } else {
+                                panic!("Attempted descent into non-node")
+                            }
+                        }
+
+                        LevelNode::Archived(_) => todo!(),
                     }
                 }
                 Step::Advance => state = State::Pop,
@@ -354,6 +312,7 @@ impl<'a, C, A> IntoIterator for Branch<'a, C, A>
 where
     C: Compound<A>,
     C::Archived: ArchivedChildren<C, A>,
+    <C::Leaf as Archive>::Archived: Borrow<C::Leaf>,
     A: Annotation<C::Leaf>,
 {
     type Item = &'a C::Leaf;
@@ -369,6 +328,7 @@ impl<'a, C, A, W> Iterator for BranchIterator<'a, C, A, W>
 where
     C: Compound<A>,
     C::Archived: ArchivedChildren<C, A>,
+    <C::Leaf as Archive>::Archived: Borrow<C::Leaf>,
     A: Annotation<C::Leaf>,
     W: Walker<C, A>,
 {
@@ -424,6 +384,7 @@ impl<'a, C, A, M> IntoIterator for MappedBranch<'a, C, A, M>
 where
     C: Compound<A>,
     C::Archived: ArchivedChildren<C, A>,
+    <C::Leaf as Archive>::Archived: Borrow<C::Leaf>,
     A: Annotation<C::Leaf>,
     M: 'a,
 {

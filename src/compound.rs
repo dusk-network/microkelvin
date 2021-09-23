@@ -59,11 +59,13 @@ where
     EndOfNode,
 }
 
+/// Trait to support branch traversal in archived nodes
 pub trait ArchivedChildren<C, A>
 where
     C: Compound<A>,
     A: Annotation<C::Leaf>,
 {
+    /// Returns an archived child
     fn archived_child(&self, ofs: usize) -> ArchivedChild<C, A>;
 }
 
@@ -75,8 +77,11 @@ where
     /// The leaf type of the Compound collection
     type Leaf: Archive;
 
-    fn child_mut(&mut self, ofs: usize) -> ChildMut<Self, A>;
+    /// Get a reference to a child    
     fn child(&self, ofs: usize) -> Child<Self, A>;
+
+    /// Get a mutable reference to a child
+    fn child_mut(&mut self, ofs: usize) -> ChildMut<Self, A>;
 
     /// Provides an iterator over all sub-annotations of the compound node
     fn annotations(&self) -> AnnoIter<Self, A>

@@ -4,10 +4,12 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use core::borrow::Borrow;
 use core::mem;
 use core::ops::{Deref, DerefMut};
 
 use alloc::vec::Vec;
+use rkyv::Archive;
 
 use crate::compound::{ArchivedChildren, Child, ChildMut, Compound};
 use crate::link::LinkCompoundMut;
@@ -335,6 +337,7 @@ impl<'a, C, A> IntoIterator for BranchMut<'a, C, A>
 where
     C: Compound<A> + Clone,
     C::Archived: ArchivedChildren<C, A>,
+    <C::Leaf as Archive>::Archived: Borrow<C::Leaf>,
     A: Annotation<C::Leaf>,
 {
     type Item = &'a mut C::Leaf;
@@ -405,6 +408,7 @@ impl<'a, C, A, M> IntoIterator for MappedBranchMut<'a, C, A, M>
 where
     C: Compound<A> + Clone,
     C::Archived: ArchivedChildren<C, A>,
+    <C::Leaf as Archive>::Archived: Borrow<C::Leaf>,
     A: Annotation<C::Leaf>,
     M: 'a,
 {

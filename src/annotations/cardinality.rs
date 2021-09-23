@@ -9,6 +9,7 @@
 use core::borrow::Borrow;
 
 use bytecheck::CheckBytes;
+use rend::LittleEndian;
 use rkyv::{Archive, Deserialize, Serialize};
 
 use crate::annotations::{Annotation, Combine};
@@ -22,7 +23,7 @@ use crate::walk::{Step, Walk, WalkChild, Walker};
     PartialEq, Debug, Clone, Default, Copy, Archive, Serialize, Deserialize,
 )]
 #[archive_attr(derive(CheckBytes))]
-pub struct Cardinality(pub(crate) u64);
+pub struct Cardinality(pub(crate) LittleEndian<u64>);
 
 impl From<Cardinality> for u64 {
     fn from(c: Cardinality) -> Self {
@@ -62,6 +63,7 @@ impl<C, A> Walker<C, A> for Offset
 where
     C: Compound<A>,
     C::Archived: ArchivedChildren<C, A>,
+    <C::Leaf as Archive>::Archived: Borrow<C::Leaf>,
     A: Annotation<C::Leaf> + Borrow<Cardinality> + Archive,
 {
     fn walk(&mut self, walk: Walk<C, A>) -> Step {
@@ -97,8 +99,9 @@ where
 pub trait Nth<'a, A>
 where
     Self: Compound<A>,
-    Self::Leaf: Archive,
     Self::Archived: ArchivedChildren<Self, A>,
+    Self::Leaf: Archive,
+    <Self::Leaf as Archive>::Archived: Borrow<Self::Leaf>,
     A: Annotation<Self::Leaf>,
 {
     /// Construct a `Branch` pointing to the `nth` element, if any
@@ -114,6 +117,7 @@ impl<'a, C, A> Nth<'a, A> for C
 where
     C: Compound<A>,
     C::Archived: ArchivedChildren<C, A>,
+    <C::Leaf as Archive>::Archived: Borrow<C::Leaf>,
     A: Annotation<C::Leaf> + Borrow<Cardinality>,
 {
     fn nth(&'a self, ofs: u64) -> Option<Branch<'a, Self, A>> {

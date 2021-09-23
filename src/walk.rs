@@ -4,7 +4,11 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use crate::branch::{Branch, Level};
+use core::borrow::Borrow;
+
+use rkyv::Archive;
+
+use crate::branch::{Branch, Level, LevelNode};
 use crate::branch_mut::{BranchMut, LevelMut};
 use crate::compound::{ArchivedChildren, Child, Compound, MutableLeaves};
 use crate::Annotation;
@@ -54,15 +58,15 @@ where
     pub fn with_child<F>(&self, ofs: usize, mut f: F) -> Option<Step>
     where
         C: Compound<A>,
+        <C::Leaf as Archive>::Archived: Borrow<C::Leaf>,
         A: Annotation<C::Leaf>,
         F: FnMut(WalkChild<C::Leaf, A>) -> Option<Step>,
     {
         match self {
-            Walk::Level(level) => match level.child(ofs) {
-                Child::Leaf(t) => f(WalkChild::Leaf(t)),
-                Child::Node(n) => f(WalkChild::Annotation(&n.annotation())),
-                Child::Empty => f(WalkChild::Empty),
-                Child::EndOfNode => f(WalkChild::EndOfNode),
+            Walk::Level(level) => match &level.node {
+                LevelNode::Root(_r) => todo!(),
+                LevelNode::Val(_v) => todo!(),
+                LevelNode::Archived(_a) => todo!(),
             },
             Walk::LevelMut(level) => match level.child(ofs) {
                 Child::Leaf(t) => f(WalkChild::Leaf(t)),
@@ -99,6 +103,7 @@ impl<C, A> Walker<C, A> for AllLeaves
 where
     C: Compound<A>,
     C::Archived: ArchivedChildren<C, A>,
+    <C::Leaf as Archive>::Archived: Borrow<C::Leaf>,
     A: Annotation<C::Leaf>,
 {
     fn walk(&mut self, walk: Walk<C, A>) -> Step {
@@ -137,6 +142,7 @@ impl<'a, C, A> First<'a, A> for C
 where
     C: Compound<A>,
     C::Archived: ArchivedChildren<C, A>,
+    <C::Leaf as Archive>::Archived: Borrow<C::Leaf>,
     A: Annotation<C::Leaf>,
 {
     fn first(&'a self) -> Option<Branch<'a, Self, A>> {
