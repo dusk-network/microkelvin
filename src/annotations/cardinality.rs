@@ -8,7 +8,6 @@
 /// i.e. the amount of elements in a collection
 use core::borrow::Borrow;
 
-use bytecheck::CheckBytes;
 use rend::LittleEndian;
 use rkyv::{Archive, Deserialize, Serialize};
 
@@ -22,24 +21,23 @@ use crate::walk::{Step, Walk, WalkChild, Walker};
 #[derive(
     PartialEq, Debug, Clone, Default, Copy, Archive, Serialize, Deserialize,
 )]
-#[archive_attr(derive(CheckBytes))]
 pub struct Cardinality(pub(crate) LittleEndian<u64>);
 
 impl From<Cardinality> for u64 {
     fn from(c: Cardinality) -> Self {
-        c.0
+        c.0.into()
     }
 }
 
 impl<'a> From<&'a Cardinality> for u64 {
     fn from(c: &'a Cardinality) -> Self {
-        c.0
+        c.0.into()
     }
 }
 
 impl<L> Annotation<L> for Cardinality {
     fn from_leaf(_: &L) -> Self {
-        Cardinality(1)
+        Cardinality(1.into())
     }
 }
 
@@ -52,12 +50,15 @@ where
         C: Compound<A>,
         A: Annotation<C::Leaf>,
     {
-        Cardinality(iter.fold(0, |sum, ann| sum + (*ann).borrow().0))
+        Cardinality(iter.fold(LittleEndian::from(0), |sum, ann| {
+            let add: LittleEndian<_> = (*ann).borrow().0;
+            (sum + add).into()
+        }))
     }
 }
 
 /// Walker method to find the nth element of a compound collection
-pub struct Offset(u64);
+pub struct Offset(LittleEndian<u64>);
 
 impl<C, A> Walker<C, A> for Offset
 where
@@ -78,9 +79,9 @@ where
                     }
                 }
                 WalkChild::Annotation(a) => {
-                    let card: u64 = a.borrow().into();
-                    if card <= self.0 {
-                        self.0 -= card;
+                    let card: &Cardinality = a.borrow();
+                    if card.0 <= self.0 {
+                        self.0 -= card.0;
                         None
                     } else {
                         Some(Step::Into(i))
@@ -105,10 +106,16 @@ where
     A: Annotation<Self::Leaf>,
 {
     /// Construct a `Branch` pointing to the `nth` element, if any
-    fn nth(&'a self, n: u64) -> Option<Branch<'a, Self, A>>;
+    fn nth<N: Into<LittleEndian<u64>>>(
+        &'a self,
+        n: N,
+    ) -> Option<Branch<'a, Self, A>>;
 
     /// Construct a `BranchMut` pointing to the `nth` element, if any
-    fn nth_mut(&'a mut self, n: u64) -> Option<BranchMut<'a, Self, A>>
+    fn nth_mut<N: Into<LittleEndian<u64>>>(
+        &'a mut self,
+        n: N,
+    ) -> Option<BranchMut<'a, Self, A>>
     where
         Self: MutableLeaves + Clone;
 }
@@ -120,16 +127,22 @@ where
     <C::Leaf as Archive>::Archived: Borrow<C::Leaf>,
     A: Annotation<C::Leaf> + Borrow<Cardinality>,
 {
-    fn nth(&'a self, ofs: u64) -> Option<Branch<'a, Self, A>> {
+    fn nth<N: Into<LittleEndian<u64>>>(
+        &'a self,
+        ofs: N,
+    ) -> Option<Branch<'a, Self, A>> {
         // Return the first that satisfies the walk
-        Branch::<_, A>::walk(self, Offset(ofs))
+        Branch::<_, A>::walk(self, Offset(ofs.into()))
     }
 
-    fn nth_mut(&'a mut self, ofs: u64) -> Option<BranchMut<'a, Self, A>>
+    fn nth_mut<N: Into<LittleEndian<u64>>>(
+        &'a mut self,
+        ofs: N,
+    ) -> Option<BranchMut<'a, Self, A>>
     where
         C: MutableLeaves + Clone,
     {
         // Return the first mutable branch that satisfies the walk
-        BranchMut::<_, A>::walk(self, Offset(ofs))
+        BranchMut::<_, A>::walk(self, Offset(ofs.into()))
     }
 }

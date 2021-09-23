@@ -4,7 +4,6 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use bytecheck::CheckBytes;
 use rand::{prelude::SliceRandom, thread_rng};
 use rkyv::{Archive, Deserialize, Serialize};
 
@@ -13,7 +12,6 @@ use linked_list::LinkedList;
 use microkelvin::{GetMaxKey, Keyed, MaxKey};
 
 #[derive(PartialEq, Clone, Debug, Archive, Serialize, Deserialize)]
-#[archive_attr(derive(CheckBytes))]
 struct TestLeaf {
     key: u64,
     other: (),
