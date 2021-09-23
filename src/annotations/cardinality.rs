@@ -61,7 +61,7 @@ pub struct Offset(u64);
 impl<C, A> Walker<C, A> for Offset
 where
     C: Compound<A>,
-    C::Archived: ArchivedChildren<A, C::Leaf>,
+    C::Archived: ArchivedChildren<C, A>,
     A: Annotation<C::Leaf> + Borrow<Cardinality> + Archive,
 {
     fn walk(&mut self, walk: Walk<C, A>) -> Step {
@@ -97,7 +97,8 @@ where
 pub trait Nth<'a, A>
 where
     Self: Compound<A>,
-    Self::Archived: ArchivedChildren<A, Self::Leaf>,
+    Self::Leaf: Archive,
+    Self::Archived: ArchivedChildren<Self, A>,
     A: Annotation<Self::Leaf>,
 {
     /// Construct a `Branch` pointing to the `nth` element, if any
@@ -112,7 +113,7 @@ where
 impl<'a, C, A> Nth<'a, A> for C
 where
     C: Compound<A>,
-    C::Archived: ArchivedChildren<A, C::Leaf>,
+    C::Archived: ArchivedChildren<C, A>,
     A: Annotation<C::Leaf> + Borrow<Cardinality>,
 {
     fn nth(&'a self, ofs: u64) -> Option<Branch<'a, Self, A>> {

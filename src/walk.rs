@@ -27,7 +27,7 @@ pub enum Step {
 pub enum Walk<'a, C, A>
 where
     C: Compound<A>,
-    C::Archived: ArchivedChildren<A, C::Leaf>,
+    C::Archived: ArchivedChildren<C, A>,
     A: Annotation<C::Leaf>,
 {
     /// Walk over an immutable tree
@@ -39,7 +39,7 @@ where
 impl<'a, C, A> Walk<'a, C, A>
 where
     C: Compound<A>,
-    C::Archived: ArchivedChildren<A, C::Leaf>,
+    C::Archived: ArchivedChildren<C, A>,
     A: Annotation<C::Leaf>,
 {
     pub(crate) fn new(level: &'a Level<C, A>) -> Self {
@@ -78,7 +78,7 @@ where
 pub trait Walker<C, A>
 where
     C: Compound<A>,
-    C::Archived: ArchivedChildren<A, C::Leaf>,
+    C::Archived: ArchivedChildren<C, A>,
     A: Annotation<C::Leaf>,
 {
     /// Walk the tree node, returning the appropriate `Step`
@@ -98,7 +98,7 @@ pub struct AllLeaves;
 impl<C, A> Walker<C, A> for AllLeaves
 where
     C: Compound<A>,
-    C::Archived: ArchivedChildren<A, C::Leaf>,
+    C::Archived: ArchivedChildren<C, A>,
     A: Annotation<C::Leaf>,
 {
     fn walk(&mut self, walk: Walk<C, A>) -> Step {
@@ -121,7 +121,7 @@ where
 pub trait First<'a, A>
 where
     Self: Compound<A>,
-    Self::Archived: ArchivedChildren<A, Self::Leaf>,
+    Self::Archived: ArchivedChildren<Self, A>,
     A: Annotation<Self::Leaf>,
 {
     /// Construct a `Branch` pointing to the first element, if not empty
@@ -136,7 +136,7 @@ where
 impl<'a, C, A> First<'a, A> for C
 where
     C: Compound<A>,
-    C::Archived: ArchivedChildren<A, C::Leaf>,
+    C::Archived: ArchivedChildren<C, A>,
     A: Annotation<C::Leaf>,
 {
     fn first(&'a self) -> Option<Branch<'a, Self, A>> {

@@ -123,7 +123,7 @@ impl<K> Default for FindMaxKey<K> {
 impl<C, A, K> Walker<C, A> for FindMaxKey<K>
 where
     C: Compound<A>,
-    C::Archived: ArchivedChildren<A, C::Leaf>,
+    C::Archived: ArchivedChildren<C, A>,
     C::Leaf: Keyed<K>,
     A: Annotation<C::Leaf> + Borrow<MaxKey<K>>,
     K: Ord + Clone,
@@ -164,8 +164,8 @@ where
 pub trait GetMaxKey<'a, A, K>
 where
     Self: Compound<A>,
-    Self::Leaf: Keyed<K>,
-    Self::Archived: ArchivedChildren<A, Self::Leaf>,
+    Self::Leaf: Keyed<K> + Archive,
+    Self::Archived: ArchivedChildren<Self, A>,
     A: Annotation<Self::Leaf> + Borrow<MaxKey<K>>,
     K: Ord,
 {
@@ -182,7 +182,7 @@ impl<'a, C, A, K> GetMaxKey<'a, A, K> for C
 where
     C: Compound<A>,
     C::Leaf: Keyed<K>,
-    C::Archived: ArchivedChildren<A, C::Leaf>,
+    C::Archived: ArchivedChildren<C, A>,
     A: Annotation<C::Leaf> + Borrow<MaxKey<K>>,
     K: Ord + Clone,
 {

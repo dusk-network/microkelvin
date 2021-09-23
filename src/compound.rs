@@ -9,7 +9,7 @@ use core::marker::PhantomData;
 use rkyv::Archive;
 
 use crate::annotations::{Annotation, WrappedAnnotation};
-use crate::link::Link;
+use crate::link::{ArchivedLink, Link};
 
 /// The response of the `child` method on a `Compound` node.
 pub enum Child<'a, C, A>
@@ -21,6 +21,22 @@ where
     Leaf(&'a C::Leaf),
     /// Child is an annotated subtree node
     Node(&'a Link<C, A>),
+    /// Empty slot
+    Empty,
+    /// No more children
+    EndOfNode,
+}
+
+/// The response of the `child` method on a `Compound` node.
+pub enum ArchivedChild<'a, C, A>
+where
+    C: Compound<A>,
+    A: Annotation<C::Leaf>,
+{
+    /// Child is a leaf
+    Leaf(&'a <<C as Compound<A>>::Leaf as Archive>::Archived),
+    /// Child is an annotated subtree node
+    Node(&'a ArchivedLink<A>),
     /// Empty slot
     Empty,
     /// No more children
@@ -43,33 +59,24 @@ where
     EndOfNode,
 }
 
-pub trait MutableChildren<A, L>
+pub trait ArchivedChildren<C, A>
 where
-    A: Annotation<L>,
+    C: Compound<A>,
+    A: Annotation<C::Leaf>,
 {
-    /// Returns a mutable reference to a possible child at specified offset
-    fn child_mut(&mut self, ofs: usize) -> ChildMut<Self, A>;
-}
-
-pub trait ArchivedChildren<A, L>
-where
-    A: Annotation<L>,
-{
-    /// Returns a reference to a possible child at specified offset
-    fn child(&self, ofs: usize) -> Child<Self, A>;
+    fn archived_child(&self, ofs: usize) -> ArchivedChild<C, A>;
 }
 
 /// A type that can recursively contain itself and leaves.
-pub trait Compound<A>:
-    Sized
-    + Archive
-    + MutableChildren<A, Self::Leaf>
-    + ArchivedChildren<A, Self::Leaf>
+pub trait Compound<A>: Sized + Archive
 where
     A: Annotation<Self::Leaf>,
 {
     /// The leaf type of the Compound collection
-    type Leaf;
+    type Leaf: Archive;
+
+    fn child_mut(&mut self, ofs: usize) -> ChildMut<Self, A>;
+    fn child(&self, ofs: usize) -> Child<Self, A>;
 
     /// Provides an iterator over all sub-annotations of the compound node
     fn annotations(&self) -> AnnoIter<Self, A>
