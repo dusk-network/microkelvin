@@ -43,19 +43,33 @@ where
     EndOfNode,
 }
 
+pub trait MutableChildren<A, L>
+where
+    A: Annotation<L>,
+{
+    /// Returns a mutable reference to a possible child at specified offset
+    fn child_mut(&mut self, ofs: usize) -> ChildMut<Self, A>;
+}
+
+pub trait ArchivedChildren<A, L>
+where
+    A: Annotation<L>,
+{
+    /// Returns a reference to a possible child at specified offset
+    fn child(&self, ofs: usize) -> Child<Self, A>;
+}
+
 /// A type that can recursively contain itself and leaves.
-pub trait Compound<A>: Sized + Archive
+pub trait Compound<A>:
+    Sized
+    + Archive
+    + MutableChildren<A, Self::Leaf>
+    + ArchivedChildren<A, Self::Leaf>
 where
     A: Annotation<Self::Leaf>,
 {
     /// The leaf type of the Compound collection
     type Leaf;
-
-    /// Returns a reference to a possible child at specified offset
-    fn child(&self, ofs: usize) -> Child<Self, A>;
-
-    /// Returns a mutable reference to a possible child at specified offset
-    fn child_mut(&mut self, ofs: usize) -> ChildMut<Self, A>;
 
     /// Provides an iterator over all sub-annotations of the compound node
     fn annotations(&self) -> AnnoIter<Self, A>

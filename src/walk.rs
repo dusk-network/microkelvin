@@ -6,7 +6,7 @@
 
 use crate::branch::{Branch, Level};
 use crate::branch_mut::{BranchMut, LevelMut};
-use crate::compound::{Compound, MutableLeaves};
+use crate::compound::{ArchivedChildren, Child, Compound, MutableLeaves};
 use crate::Annotation;
 
 /// The return value from a closure to `walk` the tree.
@@ -27,6 +27,7 @@ pub enum Step {
 pub enum Walk<'a, C, A>
 where
     C: Compound<A>,
+    C::Archived: ArchivedChildren<A, C::Leaf>,
     A: Annotation<C::Leaf>,
 {
     /// Walk over an immutable tree
@@ -35,15 +36,10 @@ where
     LevelMut(&'a LevelMut<'a, C, A>),
 }
 
-// /// The argument given to a `Walker` to traverse through nodes.
-// pub struct Walk<'a, C, A> {
-//     compound: &'a C,
-//     _marker: PhantomData<A>,
-// }
-
 impl<'a, C, A> Walk<'a, C, A>
 where
     C: Compound<A>,
+    C::Archived: ArchivedChildren<A, C::Leaf>,
     A: Annotation<C::Leaf>,
 {
     pub(crate) fn new(level: &'a Level<C, A>) -> Self {
@@ -55,14 +51,25 @@ where
     }
 
     /// Returns the child at specific offset relative to the level offset
-    pub fn child(&self, _ofs: usize) -> WalkChild<'a, C::Leaf, A>
+    pub fn with_child<F>(&self, ofs: usize, mut f: F) -> Option<Step>
     where
         C: Compound<A>,
         A: Annotation<C::Leaf>,
+        F: FnMut(WalkChild<C::Leaf, A>) -> Option<Step>,
     {
         match self {
-            Walk::Level(_) => todo!(),
-            Walk::LevelMut(_) => todo!(),
+            Walk::Level(level) => match level.child(ofs) {
+                Child::Leaf(t) => f(WalkChild::Leaf(t)),
+                Child::Node(n) => f(WalkChild::Annotation(&n.annotation())),
+                Child::Empty => f(WalkChild::Empty),
+                Child::EndOfNode => f(WalkChild::EndOfNode),
+            },
+            Walk::LevelMut(level) => match level.child(ofs) {
+                Child::Leaf(t) => f(WalkChild::Leaf(t)),
+                Child::Node(n) => f(WalkChild::Annotation(&n.annotation())),
+                Child::Empty => f(WalkChild::Empty),
+                Child::EndOfNode => f(WalkChild::EndOfNode),
+            },
         }
     }
 }
@@ -71,6 +78,7 @@ where
 pub trait Walker<C, A>
 where
     C: Compound<A>,
+    C::Archived: ArchivedChildren<A, C::Leaf>,
     A: Annotation<C::Leaf>,
 {
     /// Walk the tree node, returning the appropriate `Step`
@@ -78,7 +86,7 @@ where
 }
 
 pub enum WalkChild<'a, T, A> {
-    Leaf(T),
+    Leaf(&'a T),
     Annotation(&'a A),
     Empty,
     EndOfNode,
@@ -90,15 +98,18 @@ pub struct AllLeaves;
 impl<C, A> Walker<C, A> for AllLeaves
 where
     C: Compound<A>,
+    C::Archived: ArchivedChildren<A, C::Leaf>,
     A: Annotation<C::Leaf>,
 {
     fn walk(&mut self, walk: Walk<C, A>) -> Step {
         for i in 0.. {
-            match walk.child(i) {
-                WalkChild::Leaf(_) => return Step::Found(i),
-                WalkChild::Annotation(_) => return Step::Into(i),
-                WalkChild::Empty => (),
-                WalkChild::EndOfNode => return Step::Advance,
+            if let Some(step) = walk.with_child(i, |child| match child {
+                WalkChild::Leaf(_) => Some(Step::Found(i)),
+                WalkChild::Annotation(_) => Some(Step::Into(i)),
+                WalkChild::Empty => None,
+                WalkChild::EndOfNode => Some(Step::Advance),
+            }) {
+                return step;
             }
         }
         unreachable!()
@@ -110,6 +121,7 @@ where
 pub trait First<'a, A>
 where
     Self: Compound<A>,
+    Self::Archived: ArchivedChildren<A, Self::Leaf>,
     A: Annotation<Self::Leaf>,
 {
     /// Construct a `Branch` pointing to the first element, if not empty
@@ -124,6 +136,7 @@ where
 impl<'a, C, A> First<'a, A> for C
 where
     C: Compound<A>,
+    C::Archived: ArchivedChildren<A, C::Leaf>,
     A: Annotation<C::Leaf>,
 {
     fn first(&'a self) -> Option<Branch<'a, Self, A>> {
