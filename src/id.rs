@@ -6,12 +6,11 @@
 
 use core::marker::PhantomData;
 
-use bytecheck::CheckBytes;
-use rkyv::{validation::validators::DefaultValidator, Archive};
+use rkyv::Archive;
 
 use crate::backend::Portal;
 
-#[derive(Debug, Clone, Hash, Copy, PartialEq, Eq, CheckBytes)]
+#[derive(Debug, Clone, Hash, Copy, PartialEq, Eq)]
 pub struct IdHash([u8; 32]);
 
 impl IdHash {
@@ -88,7 +87,6 @@ impl<C> Id<C> {
     pub fn resolve(&self) -> &C::Archived
     where
         C: Archive,
-        C::Archived: for<'a> CheckBytes<DefaultValidator<'a>>,
     {
         self.portal.get::<C>(&self.hash)
     }

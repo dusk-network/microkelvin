@@ -10,7 +10,6 @@ use rand::{prelude::SliceRandom, thread_rng};
 mod linked_list;
 use linked_list::LinkedList;
 
-use bytecheck::CheckBytes;
 use rkyv::{Archive, Deserialize, Serialize};
 
 use microkelvin::{
@@ -19,7 +18,6 @@ use microkelvin::{
 };
 
 #[derive(Default, Clone, Archive, Serialize, Deserialize)]
-#[archive_attr(derive(CheckBytes))]
 struct Anno<K> {
     max: MaxKey<K>,
     card: Cardinality,
@@ -68,7 +66,6 @@ where
 }
 
 #[derive(PartialEq, Clone, Debug, Archive, Serialize, Deserialize)]
-#[archive_attr(derive(CheckBytes))]
 struct TestLeaf {
     key: u64,
     other: (),

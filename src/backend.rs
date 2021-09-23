@@ -1,11 +1,9 @@
 use alloc::sync::Arc;
 
 use crate::id::{Id, IdHash};
-use bytecheck::CheckBytes;
 use rkyv::ser::{serializers::AlignedSerializer, Serializer};
-use rkyv::validation::validators::DefaultValidator;
 use rkyv::{
-    check_archived_root, AlignedVec, Archive, Fallible, Infallible, Serialize,
+    archived_root, AlignedVec, Archive, Fallible, Infallible, Serialize,
 };
 
 /// The trait defining a disk or network backend for microkelvin structures.
@@ -83,11 +81,12 @@ impl Portal {
     pub fn get<C>(&self, hash: &IdHash) -> &C::Archived
     where
         C: Archive,
-        C::Archived: for<'a> CheckBytes<DefaultValidator<'a>>,
     {
         let len = core::mem::size_of::<C::Archived>();
         let bytes = self.0.get(hash, len);
-        check_archived_root::<C>(bytes).expect("Invalid data")
+        // TODO: This should be using ByteCheck in the `host` version whenever
+        // untrusted data is encountered
+        unsafe { archived_root::<C>(bytes) }
     }
 
     /// Encode value into the backend, returns the Id

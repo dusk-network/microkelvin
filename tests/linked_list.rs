@@ -4,15 +4,14 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use bytecheck::CheckBytes;
 use microkelvin::{
     Annotation, ArchivedChild, ArchivedChildren, Cardinality, Child, ChildMut,
     Compound, First, Link, MutableLeaves, Nth, Portal, PortalProvider,
 };
+use rend::LittleEndian;
 use rkyv::{ser::Serializer, AlignedVec, Archive, Deserialize, Serialize};
 
 #[derive(Clone, Archive, Serialize, Deserialize)]
-#[archive_attr(derive(CheckBytes))]
 #[archive(bound(archive = "A: Archive + Annotation<T> + Clone"))]
 #[archive(bound(serialize = "
   A: Archive + Serialize<__S>, 
@@ -140,11 +139,12 @@ fn push_cardinality() {
 
 #[test]
 fn push_nth() {
-    let n: u64 = 1024;
+    let n = 1024;
 
     let mut list = LinkedList::<_, Cardinality>::new();
 
     for i in 0..n {
+        let i: LittleEndian<u64> = i.into();
         list.push(i)
     }
 
@@ -175,10 +175,12 @@ fn push_mut() {
     let mut list = LinkedList::<_, Cardinality>::new();
 
     for i in 0..n {
+        let i: LittleEndian<u64> = i.into();
         list.push(i)
     }
 
     for i in 0..n {
+        let i: LittleEndian<u64> = i.into();
         *list.nth_mut(i).expect("Some(branch)") += 1
     }
 
@@ -194,6 +196,7 @@ fn iterate_immutable() {
     let mut list = LinkedList::<_, Cardinality>::new();
 
     for i in 0..n {
+        let i: LittleEndian<u64> = i.into();
         list.push(i)
     }
 
@@ -225,6 +228,7 @@ fn iterate_mutable() {
     let mut list = LinkedList::<_, Cardinality>::new();
 
     for i in 0..n {
+        let i: LittleEndian<u64> = i.into();
         list.push(i)
     }
 
@@ -265,6 +269,7 @@ fn iterate_map() {
     let mut list = LinkedList::<_, ()>::new();
 
     for i in 0..n {
+        let i: LittleEndian<u64> = i.into();
         list.push(i)
     }
 
@@ -288,6 +293,7 @@ fn iterate_map_mutable() {
     let mut list = LinkedList::<_, ()>::new();
 
     for i in 0..n {
+        let i: LittleEndian<u64> = i.into();
         list.push(i)
     }
 
@@ -311,6 +317,7 @@ fn deref_mapped_mutable_branch() {
     let mut list = LinkedList::<_, ()>::new();
 
     for i in 0..n {
+        let i: LittleEndian<u64> = i.into();
         list.push(i)
     }
 

@@ -9,7 +9,6 @@ use core::borrow::Borrow;
 use core::cmp::Ordering;
 use core::marker::PhantomData;
 
-use bytecheck::CheckBytes;
 use rkyv::{Archive, Deserialize, Serialize};
 
 use crate::annotations::{Annotation, Combine};
@@ -20,7 +19,6 @@ use crate::walk::{Step, Walk, Walker};
 
 /// The maximum value of a collection
 #[derive(PartialEq, Eq, Clone, Debug, Archive, Serialize, Deserialize)]
-#[archive_attr(derive(CheckBytes))]
 pub enum MaxKey<K> {
     /// Identity of max, everything else is larger
     NegativeInfinity,

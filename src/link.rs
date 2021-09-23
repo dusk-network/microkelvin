@@ -11,7 +11,6 @@ use core::ops::{Deref, DerefMut};
 use rkyv::ser::Serializer;
 use rkyv::{out_field, AlignedVec, Fallible};
 
-use bytecheck::CheckBytes;
 use rkyv::{Archive, Deserialize, Serialize};
 
 use crate::backend::PortalProvider;
@@ -36,7 +35,6 @@ pub struct Link<C, A> {
     inner: RefCell<LinkInner<C, A>>,
 }
 
-#[derive(CheckBytes)]
 pub struct ArchivedLink<A: Archive>(IdHash, A::Archived);
 
 impl<C, A> Archive for Link<C, A>
