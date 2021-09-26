@@ -75,7 +75,7 @@ where
     A: Annotation<Self::Leaf>,
 {
     /// The leaf type of the Compound collection
-    type Leaf: Archive;
+    type Leaf: Archive<Archived = Self::Leaf>;
 
     /// Get a reference to a child    
     fn child(&self, ofs: usize) -> Child<Self, A>;

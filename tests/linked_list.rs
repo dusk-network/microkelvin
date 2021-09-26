@@ -12,13 +12,15 @@ use rend::LittleEndian;
 use rkyv::{ser::Serializer, AlignedVec, Archive, Deserialize, Serialize};
 
 #[derive(Clone, Archive, Serialize, Deserialize)]
-#[archive(bound(archive = "A: Archive + Annotation<T> + Clone"))]
+#[archive(bound(archive = "
+  A: Archive<Archived = A> + Annotation<T> + Clone,
+  T: Archive<Archived = T>"))]
 #[archive(bound(serialize = "
-  A: Archive + Serialize<__S>, 
+  A: Archive<Archived = A> + Serialize<__S>, 
   __S: Serializer + PortalProvider + From<Portal> + Into<AlignedVec>"))]
 #[archive(bound(deserialize = "
-  A: Archive,
-  A::Archived: Deserialize<A, __D>,
+  A: Archive<Archived = A>,
+  A: Deserialize<A, __D>,
   __D: Sized + PortalProvider,
   "))]
 pub enum LinkedList<T, A> {
@@ -38,17 +40,20 @@ impl<T, A> Default for LinkedList<T, A> {
 
 impl<T, A> ArchivedChildren<LinkedList<T, A>, A> for ArchivedLinkedList<T, A>
 where
-    T: Archive,
+    T: Archive<Archived = T>,
     A: Annotation<T>,
 {
-    fn archived_child(&self, ofs: usize) -> ArchivedChild<LinkedList<T, A>, A> {
+    fn archived_child(
+        &self,
+        _ofs: usize,
+    ) -> ArchivedChild<LinkedList<T, A>, A> {
         todo!()
     }
 }
 
 impl<T, A> Compound<A> for LinkedList<T, A>
 where
-    T: Archive,
+    T: Archive<Archived = T>,
     A: Annotation<T>,
 {
     type Leaf = T;
@@ -76,7 +81,7 @@ impl<T, A> MutableLeaves for LinkedList<T, A> where A: Archive + Annotation<T> {
 
 impl<T, A> LinkedList<T, A>
 where
-    T: Archive,
+    T: Archive<Archived = T>,
     A: Annotation<T>,
 {
     pub fn new() -> Self {
@@ -122,6 +127,7 @@ fn push() {
     let mut list = LinkedList::<_, ()>::new();
 
     for i in 0..n {
+        let i: LittleEndian<u64> = i.into();
         list.push(i)
     }
 }
@@ -133,6 +139,7 @@ fn push_cardinality() {
     let mut list = LinkedList::<_, Cardinality>::new();
 
     for i in 0..n {
+        let i: LittleEndian<u64> = i.into();
         list.push(i)
     }
 }
@@ -160,11 +167,12 @@ fn push_pop() {
     let mut list = LinkedList::<_, ()>::new();
 
     for i in 0..n {
+        let i: LittleEndian<u64> = i.into();
         list.push(i)
     }
 
     for i in 0..n {
-        assert_eq!(list.pop(), Some(n - i - 1))
+        assert_eq!(list.pop(), Some((n - i - 1).into()))
     }
 }
 
@@ -191,7 +199,8 @@ fn push_mut() {
 
 #[test]
 fn iterate_immutable() {
-    let n: u64 = 16;
+    // todo - make larger
+    let n: u64 = 1;
 
     let mut list = LinkedList::<_, Cardinality>::new();
 
@@ -200,8 +209,12 @@ fn iterate_immutable() {
         list.push(i)
     }
 
+    println!("joru");
+
     // branch from first element
     let branch = list.first().expect("Some(branch)");
+
+    println!("skoru");
 
     let mut count = n;
 

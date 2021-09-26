@@ -64,8 +64,18 @@ where
     {
         match self {
             Walk::Level(level) => match &level.node {
-                LevelNode::Root(_r) => todo!(),
-                LevelNode::Val(_v) => todo!(),
+                LevelNode::Root(root) => match root.child(ofs) {
+                    Child::Leaf(t) => f(WalkChild::Leaf(t)),
+                    Child::Node(n) => f(WalkChild::Annotation(&n.annotation())),
+                    Child::Empty => f(WalkChild::Empty),
+                    Child::EndOfNode => f(WalkChild::EndOfNode),
+                },
+                LevelNode::Val(val) => match val.child(ofs) {
+                    Child::Leaf(t) => f(WalkChild::Leaf(t)),
+                    Child::Node(n) => f(WalkChild::Annotation(&n.annotation())),
+                    Child::Empty => f(WalkChild::Empty),
+                    Child::EndOfNode => f(WalkChild::EndOfNode),
+                },
                 LevelNode::Archived(_a) => todo!(),
             },
             Walk::LevelMut(level) => match level.child(ofs) {

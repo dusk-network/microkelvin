@@ -10,6 +10,7 @@ use rand::{prelude::SliceRandom, thread_rng};
 mod linked_list;
 use linked_list::LinkedList;
 
+use rend::LittleEndian;
 use rkyv::{Archive, Deserialize, Serialize};
 
 use microkelvin::{
@@ -17,7 +18,12 @@ use microkelvin::{
     MaxKey,
 };
 
-#[derive(Default, Clone, Archive, Serialize, Deserialize)]
+#[derive(Default, Clone, Archive, Serialize)]
+#[archive(as = "Self")]
+#[archive(bound(archive = "
+  K: Archive<Archived = K>,
+  MaxKey<K>: Archive<Archived = MaxKey<K>>
+"))]
 struct Anno<K> {
     max: MaxKey<K>,
     card: Cardinality,
@@ -38,7 +44,7 @@ impl<K> Borrow<Cardinality> for Anno<K> {
 impl<Leaf, K> Annotation<Leaf> for Anno<K>
 where
     Leaf: Keyed<K>,
-    K: Ord + Default + Clone + Archive,
+    K: Ord + Default + Clone + Archive<Archived = K>,
 {
     fn from_leaf(leaf: &Leaf) -> Self {
         Anno {
@@ -66,13 +72,14 @@ where
 }
 
 #[derive(PartialEq, Clone, Debug, Archive, Serialize, Deserialize)]
+#[archive(as = "Self")]
 struct TestLeaf {
-    key: u64,
+    key: LittleEndian<u64>,
     other: (),
 }
 
-impl Keyed<u64> for TestLeaf {
-    fn key(&self) -> &u64 {
+impl Keyed<LittleEndian<u64>> for TestLeaf {
+    fn key(&self) -> &LittleEndian<u64> {
         &self.key
     }
 }
@@ -89,18 +96,19 @@ fn maximum_multiple() {
 
     keys.shuffle(&mut thread_rng());
 
-    let mut list = LinkedList::<_, Anno<u64>>::new();
+    let mut list = LinkedList::<_, Anno<LittleEndian<u64>>>::new();
 
     for key in keys {
+        let key: LittleEndian<u64> = key.into();
         list.push(TestLeaf { key, other: () });
     }
 
     let max = list.max_key().expect("Some(branch)");
 
     assert_eq!(
-        *max,
-        TestLeaf {
-            key: 1023,
+        core::ops::Deref::deref(&max),
+        &TestLeaf {
+            key: 1023.into(),
             other: ()
         }
     );
