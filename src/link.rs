@@ -8,13 +8,14 @@ use alloc::rc::Rc;
 use core::cell::{Ref, RefCell, RefMut};
 use core::mem;
 use core::ops::{Deref, DerefMut};
+
 use rkyv::ser::Serializer;
 use rkyv::{out_field, AlignedVec, Fallible};
-
 use rkyv::{Archive, Deserialize, Serialize};
 
 use crate::backend::PortalProvider;
 use crate::id::{Id, IdHash};
+use crate::primitive::Primitive;
 
 use crate::{Annotation, Compound, Portal};
 
@@ -40,7 +41,7 @@ pub struct ArchivedLink<A: Archive>(IdHash, A::Archived);
 impl<C, A> Archive for Link<C, A>
 where
     C: Compound<A>,
-    A: Archive + Annotation<C::Leaf>,
+    A: Primitive + Annotation<C::Leaf>,
 {
     type Archived = ArchivedLink<A>;
     type Resolver = (IdHash, A::Resolver);
@@ -79,7 +80,7 @@ where
 impl<C, A, S> Serialize<S> for Link<C, A>
 where
     C: Compound<A> + Serialize<S>,
-    A: Clone + Archive + Annotation<C::Leaf> + Serialize<S>,
+    A: Clone + Primitive + Annotation<C::Leaf> + Serialize<S>,
     S: Serializer + Fallible + PortalProvider + From<Portal> + Into<AlignedVec>,
 {
     fn serialize(
@@ -111,7 +112,7 @@ where
 impl<C, A> Link<C, A>
 where
     C: Compound<A>,
-    A: Annotation<C::Leaf>,
+    A: Primitive + Annotation<C::Leaf>,
 {
     /// Create a new link
     pub fn new(compound: C) -> Self {

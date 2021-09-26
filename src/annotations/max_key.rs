@@ -9,18 +9,19 @@ use core::borrow::Borrow;
 use core::cmp::Ordering;
 use core::marker::PhantomData;
 
-use rkyv::{Archive, Deserialize, Serialize};
+use rkyv::{Archive, Serialize};
 
 use crate::annotations::{Annotation, Combine};
 use crate::branch::Branch;
 use crate::branch_mut::BranchMut;
 use crate::compound::{AnnoIter, ArchivedChildren, Compound, MutableLeaves};
+use crate::primitive::Primitive;
 use crate::walk::{Step, Walk, Walker};
 
 /// The maximum value of a collection
 #[derive(PartialEq, Eq, Clone, Debug, Archive, Serialize)]
 #[archive(as = "Self")]
-#[archive(bound(archive = "K: Archive<Archived = K>"))]
+#[archive(bound(archive = "K: Primitive"))]
 pub enum MaxKey<K> {
     /// Identity of max, everything else is larger
     NegativeInfinity,
@@ -82,7 +83,7 @@ where
 impl<K, L> Annotation<L> for MaxKey<K>
 where
     L: Keyed<K>,
-    K: Clone + Ord + Archive<Archived = K>,
+    K: Primitive + Clone + Ord,
 {
     fn from_leaf(leaf: &L) -> Self {
         MaxKey::Maximum(leaf.key().clone())
@@ -92,7 +93,7 @@ where
 impl<K, A> Combine<A> for MaxKey<K>
 where
     K: Ord + Clone,
-    A: Borrow<Self>,
+    A: Primitive + Borrow<Self>,
 {
     fn combine<C>(iter: AnnoIter<C, A>) -> Self
     where
@@ -125,7 +126,7 @@ where
     C: Compound<A>,
     C::Archived: ArchivedChildren<C, A>,
     C::Leaf: Keyed<K>,
-    A: Annotation<C::Leaf> + Borrow<MaxKey<K>>,
+    A: Primitive + Annotation<C::Leaf> + Borrow<MaxKey<K>>,
     K: Ord + Clone,
 {
     fn walk(&mut self, _walk: Walk<C, A>) -> Step {
@@ -166,7 +167,7 @@ where
     Self: Compound<A>,
     Self::Leaf: Keyed<K> + Archive,
     Self::Archived: ArchivedChildren<Self, A>,
-    A: Annotation<Self::Leaf> + Borrow<MaxKey<K>>,
+    A: Primitive + Annotation<Self::Leaf> + Borrow<MaxKey<K>>,
     K: Ord,
 {
     /// Construct a `Branch` pointing to the element with the largest key
@@ -183,7 +184,7 @@ where
     C: Compound<A>,
     C::Leaf: Keyed<K>,
     C::Archived: ArchivedChildren<C, A>,
-    A: Annotation<C::Leaf> + Borrow<MaxKey<K>>,
+    A: Primitive + Annotation<C::Leaf> + Borrow<MaxKey<K>>,
     K: Ord + Clone,
 {
     fn max_key(&'a self) -> Option<Branch<'a, Self, A>> {

@@ -6,9 +6,7 @@
 
 use core::ops::Deref;
 
-use rkyv::Archive;
-
-use crate::{AnnoIter, Compound, LinkAnnotation};
+use crate::{AnnoIter, Compound, LinkAnnotation, Primitive};
 
 mod cardinality;
 mod max_key;
@@ -19,9 +17,7 @@ pub use cardinality::{Cardinality, Nth};
 pub use max_key::{GetMaxKey, Keyed, MaxKey};
 
 /// The trait defining an annotation type over a leaf
-pub trait Annotation<Leaf>:
-    Default + Clone + Combine<Self> + Archive<Archived = Self>
-{
+pub trait Annotation<Leaf>: Default + Clone + Combine<Self> {
     /// Creates an annotation from the leaf type
     fn from_leaf(leaf: &Leaf) -> Self;
 }
@@ -34,7 +30,7 @@ pub trait Combine<A> {
     fn combine<C>(iter: AnnoIter<C, A>) -> Self
     where
         C: Compound<A>,
-        A: Annotation<C::Leaf>;
+        A: Primitive + Annotation<C::Leaf>;
 }
 
 /// Custom pointer type, like a lightweight `std::borrow::Cow` since it

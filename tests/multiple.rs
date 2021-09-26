@@ -15,14 +15,14 @@ use rkyv::{Archive, Deserialize, Serialize};
 
 use microkelvin::{
     AnnoIter, Annotation, Cardinality, Combine, Compound, GetMaxKey, Keyed,
-    MaxKey,
+    MaxKey, Primitive,
 };
 
 #[derive(Default, Clone, Archive, Serialize)]
 #[archive(as = "Self")]
 #[archive(bound(archive = "
-  K: Archive<Archived = K>,
-  MaxKey<K>: Archive<Archived = MaxKey<K>>
+  K: Primitive,
+  MaxKey<K>: Primitive,
 "))]
 struct Anno<K> {
     max: MaxKey<K>,
@@ -44,7 +44,7 @@ impl<K> Borrow<Cardinality> for Anno<K> {
 impl<Leaf, K> Annotation<Leaf> for Anno<K>
 where
     Leaf: Keyed<K>,
-    K: Ord + Default + Clone + Archive<Archived = K>,
+    K: Primitive + Ord + Default + Clone,
 {
     fn from_leaf(leaf: &Leaf) -> Self {
         Anno {
@@ -62,7 +62,7 @@ where
     fn combine<C>(iter: AnnoIter<C, A>) -> Self
     where
         C: Compound<A>,
-        A: Annotation<C::Leaf>,
+        A: Primitive + Annotation<C::Leaf>,
     {
         Anno {
             max: MaxKey::combine(iter.clone()),

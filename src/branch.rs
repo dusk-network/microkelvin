@@ -4,7 +4,6 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use core::borrow::Borrow;
 use core::ops::Deref;
 
 use alloc::vec::Vec;
@@ -12,6 +11,7 @@ use rkyv::Archive;
 
 use crate::compound::{ArchivedChildren, Child, Compound};
 use crate::link::LinkCompound;
+use crate::primitive::Primitive;
 use crate::walk::{AllLeaves, Step, Walk, Walker};
 use crate::Annotation;
 
@@ -19,7 +19,7 @@ pub(crate) enum LevelNode<'a, C, A>
 where
     C: Compound<A>,
     C::Archived: ArchivedChildren<C, A>,
-    A: Annotation<C::Leaf>,
+    A: Primitive + Annotation<C::Leaf>,
 {
     Root(&'a C),
     Val(LinkCompound<'a, C, A>),
@@ -31,7 +31,7 @@ pub struct Level<'a, C, A>
 where
     C: Compound<A>,
     C::Archived: ArchivedChildren<C, A>,
-    A: Annotation<C::Leaf>,
+    A: Primitive + Annotation<C::Leaf>,
 {
     offset: usize,
     // pub to be accesible from `walk.rs`
@@ -42,7 +42,7 @@ impl<'a, C, A> Level<'a, C, A>
 where
     C: Compound<A>,
     C::Archived: ArchivedChildren<C, A>,
-    A: Annotation<C::Leaf>,
+    A: Primitive + Annotation<C::Leaf>,
 {
     pub fn new_root(root: &'a C) -> Level<'a, C, A> {
         Level {
@@ -72,13 +72,13 @@ pub struct PartialBranch<'a, C, A>(Vec<Level<'a, C, A>>)
 where
     C: Compound<A>,
     C::Archived: ArchivedChildren<C, A>,
-    A: Annotation<C::Leaf>;
+    A: Primitive + Annotation<C::Leaf> + Archive<Archived = A>;
 
 impl<'a, C, A> PartialBranch<'a, C, A>
 where
     C: Compound<A>,
     C::Archived: ArchivedChildren<C, A>,
-    A: Annotation<C::Leaf>,
+    A: Primitive + Annotation<C::Leaf>,
 {
     fn new(root: &'a C) -> Self {
         PartialBranch(vec![Level::new_root(root)])
@@ -95,7 +95,6 @@ where
     fn leaf(&self) -> Option<&C::Leaf>
     where
         C: Compound<A>,
-        <C::Leaf as Archive>::Archived: Borrow<C::Leaf>,
         A: Annotation<C::Leaf>,
     {
         let top = self.top();
@@ -143,7 +142,7 @@ where
         where
             C: Compound<A>,
             C::Archived: ArchivedChildren<C, A>,
-            A: Annotation<C::Leaf>,
+            A: Primitive + Annotation<C::Leaf>,
         {
             Init,
             Push(Level<'a, C, A>),
@@ -215,7 +214,7 @@ impl<'a, C, A> Branch<'a, C, A>
 where
     C: Compound<A>,
     C::Archived: ArchivedChildren<C, A>,
-    A: Annotation<C::Leaf>,
+    A: Primitive + Annotation<C::Leaf>,
 {
     /// Returns the depth of the branch
     pub fn depth(&self) -> usize {
@@ -264,14 +263,13 @@ pub struct Branch<'a, C, A>(PartialBranch<'a, C, A>)
 where
     C: Compound<A>,
     C::Archived: ArchivedChildren<C, A>,
-    A: Annotation<C::Leaf>;
+    A: Primitive + Annotation<C::Leaf>;
 
 impl<'a, C, A> Deref for Branch<'a, C, A>
 where
     C: Compound<A>,
-    <C::Leaf as Archive>::Archived: Borrow<C::Leaf>,
     C::Archived: ArchivedChildren<C, A>,
-    A: Annotation<C::Leaf>,
+    A: Primitive + Annotation<C::Leaf>,
 {
     type Target = C::Leaf;
 
@@ -284,7 +282,7 @@ pub struct MappedBranch<'a, C, A, M>
 where
     C: Compound<A>,
     C::Archived: ArchivedChildren<C, A>,
-    A: Annotation<C::Leaf>,
+    A: Primitive + Annotation<C::Leaf>,
 {
     inner: Branch<'a, C, A>,
     closure: for<'b> fn(&'b C::Leaf) -> &'b M,
@@ -294,9 +292,8 @@ impl<'a, C, A, M> Deref for MappedBranch<'a, C, A, M>
 where
     C: Compound<A>,
     C::Leaf: 'a,
-    <C::Leaf as Archive>::Archived: Borrow<C::Leaf>,
     C::Archived: ArchivedChildren<C, A>,
-    A: Annotation<C::Leaf>,
+    A: Primitive + Annotation<C::Leaf>,
 {
     type Target = M;
 
@@ -309,7 +306,7 @@ pub enum BranchIterator<'a, C, A, W>
 where
     C: Compound<A>,
     C::Archived: ArchivedChildren<C, A>,
-    A: Annotation<C::Leaf>,
+    A: Primitive + Annotation<C::Leaf>,
 {
     Initial(Branch<'a, C, A>, W),
     Intermediate(Branch<'a, C, A>, W),
@@ -321,8 +318,7 @@ impl<'a, C, A> IntoIterator for Branch<'a, C, A>
 where
     C: Compound<A>,
     C::Archived: ArchivedChildren<C, A>,
-    <C::Leaf as Archive>::Archived: Borrow<C::Leaf>,
-    A: Annotation<C::Leaf>,
+    A: Primitive + Annotation<C::Leaf>,
 {
     type Item = &'a C::Leaf;
 
@@ -337,8 +333,7 @@ impl<'a, C, A, W> Iterator for BranchIterator<'a, C, A, W>
 where
     C: Compound<A>,
     C::Archived: ArchivedChildren<C, A>,
-    <C::Leaf as Archive>::Archived: Borrow<C::Leaf>,
-    A: Annotation<C::Leaf>,
+    A: Primitive + Annotation<C::Leaf>,
     W: Walker<C, A>,
 {
     type Item = &'a C::Leaf;
@@ -382,7 +377,7 @@ pub enum MappedBranchIterator<'a, C, A, W, M>
 where
     C: Compound<A>,
     C::Archived: ArchivedChildren<C, A>,
-    A: Annotation<C::Leaf>,
+    A: Primitive + Annotation<C::Leaf>,
 {
     Initial(MappedBranch<'a, C, A, M>, W),
     Intermediate(MappedBranch<'a, C, A, M>, W),
@@ -393,8 +388,7 @@ impl<'a, C, A, M> IntoIterator for MappedBranch<'a, C, A, M>
 where
     C: Compound<A>,
     C::Archived: ArchivedChildren<C, A>,
-    <C::Leaf as Archive>::Archived: Borrow<C::Leaf>,
-    A: Annotation<C::Leaf>,
+    A: Primitive + Annotation<C::Leaf>,
     M: 'a,
 {
     type Item = &'a M;
@@ -409,9 +403,8 @@ where
 impl<'a, C, A, W, M> Iterator for MappedBranchIterator<'a, C, A, W, M>
 where
     C: Compound<A>,
-    <C::Leaf as Archive>::Archived: Borrow<C::Leaf>,
     C::Archived: ArchivedChildren<C, A>,
-    A: Annotation<C::Leaf>,
+    A: Primitive + Annotation<C::Leaf>,
     W: Walker<C, A>,
     M: 'a,
 {

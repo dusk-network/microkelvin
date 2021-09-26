@@ -10,12 +10,13 @@ use rkyv::Archive;
 
 use crate::annotations::{Annotation, WrappedAnnotation};
 use crate::link::{ArchivedLink, Link};
+use crate::primitive::Primitive;
 
 /// The response of the `child` method on a `Compound` node.
 pub enum Child<'a, C, A>
 where
     C: Compound<A>,
-    A: Annotation<C::Leaf>,
+    A: Primitive + Annotation<C::Leaf>,
 {
     /// Child is a leaf
     Leaf(&'a C::Leaf),
@@ -31,7 +32,7 @@ where
 pub enum ArchivedChild<'a, C, A>
 where
     C: Compound<A>,
-    A: Annotation<C::Leaf>,
+    A: Primitive + Annotation<C::Leaf>,
 {
     /// Child is a leaf
     Leaf(&'a <<C as Compound<A>>::Leaf as Archive>::Archived),
@@ -47,7 +48,7 @@ where
 pub enum ChildMut<'a, C, A>
 where
     C: Compound<A>,
-    A: Annotation<C::Leaf>,
+    A: Primitive + Annotation<C::Leaf>,
 {
     /// Child is a leaf
     Leaf(&'a mut C::Leaf),
@@ -63,7 +64,7 @@ where
 pub trait ArchivedChildren<C, A>
 where
     C: Compound<A>,
-    A: Annotation<C::Leaf>,
+    A: Primitive + Annotation<C::Leaf>,
 {
     /// Returns an archived child
     fn archived_child(&self, ofs: usize) -> ArchivedChild<C, A>;
@@ -72,10 +73,10 @@ where
 /// A type that can recursively contain itself and leaves.
 pub trait Compound<A>: Sized + Archive
 where
-    A: Annotation<Self::Leaf>,
+    A: Primitive + Annotation<Self::Leaf>,
 {
     /// The leaf type of the Compound collection
-    type Leaf: Archive<Archived = Self::Leaf>;
+    type Leaf: Primitive;
 
     /// Get a reference to a child    
     fn child(&self, ofs: usize) -> Child<Self, A>;
@@ -116,7 +117,7 @@ impl<'a, C, A> Clone for AnnoIter<'a, C, A> {
 impl<'a, C, A> Iterator for AnnoIter<'a, C, A>
 where
     C: Compound<A>,
-    A: Annotation<C::Leaf> + 'a,
+    A: Primitive + Annotation<C::Leaf> + 'a,
 {
     type Item = WrappedAnnotation<'a, C, A>;
 

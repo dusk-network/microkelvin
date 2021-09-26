@@ -20,6 +20,7 @@
 extern crate alloc;
 
 mod annotations;
+mod primitive;
 mod backend;
 mod branch;
 mod branch_mut;
@@ -41,6 +42,7 @@ pub use compound::{
     MutableLeaves,
 };
 pub use id::Id;
+pub use primitive::Primitive;
 pub use link::{Link, LinkAnnotation, LinkCompound, LinkCompoundMut};
 pub use walk::{First, Step, Walk, Walker};
 

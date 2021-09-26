@@ -15,6 +15,7 @@ use crate::annotations::{Annotation, Combine};
 use crate::branch::Branch;
 use crate::branch_mut::BranchMut;
 use crate::compound::{AnnoIter, ArchivedChildren, Compound, MutableLeaves};
+use crate::primitive::Primitive;
 use crate::walk::{Step, Walk, WalkChild, Walker};
 
 /// The cardinality of a compound collection
@@ -49,7 +50,7 @@ where
     fn combine<C>(iter: AnnoIter<C, A>) -> Self
     where
         C: Compound<A>,
-        A: Annotation<C::Leaf>,
+        A: Primitive + Annotation<C::Leaf>,
     {
         Cardinality(iter.fold(LittleEndian::from(0), |sum, ann| {
             let add: LittleEndian<_> = (*ann).borrow().0;
@@ -65,8 +66,7 @@ impl<C, A> Walker<C, A> for Offset
 where
     C: Compound<A>,
     C::Archived: ArchivedChildren<C, A>,
-    <C::Leaf as Archive>::Archived: Borrow<C::Leaf>,
-    A: Annotation<C::Leaf> + Borrow<Cardinality> + Archive,
+    A: Primitive + Annotation<C::Leaf> + Borrow<Cardinality>,
 {
     fn walk(&mut self, walk: Walk<C, A>) -> Step {
         for i in 0.. {
@@ -102,9 +102,7 @@ pub trait Nth<'a, A>
 where
     Self: Compound<A>,
     Self::Archived: ArchivedChildren<Self, A>,
-    Self::Leaf: Archive,
-    <Self::Leaf as Archive>::Archived: Borrow<Self::Leaf>,
-    A: Annotation<Self::Leaf>,
+    A: Primitive + Annotation<Self::Leaf>,
 {
     /// Construct a `Branch` pointing to the `nth` element, if any
     fn nth<N: Into<LittleEndian<u64>>>(
@@ -125,8 +123,7 @@ impl<'a, C, A> Nth<'a, A> for C
 where
     C: Compound<A>,
     C::Archived: ArchivedChildren<C, A>,
-    <C::Leaf as Archive>::Archived: Borrow<C::Leaf>,
-    A: Annotation<C::Leaf> + Borrow<Cardinality>,
+    A: Primitive + Annotation<C::Leaf> + Borrow<Cardinality>,
 {
     fn nth<N: Into<LittleEndian<u64>>>(
         &'a self,
