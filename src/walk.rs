@@ -4,13 +4,10 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use core::borrow::Borrow;
-
-use rkyv::Archive;
-
 use crate::branch::{Branch, Level, LevelNode};
 use crate::branch_mut::{BranchMut, LevelMut};
 use crate::compound::{ArchivedChildren, Child, Compound, MutableLeaves};
+use crate::primitive::Primitive;
 use crate::Annotation;
 
 /// The return value from a closure to `walk` the tree.
@@ -32,7 +29,7 @@ pub enum Walk<'a, C, A>
 where
     C: Compound<A>,
     C::Archived: ArchivedChildren<C, A>,
-    A: Annotation<C::Leaf>,
+    A: Primitive + Annotation<C::Leaf>,
 {
     /// Walk over an immutable tree
     Level(&'a Level<'a, C, A>),
@@ -44,7 +41,7 @@ impl<'a, C, A> Walk<'a, C, A>
 where
     C: Compound<A>,
     C::Archived: ArchivedChildren<C, A>,
-    A: Annotation<C::Leaf>,
+    A: Primitive + Annotation<C::Leaf>,
 {
     pub(crate) fn new(level: &'a Level<C, A>) -> Self {
         Walk::Level(level)
@@ -58,7 +55,6 @@ where
     pub fn with_child<F>(&self, ofs: usize, mut f: F) -> Option<Step>
     where
         C: Compound<A>,
-        <C::Leaf as Archive>::Archived: Borrow<C::Leaf>,
         A: Annotation<C::Leaf>,
         F: FnMut(WalkChild<C::Leaf, A>) -> Option<Step>,
     {
@@ -93,7 +89,7 @@ pub trait Walker<C, A>
 where
     C: Compound<A>,
     C::Archived: ArchivedChildren<C, A>,
-    A: Annotation<C::Leaf>,
+    A: Primitive + Annotation<C::Leaf>,
 {
     /// Walk the tree node, returning the appropriate `Step`
     fn walk(&mut self, walk: Walk<C, A>) -> Step;
@@ -113,8 +109,7 @@ impl<C, A> Walker<C, A> for AllLeaves
 where
     C: Compound<A>,
     C::Archived: ArchivedChildren<C, A>,
-    <C::Leaf as Archive>::Archived: Borrow<C::Leaf>,
-    A: Annotation<C::Leaf>,
+    A: Primitive + Annotation<C::Leaf>,
 {
     fn walk(&mut self, walk: Walk<C, A>) -> Step {
         for i in 0.. {
@@ -137,7 +132,7 @@ pub trait First<'a, A>
 where
     Self: Compound<A>,
     Self::Archived: ArchivedChildren<Self, A>,
-    A: Annotation<Self::Leaf>,
+    A: Primitive + Annotation<Self::Leaf>,
 {
     /// Construct a `Branch` pointing to the first element, if not empty
     fn first(&'a self) -> Option<Branch<'a, Self, A>>;
@@ -152,8 +147,7 @@ impl<'a, C, A> First<'a, A> for C
 where
     C: Compound<A>,
     C::Archived: ArchivedChildren<C, A>,
-    <C::Leaf as Archive>::Archived: Borrow<C::Leaf>,
-    A: Annotation<C::Leaf>,
+    A: Primitive + Annotation<C::Leaf>,
 {
     fn first(&'a self) -> Option<Branch<'a, Self, A>> {
         Branch::<_, A>::walk(self, AllLeaves)

@@ -7,22 +7,18 @@
 use microkelvin::{
     Annotation, ArchivedChild, ArchivedChildren, Cardinality, Child, ChildMut,
     Compound, First, Link, MutableLeaves, Nth, Portal, PortalProvider,
+    Primitive,
 };
 use rend::LittleEndian;
-use rkyv::{ser::Serializer, AlignedVec, Archive, Deserialize, Serialize};
+use rkyv::{ser::Serializer, AlignedVec, Archive, Serialize};
 
-#[derive(Clone, Archive, Serialize, Deserialize)]
+#[derive(Clone, Archive, Serialize)]
 #[archive(bound(archive = "
-  A: Archive<Archived = A> + Annotation<T> + Clone,
-  T: Archive<Archived = T>"))]
+  A: Primitive + Annotation<T>,
+  T: Primitive"))]
 #[archive(bound(serialize = "
-  A: Archive<Archived = A> + Serialize<__S>, 
+  A: Serialize<__S>,
   __S: Serializer + PortalProvider + From<Portal> + Into<AlignedVec>"))]
-#[archive(bound(deserialize = "
-  A: Archive<Archived = A>,
-  A: Deserialize<A, __D>,
-  __D: Sized + PortalProvider,
-  "))]
 pub enum LinkedList<T, A> {
     Empty,
     Node {
@@ -40,8 +36,8 @@ impl<T, A> Default for LinkedList<T, A> {
 
 impl<T, A> ArchivedChildren<LinkedList<T, A>, A> for ArchivedLinkedList<T, A>
 where
-    T: Archive<Archived = T>,
-    A: Annotation<T>,
+    T: Primitive,
+    A: Primitive + Annotation<T>,
 {
     fn archived_child(
         &self,
@@ -53,8 +49,8 @@ where
 
 impl<T, A> Compound<A> for LinkedList<T, A>
 where
-    T: Archive<Archived = T>,
-    A: Annotation<T>,
+    T: Primitive,
+    A: Primitive + Annotation<T>,
 {
     type Leaf = T;
 
@@ -81,8 +77,8 @@ impl<T, A> MutableLeaves for LinkedList<T, A> where A: Archive + Annotation<T> {
 
 impl<T, A> LinkedList<T, A>
 where
-    T: Archive<Archived = T>,
-    A: Annotation<T>,
+    T: Primitive,
+    A: Primitive + Annotation<T>,
 {
     pub fn new() -> Self {
         Default::default()
