@@ -23,6 +23,7 @@ where
 {
     Root(&'a C),
     Val(LinkCompound<'a, C, A>),
+    #[allow(unused)]
     Archived(&'a C::Archived),
 }
 
@@ -94,17 +95,23 @@ where
     fn leaf(&self) -> Option<&C::Leaf>
     where
         C: Compound<A>,
+        <C::Leaf as Archive>::Archived: Borrow<C::Leaf>,
         A: Annotation<C::Leaf>,
     {
         let top = self.top();
-        let _ofs = top.offset();
+        let ofs = top.offset();
 
-        todo!();
-
-        // match (**top).child(ofs) {
-        //     Child::Leaf(l) => Some(l),
-        //     _ => None,
-        // }
+        match &top.node {
+            LevelNode::Root(root) => match root.child(ofs) {
+                Child::Leaf(l) => Some(l),
+                _ => None,
+            },
+            LevelNode::Val(val) => match val.child(ofs) {
+                Child::Leaf(l) => Some(l),
+                _ => None,
+            },
+            LevelNode::Archived(_) => todo!(),
+        }
     }
 
     fn top(&self) -> &Level<C, A> {
@@ -262,6 +269,7 @@ where
 impl<'a, C, A> Deref for Branch<'a, C, A>
 where
     C: Compound<A>,
+    <C::Leaf as Archive>::Archived: Borrow<C::Leaf>,
     C::Archived: ArchivedChildren<C, A>,
     A: Annotation<C::Leaf>,
 {
@@ -286,6 +294,7 @@ impl<'a, C, A, M> Deref for MappedBranch<'a, C, A, M>
 where
     C: Compound<A>,
     C::Leaf: 'a,
+    <C::Leaf as Archive>::Archived: Borrow<C::Leaf>,
     C::Archived: ArchivedChildren<C, A>,
     A: Annotation<C::Leaf>,
 {
@@ -400,6 +409,7 @@ where
 impl<'a, C, A, W, M> Iterator for MappedBranchIterator<'a, C, A, W, M>
 where
     C: Compound<A>,
+    <C::Leaf as Archive>::Archived: Borrow<C::Leaf>,
     C::Archived: ArchivedChildren<C, A>,
     A: Annotation<C::Leaf>,
     W: Walker<C, A>,

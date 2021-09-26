@@ -21,6 +21,7 @@ use crate::walk::{Step, Walk, WalkChild, Walker};
 #[derive(
     PartialEq, Debug, Clone, Default, Copy, Archive, Serialize, Deserialize,
 )]
+#[archive(as = "Self")]
 pub struct Cardinality(pub(crate) LittleEndian<u64>);
 
 impl From<Cardinality> for u64 {

@@ -18,7 +18,9 @@ use crate::compound::{AnnoIter, ArchivedChildren, Compound, MutableLeaves};
 use crate::walk::{Step, Walk, Walker};
 
 /// The maximum value of a collection
-#[derive(PartialEq, Eq, Clone, Debug, Archive, Serialize, Deserialize)]
+#[derive(PartialEq, Eq, Clone, Debug, Archive, Serialize)]
+#[archive(as = "Self")]
+#[archive(bound(archive = "K: Archive<Archived = K>"))]
 pub enum MaxKey<K> {
     /// Identity of max, everything else is larger
     NegativeInfinity,
@@ -80,7 +82,7 @@ where
 impl<K, L> Annotation<L> for MaxKey<K>
 where
     L: Keyed<K>,
-    K: Clone + Ord + Archive,
+    K: Clone + Ord + Archive<Archived = K>,
 {
     fn from_leaf(leaf: &L) -> Self {
         MaxKey::Maximum(leaf.key().clone())
