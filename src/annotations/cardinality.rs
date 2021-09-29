@@ -84,7 +84,7 @@ where
                     if card.0 <= self.0 {
                         self.0 -= card.0;
                     } else {
-                        return Step::Into(i);
+                        return Step::Found(i);
                     }
                 }
                 Slot::Empty => (),

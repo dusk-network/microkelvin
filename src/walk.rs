@@ -19,8 +19,6 @@ use crate::{Annotation, LinkAnnotation};
 pub enum Step {
     /// The correct leaf was found!
     Found(usize),
-    /// Traverse the branch deeper
-    Into(usize),
     /// Advance search
     Advance,
     /// Abort search
