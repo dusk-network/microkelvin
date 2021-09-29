@@ -17,6 +17,14 @@ pub struct DiskBackend {
     index: Index<IdHash, u64>,
 }
 
+impl core::fmt::Debug for DiskBackend {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DiskBackend")
+            .field("path", &self.path)
+            .finish()
+    }
+}
+
 impl DiskBackend {
     /// Create a new `DiskBackend` using path as storage.
     pub fn new<P: Into<PathBuf>>(path: P) -> Result<Self, io::Error> {
