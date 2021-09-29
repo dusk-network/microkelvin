@@ -6,9 +6,9 @@
 
 use core::marker::PhantomData;
 
-use rkyv::Archive;
+use rkyv::{Archive, Deserialize, Fallible, Infallible};
 
-use crate::backend::Portal;
+use crate::{backend::Portal, PortalDeserializer};
 
 #[derive(Debug, Clone, Hash, Copy, PartialEq, Eq)]
 pub struct IdHash([u8; 32]);
@@ -78,17 +78,15 @@ impl<C> Id<C> {
         }
     }
 
-    // /// Pull out the represented value of the Id
-    // pub fn reify(&self) -> C {
-    // 	self.portal.get()
-    // }
-
-    /// Pull out the represented value of the Id
-    pub fn resolve(&self) -> &C::Archived
+    /// Resolve the id to a concrete type
+    pub fn resolve(&self) -> C
     where
         C: Archive,
+        C::Archived: Deserialize<C, PortalDeserializer>,
     {
-        self.portal.get::<C>(&self.hash)
+        let mut de = PortalDeserializer::new(self.portal.clone());
+        let archived = self.portal.get::<C>(&self.hash);
+        archived.deserialize(&mut de).expect("todo")
     }
 
     /// Pull out the represented value of the Id

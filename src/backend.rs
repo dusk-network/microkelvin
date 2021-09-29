@@ -129,3 +129,9 @@ impl PortalProvider for PortalDeserializer {
         self.0.clone()
     }
 }
+
+impl PortalDeserializer {
+    pub(crate) fn new(portal: Portal) -> Self {
+        PortalDeserializer(portal)
+    }
+}

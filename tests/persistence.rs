@@ -14,6 +14,8 @@ mod persist_tests {
 
     use std::io;
 
+    use rend::LittleEndian;
+
     use tempfile::tempdir;
 
     use microkelvin::{DiskBackend, Keyed, Portal, PortalSerializer};
@@ -36,6 +38,7 @@ mod persist_tests {
         let mut list = LinkedList::<_, ()>::new();
 
         for i in 0..n {
+            let i: LittleEndian<u64> = i.into();
             list.push(i);
         }
 
@@ -45,18 +48,20 @@ mod persist_tests {
 
         let id = portal.put::<_, PortalSerializer>(&list);
 
-        let mut restored = id.reify();
+        let mut restored = id.resolve();
 
         // first empty the original
 
         for i in 0..n {
-            assert_eq!(list.pop(), Some(n - i - 1));
+            let i: LittleEndian<u64> = i.into();
+            assert_eq!(list.pop(), Some((n - i - 1).into()));
         }
 
         // then the restored copy
 
         for i in 0..n {
-            assert_eq!(restored.pop(), Some(n - i - 1));
+            let i: LittleEndian<u64> = i.into();
+            assert_eq!(restored.pop(), Some((n - i - 1).into()));
         }
 
         Ok(())
@@ -92,6 +97,7 @@ mod persist_tests {
         let mut list = LinkedList::<_, ()>::new();
 
         for i in 0..n {
+            let i: LittleEndian<u64> = i.into();
             list.push(i);
         }
 
@@ -100,10 +106,11 @@ mod persist_tests {
         // it should now be available from other threads
 
         std::thread::spawn(move || {
-            let mut restored = persisted.reify();
+            let mut restored = persisted.resolve();
 
             for i in 0..n {
-                assert_eq!(restored.pop(), Some(n - i - 1));
+                let i: LittleEndian<u64> = i.into();
+                assert_eq!(restored.pop(), Some((n - i - 1).into()));
             }
 
             Ok(()) as Result<(), io::Error>
@@ -114,7 +121,7 @@ mod persist_tests {
         // then empty the original
 
         for i in 0..n {
-            assert_eq!(list.pop(), Some(n - i - 1));
+            assert_eq!(list.pop(), Some((n - i - 1).into()));
         }
 
         Ok(())

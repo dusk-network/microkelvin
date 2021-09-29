@@ -10,15 +10,19 @@ use microkelvin::{
     Primitive,
 };
 use rend::LittleEndian;
-use rkyv::{ser::Serializer, AlignedVec, Archive, Serialize};
+use rkyv::{ser::Serializer, AlignedVec, Archive, Deserialize, Serialize};
 
-#[derive(Clone, Archive, Serialize, Debug)]
+#[derive(Clone, Archive, Serialize, Debug, Deserialize)]
 #[archive(bound(archive = "
   A: Primitive + Annotation<T>,
   T: Primitive"))]
 #[archive(bound(serialize = "
   A: Serialize<__S>,
   __S: Serializer + PortalProvider + From<Portal> + Into<AlignedVec>"))]
+#[archive(bound(deserialize = "
+  A::Archived:  Deserialize<A, __D>,
+  T::Archived:  Deserialize<T, __D>,
+  __D: PortalProvider + Sized"))]
 #[archive_attr(derive(Debug))]
 pub enum LinkedList<T, A> {
     Empty,
