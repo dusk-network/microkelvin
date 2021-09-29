@@ -15,6 +15,7 @@
 
 // #![cfg_attr(not(feature = "host"), no_std)]
 #![deny(missing_docs)]
+#![deny(missing_debug_implementations)]
 
 #[macro_use]
 extern crate alloc;

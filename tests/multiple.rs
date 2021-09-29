@@ -18,7 +18,7 @@ use microkelvin::{
     MaxKey, Primitive,
 };
 
-#[derive(Default, Clone, Archive, Serialize)]
+#[derive(Default, Clone, Archive, Serialize, Debug)]
 #[archive(as = "Self")]
 #[archive(bound(archive = "
   K: Primitive,

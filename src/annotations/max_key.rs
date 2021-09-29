@@ -83,7 +83,7 @@ where
 impl<K, L> Annotation<L> for MaxKey<K>
 where
     L: Keyed<K>,
-    K: Primitive + Clone + Ord,
+    K: Primitive + Clone + Ord + core::fmt::Debug,
 {
     fn from_leaf(leaf: &L) -> Self {
         MaxKey::Maximum(leaf.key().clone())

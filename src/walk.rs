@@ -15,6 +15,7 @@ use crate::{Annotation, LinkAnnotation};
 /// The return value from a closure to `walk` the tree.
 ///
 /// Determines how the `Branch` is constructed
+#[derive(Debug)]
 pub enum Step {
     /// The correct leaf was found!
     Found(usize),
@@ -37,6 +38,8 @@ where
     fn walk(&mut self, walk: impl Slots<C, A>) -> Step;
 }
 
+/// A reference to an annotation, either archived or in memory
+#[derive(Debug)]
 pub enum AnnoRef<'a, C, A> {
     Archived(&'a A),
     Memory(LinkAnnotation<'a, C, A>),
@@ -52,6 +55,7 @@ impl<'a, C, A> Deref for AnnoRef<'a, C, A> {
     }
 }
 
+#[derive(Debug)]
 pub enum Slot<'a, C, A>
 where
     C: Compound<A>,
@@ -72,6 +76,7 @@ where
 }
 
 /// Walker that visits all leaves
+#[derive(Debug)]
 pub struct AllLeaves;
 
 impl<C, A> Walker<C, A> for AllLeaves
