@@ -12,13 +12,14 @@ use microkelvin::{
 use rend::LittleEndian;
 use rkyv::{ser::Serializer, AlignedVec, Archive, Serialize};
 
-#[derive(Clone, Archive, Serialize)]
+#[derive(Clone, Archive, Serialize, Debug)]
 #[archive(bound(archive = "
   A: Primitive + Annotation<T>,
   T: Primitive"))]
 #[archive(bound(serialize = "
   A: Serialize<__S>,
   __S: Serializer + PortalProvider + From<Portal> + Into<AlignedVec>"))]
+#[archive_attr(derive(Debug))]
 pub enum LinkedList<T, A> {
     Empty,
     Node {

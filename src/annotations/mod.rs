@@ -17,7 +17,9 @@ pub use cardinality::{Cardinality, Nth};
 pub use max_key::{GetMaxKey, Keyed, MaxKey};
 
 /// The trait defining an annotation type over a leaf
-pub trait Annotation<Leaf>: Default + Clone + Combine<Self> {
+pub trait Annotation<Leaf>:
+    Default + Clone + Combine<Self> + core::fmt::Debug
+{
     /// Creates an annotation from the leaf type
     fn from_leaf(leaf: &Leaf) -> Self;
 }
@@ -33,8 +35,9 @@ pub trait Combine<A> {
         A: Primitive + Annotation<C::Leaf>;
 }
 
-/// Custom pointer type, like a lightweight `std::borrow::Cow` since it
-/// is not available in `core`
+/// A wrapped annotation that is either owning it's a or providing an annotated
+/// link
+#[derive(Debug)]
 pub enum WrappedAnnotation<'a, C, A> {
     /// The annotation is owned
     Owned(A),

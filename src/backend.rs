@@ -26,6 +26,7 @@ pub trait IntoAlignedVec {
 }
 
 /// A serializer with access to a backend portal
+#[derive(Debug)]
 pub struct PortalSerializer {
     portal: Portal,
     serializer: AlignedSerializer<AlignedVec>,
@@ -71,6 +72,12 @@ impl Serializer for PortalSerializer {
 #[derive(Clone)]
 pub struct Portal(Arc<dyn Backend>);
 
+impl core::fmt::Debug for Portal {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Portal")
+    }
+}
+
 impl Portal {
     /// Open a new portal to a backend
     pub fn new(backend: impl Backend + 'static) -> Self {
@@ -110,6 +117,7 @@ impl Portal {
 }
 
 /// Deserializer that can resolve backend values
+#[derive(Debug)]
 pub struct PortalDeserializer(Portal);
 
 impl Fallible for PortalDeserializer {

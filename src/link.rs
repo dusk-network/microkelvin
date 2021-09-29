@@ -19,7 +19,7 @@ use crate::primitive::Primitive;
 
 use crate::{Annotation, Compound, Portal};
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum LinkInner<C, A> {
     Placeholder,
     C(Rc<C>),
@@ -27,7 +27,7 @@ pub enum LinkInner<C, A> {
     Ia(Id<C>, A),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 /// The Link struct is an annotated merkle link to a compound type
 ///
 /// The link takes care of lazily evaluating the annotation of the inner type,
@@ -36,6 +36,7 @@ pub struct Link<C, A> {
     inner: RefCell<LinkInner<C, A>>,
 }
 
+#[derive(Debug)]
 pub struct ArchivedLink<A: Archive>(IdHash, A::Archived);
 
 impl<C, A> Archive for Link<C, A>
@@ -210,13 +211,16 @@ where
 
 /// A wrapped borrow of an inner link guaranteed to contain a computed
 /// annotation
+#[derive(Debug)]
 pub struct LinkAnnotation<'a, C, A>(Ref<'a, LinkInner<C, A>>);
 
 /// A wrapped borrow of an inner node guaranteed to contain a compound node
+#[derive(Debug)]
 pub struct LinkCompound<'a, C, A>(Ref<'a, LinkInner<C, A>>);
 
 /// A wrapped mutable borrow of an inner node guaranteed to contain a compound
 /// node
+#[derive(Debug)]
 pub struct LinkCompoundMut<'a, C, A>(RefMut<'a, LinkInner<C, A>>);
 
 impl<'a, C, A> Deref for LinkAnnotation<'a, C, A> {

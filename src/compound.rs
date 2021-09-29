@@ -13,6 +13,7 @@ use crate::link::{ArchivedLink, Link};
 use crate::primitive::Primitive;
 
 /// The response of the `child` method on a `Compound` node.
+#[derive(Debug)]
 pub enum Child<'a, C, A>
 where
     C: Compound<A>,
@@ -29,13 +30,14 @@ where
 }
 
 /// The response of the `child` method on a `Compound` node.
+#[derive(Debug)]
 pub enum ArchivedChild<'a, C, A>
 where
     C: Compound<A>,
     A: Primitive + Annotation<C::Leaf>,
 {
     /// Child is a leaf
-    Leaf(&'a <<C as Compound<A>>::Leaf as Archive>::Archived),
+    Leaf(&'a C::Leaf),
     /// Child is an annotated subtree node
     Node(&'a ArchivedLink<A>),
     /// Empty slot
@@ -45,6 +47,7 @@ where
 }
 
 /// The response of the `child_mut` method on a `Compound` node.
+#[derive(Debug)]
 pub enum ChildMut<'a, C, A>
 where
     C: Compound<A>,
@@ -61,7 +64,7 @@ where
 }
 
 /// Trait to support branch traversal in archived nodes
-pub trait ArchivedChildren<C, A>
+pub trait ArchivedChildren<C, A>: core::fmt::Debug
 where
     C: Compound<A>,
     A: Primitive + Annotation<C::Leaf>,
@@ -71,7 +74,7 @@ where
 }
 
 /// A type that can recursively contain itself and leaves.
-pub trait Compound<A>: Sized + Archive
+pub trait Compound<A>: Sized + Archive + core::fmt::Debug
 where
     A: Primitive + Annotation<Self::Leaf>,
 {
@@ -98,6 +101,7 @@ where
 }
 
 /// An iterator over the sub-annotations of a Compound collection
+#[derive(Debug)]
 pub struct AnnoIter<'a, C, A> {
     node: &'a C,
     ofs: usize,

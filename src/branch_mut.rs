@@ -15,6 +15,7 @@ use crate::primitive::Primitive;
 use crate::walk::{AllLeaves, AnnoRef, Slot, Slots, Step, Walker};
 use crate::Annotation;
 
+#[derive(Debug)]
 enum LevelNodeMut<'a, C, A> {
     Root(&'a mut C),
     Val(LinkCompoundMut<'a, C, A>),
@@ -43,6 +44,7 @@ where
     }
 }
 
+#[derive(Debug)]
 pub struct LevelMut<'a, C, A> {
     offset: usize,
     node: LevelNodeMut<'a, C, A>,
@@ -108,6 +110,7 @@ where
     }
 }
 
+#[derive(Debug)]
 pub struct PartialBranchMut<'a, C, A>(Vec<LevelMut<'a, C, A>>);
 
 impl<'a, C, A> PartialBranchMut<'a, C, A> {
@@ -271,6 +274,7 @@ impl<'a, C, A> BranchMut<'a, C, A> {
 ///
 /// Branches are always guaranteed to point at a leaf, and can be dereferenced
 /// to the pointed-at leaf.
+#[derive(Debug)]
 pub struct BranchMut<'a, C, A>(PartialBranchMut<'a, C, A>);
 
 impl<'a, C, A> Deref for BranchMut<'a, C, A>
@@ -308,6 +312,19 @@ where
     closure: for<'b> fn(&'b mut C::Leaf) -> &'b mut M,
 }
 
+impl<'a, C, A, M> core::fmt::Debug for MappedBranchMut<'a, C, A, M>
+where
+    C: Compound<A>,
+    C::Archived: ArchivedChildren<C, A>,
+    A: Primitive + Annotation<C::Leaf>,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("MappedBranchMut")
+            .field("inner", &self.inner)
+            .finish()
+    }
+}
+
 impl<'a, C, A, M> Deref for MappedBranchMut<'a, C, A, M>
 where
     C: Compound<A> + Clone,
@@ -339,6 +356,7 @@ where
 
 // iterators
 
+#[derive(Debug)]
 pub enum BranchMutIterator<'a, C, A, W>
 where
     C: Compound<A> + Clone,
@@ -409,6 +427,7 @@ where
     }
 }
 
+#[derive(Debug)]
 pub enum MappedBranchMutIterator<'a, C, A, W, M>
 where
     C: Compound<A>,
