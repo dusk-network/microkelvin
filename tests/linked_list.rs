@@ -181,26 +181,22 @@ fn push_mut() {
 
     for i in 0..n {
         let i: LittleEndian<u64> = i.into();
-        println!("push {:?}", i);
         list.push(i)
     }
 
     for i in 0..n {
         let i: LittleEndian<u64> = i.into();
-        println!("mutate {:?}", i);
         *list.nth_mut(i).expect("Some(branch)") += 1
     }
 
     for i in 0..n {
-        println!("read {:?}", i);
         assert_eq!(*list.nth(i).expect("Some(branch)"), n - i)
     }
 }
 
 #[test]
 fn iterate_immutable() {
-    // todo - make larger
-    let n: u64 = 64;
+    let n: u64 = 1024;
 
     let mut list = LinkedList::<_, Cardinality>::new();
 
@@ -209,25 +205,15 @@ fn iterate_immutable() {
         list.push(i)
     }
 
-    println!("joru");
-
     // branch from first element
     let branch = list.first().expect("Some(branch)");
-
-    println!("skoru");
 
     let mut count = n;
 
     for leaf in branch {
-        println!("moru {:?}", leaf);
-
         count -= 1;
         assert_eq!(*leaf, count);
-
-        println!("orre");
     }
-
-    println!("toru");
 
     // branch from 7th element
     let branch = list.nth(6).expect("Some(branch)");
@@ -300,7 +286,6 @@ fn iterate_map() {
 
     for leaf in mapped {
         assert_eq!(*leaf, count);
-
         count = count.saturating_sub(1);
     }
 }

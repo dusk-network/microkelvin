@@ -203,23 +203,31 @@ impl<'a, C, A> PartialBranchMut<'a, C, A> {
             match step {
                 Step::Found(walk_ofs) => {
                     *top.offset_mut() += walk_ofs;
-                    return Some(());
-                }
-                Step::Into(walk_ofs) => {
-                    *top.offset_mut() += walk_ofs;
                     let ofs = top.offset();
-                    let top_child = top.child_mut(ofs);
-                    if let ChildMut::Node(n) = top_child {
-                        let level: LevelMut<'_, C, A> =
-                            LevelMut::new_val(n.inner_mut());
 
-                        // Extend the lifetime of the Level.
-                        // See comment in `Branch::walk` for justification.
-                        let extended: LevelMut<'a, C, A> =
-                            unsafe { core::mem::transmute(level) };
-                        state = State::Push(extended);
-                    } else {
-                        panic!("Attempted descent into non-node")
+                    match &mut top.node {
+                        LevelNodeMut::Root(root) => match root.child_mut(ofs) {
+                            ChildMut::Leaf(_) => return Some(()),
+                            ChildMut::Node(n) => {
+                                let level: LevelMut<'_, C, A> =
+                                    LevelMut::new_val(n.inner_mut());
+                                let extended: LevelMut<'a, C, A> =
+                                    unsafe { core::mem::transmute(level) };
+                                state = State::Push(extended);
+                            }
+                            _ => panic!("Invalid child found"),
+                        },
+                        LevelNodeMut::Val(val) => match val.child_mut(ofs) {
+                            ChildMut::Leaf(_) => return Some(()),
+                            ChildMut::Node(n) => {
+                                let level: LevelMut<'_, C, A> =
+                                    LevelMut::new_val(n.inner_mut());
+                                let extended: LevelMut<'a, C, A> =
+                                    unsafe { core::mem::transmute(level) };
+                                state = State::Push(extended);
+                            }
+                            _ => panic!("Invalid child found"),
+                        },
                     }
                 }
                 Step::Advance => state = State::Pop,

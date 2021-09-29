@@ -16,7 +16,7 @@ use crate::branch::Branch;
 use crate::branch_mut::BranchMut;
 use crate::compound::{AnnoIter, ArchivedChildren, Compound, MutableLeaves};
 use crate::primitive::Primitive;
-use crate::walk::{Slots, Step, Walker};
+use crate::walk::{Slot, Slots, Step, Walker};
 
 /// The maximum value of a collection
 #[derive(PartialEq, Eq, Clone, Debug, Archive, Serialize)]
@@ -129,34 +129,32 @@ where
     A: Primitive + Annotation<C::Leaf> + Borrow<MaxKey<K>>,
     K: Ord + Clone,
 {
-    fn walk(&mut self, _walk: impl Slots<C, A>) -> Step {
-        // let mut current_max: MaxKey<K> = MaxKey::NegativeInfinity;
-        // let mut current_step = Step::Abort;
+    fn walk(&mut self, walk: impl Slots<C, A>) -> Step {
+        let mut current_max: MaxKey<K> = MaxKey::NegativeInfinity;
+        let mut current_step = Step::Abort;
 
-        // for i in 0.. {
-        //     match walk.child(i) {
-        //         WalkChild::Leaf(l) => {
-        //             let leaf_max: MaxKey<K> =
-        // MaxKey::Maximum(l.key().clone());
+        for i in 0.. {
+            match walk.slot(i) {
+                Slot::Leaf(l) => {
+                    let leaf_max: MaxKey<K> = MaxKey::Maximum(l.key().clone());
 
-        //             if leaf_max > current_max {
-        //                 current_max = leaf_max;
-        //                 current_step = Step::Found(i);
-        //             }
-        //         }
-        //         WalkChild::Annotation(ann) => {
-        //             let node_max: &MaxKey<K> = (*ann).borrow();
-        //             if node_max > &current_max {
-        //                 current_max = node_max.clone();
-        //                 current_step = Step::Into(i);
-        //             }
-        //         }
-        //         WalkChild::Empty => (),
-        //         WalkChild::EndOfNode => return current_step,
-        //     }
-        // }
-        // unreachable!()
-        todo!()
+                    if leaf_max > current_max {
+                        current_max = leaf_max;
+                        current_step = Step::Found(i);
+                    }
+                }
+                Slot::Annotation(ann) => {
+                    let node_max: &MaxKey<K> = (*ann).borrow();
+                    if node_max > &current_max {
+                        current_max = node_max.clone();
+                        current_step = Step::Found(i);
+                    }
+                }
+                Slot::Empty => (),
+                Slot::End => return current_step,
+            }
+        }
+        unreachable!()
     }
 }
 

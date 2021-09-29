@@ -82,16 +82,16 @@ where
                 Child::Node(n) => {
                     Slot::Annotation(AnnoRef::Memory(n.annotation()))
                 }
-                Child::Empty => todo!(),
-                Child::EndOfNode => todo!(),
+                Child::Empty => Slot::End,
+                Child::EndOfNode => Slot::End,
             },
             LevelNode::Val(val) => match val.child(self.offset + ofs) {
                 Child::Leaf(l) => Slot::Leaf(l),
                 Child::Node(n) => {
                     Slot::Annotation(AnnoRef::Memory(n.annotation()))
                 }
-                Child::Empty => todo!(),
-                Child::EndOfNode => todo!(),
+                Child::Empty => Slot::Empty,
+                Child::EndOfNode => Slot::End,
             },
             LevelNode::Archived(_) => todo!(),
         }
@@ -198,35 +198,33 @@ where
             match walker.walk(&*top) {
                 Step::Found(walk_ofs) => {
                     *top.offset_mut() += walk_ofs;
-                    return Some(());
-                }
-                Step::Into(walk_ofs) => {
-                    *top.offset_mut() += walk_ofs;
                     let ofs = top.offset();
 
+                    // TODO: DRY
+
                     match &top.node {
-                        LevelNode::Root(root) => {
-                            if let Child::Node(n) = root.child(ofs) {
+                        LevelNode::Root(root) => match root.child(ofs) {
+                            Child::Leaf(_) => return Some(()),
+                            Child::Node(n) => {
                                 let level: Level<'_, C, A> =
                                     Level::new_val(n.inner());
                                 let extended: Level<'a, C, A> =
                                     unsafe { core::mem::transmute(level) };
                                 state = State::Push(extended);
-                            } else {
-                                panic!("Attempted descent into non-node")
                             }
-                        }
-                        LevelNode::Val(val) => {
-                            if let Child::Node(n) = val.child(ofs) {
+                            _ => panic!("Invalid child found"),
+                        },
+                        LevelNode::Val(val) => match val.child(ofs) {
+                            Child::Leaf(_) => return Some(()),
+                            Child::Node(n) => {
                                 let level: Level<'_, C, A> =
                                     Level::new_val(n.inner());
                                 let extended: Level<'a, C, A> =
                                     unsafe { core::mem::transmute(level) };
                                 state = State::Push(extended);
-                            } else {
-                                panic!("Attempted descent into non-node")
                             }
-                        }
+                            _ => panic!("Invalid child found"),
+                        },
 
                         LevelNode::Archived(_) => todo!(),
                     }
