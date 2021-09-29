@@ -7,12 +7,11 @@
 use core::ops::Deref;
 
 use alloc::vec::Vec;
-use rkyv::Archive;
 
 use crate::compound::{ArchivedChildren, Child, Compound};
 use crate::link::LinkCompound;
 use crate::primitive::Primitive;
-use crate::walk::{AllLeaves, Step, Walk, Walker};
+use crate::walk::{AllLeaves, AnnoRef, Slot, Slots, Step, Walker};
 use crate::Annotation;
 
 pub(crate) enum LevelNode<'a, C, A>
@@ -68,11 +67,40 @@ where
     }
 }
 
+impl<'a, C, A> Slots<C, A> for &Level<'a, C, A>
+where
+    C: Compound<A>,
+    C::Archived: ArchivedChildren<C, A>,
+    A: Primitive + Annotation<C::Leaf>,
+{
+    fn slot(&self, ofs: usize) -> Slot<C, A> {
+        match &self.node {
+            LevelNode::Root(root) => match root.child(self.offset + ofs) {
+                Child::Leaf(l) => Slot::Leaf(l),
+                Child::Node(n) => {
+                    Slot::Annotation(AnnoRef::Memory(n.annotation()))
+                }
+                Child::Empty => todo!(),
+                Child::EndOfNode => todo!(),
+            },
+            LevelNode::Val(val) => match val.child(self.offset + ofs) {
+                Child::Leaf(l) => Slot::Leaf(l),
+                Child::Node(n) => {
+                    Slot::Annotation(AnnoRef::Memory(n.annotation()))
+                }
+                Child::Empty => todo!(),
+                Child::EndOfNode => todo!(),
+            },
+            LevelNode::Archived(_) => todo!(),
+        }
+    }
+}
+
 pub struct PartialBranch<'a, C, A>(Vec<Level<'a, C, A>>)
 where
     C: Compound<A>,
     C::Archived: ArchivedChildren<C, A>,
-    A: Primitive + Annotation<C::Leaf> + Archive<Archived = A>;
+    A: Primitive + Annotation<C::Leaf>;
 
 impl<'a, C, A> PartialBranch<'a, C, A>
 where
@@ -163,9 +191,8 @@ where
             }
 
             let top = self.top_mut();
-            let step = walker.walk(Walk::new(top));
 
-            match step {
+            match walker.walk(&*top) {
                 Step::Found(walk_ofs) => {
                     *top.offset_mut() += walk_ofs;
                     return Some(());

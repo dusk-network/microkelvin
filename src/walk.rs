@@ -4,11 +4,13 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use crate::branch::{Branch, Level, LevelNode};
-use crate::branch_mut::{BranchMut, LevelMut};
-use crate::compound::{ArchivedChildren, Child, Compound, MutableLeaves};
+use core::ops::Deref;
+
+use crate::branch::Branch;
+use crate::branch_mut::BranchMut;
+use crate::compound::{ArchivedChildren, Compound, MutableLeaves};
 use crate::primitive::Primitive;
-use crate::Annotation;
+use crate::{Annotation, LinkAnnotation};
 
 /// The return value from a closure to `walk` the tree.
 ///
@@ -24,66 +26,6 @@ pub enum Step {
     Abort,
 }
 
-/// Type to handle the walking over datastructures
-pub enum Walk<'a, C, A>
-where
-    C: Compound<A>,
-    C::Archived: ArchivedChildren<C, A>,
-    A: Primitive + Annotation<C::Leaf>,
-{
-    /// Walk over an immutable tree
-    Level(&'a Level<'a, C, A>),
-    /// Walk over a mutable tree
-    LevelMut(&'a LevelMut<'a, C, A>),
-}
-
-impl<'a, C, A> Walk<'a, C, A>
-where
-    C: Compound<A>,
-    C::Archived: ArchivedChildren<C, A>,
-    A: Primitive + Annotation<C::Leaf>,
-{
-    pub(crate) fn new(level: &'a Level<C, A>) -> Self {
-        Walk::Level(level)
-    }
-
-    pub(crate) fn new_mut(level: &'a LevelMut<C, A>) -> Self {
-        Walk::LevelMut(level)
-    }
-
-    /// Returns the child at specific offset relative to the level offset
-    pub fn with_child<F>(&self, ofs: usize, mut f: F) -> Option<Step>
-    where
-        C: Compound<A>,
-        A: Annotation<C::Leaf>,
-        F: FnMut(WalkChild<C::Leaf, A>) -> Option<Step>,
-    {
-        match self {
-            Walk::Level(level) => match &level.node {
-                LevelNode::Root(root) => match root.child(ofs) {
-                    Child::Leaf(t) => f(WalkChild::Leaf(t)),
-                    Child::Node(n) => f(WalkChild::Annotation(&n.annotation())),
-                    Child::Empty => f(WalkChild::Empty),
-                    Child::EndOfNode => f(WalkChild::EndOfNode),
-                },
-                LevelNode::Val(val) => match val.child(ofs) {
-                    Child::Leaf(t) => f(WalkChild::Leaf(t)),
-                    Child::Node(n) => f(WalkChild::Annotation(&n.annotation())),
-                    Child::Empty => f(WalkChild::Empty),
-                    Child::EndOfNode => f(WalkChild::EndOfNode),
-                },
-                LevelNode::Archived(_a) => todo!(),
-            },
-            Walk::LevelMut(level) => match level.child(ofs) {
-                Child::Leaf(t) => f(WalkChild::Leaf(t)),
-                Child::Node(n) => f(WalkChild::Annotation(&n.annotation())),
-                Child::Empty => f(WalkChild::Empty),
-                Child::EndOfNode => f(WalkChild::EndOfNode),
-            },
-        }
-    }
-}
-
 /// The trait used to construct a `Branch` or to iterate through a tree.
 pub trait Walker<C, A>
 where
@@ -92,14 +34,41 @@ where
     A: Primitive + Annotation<C::Leaf>,
 {
     /// Walk the tree node, returning the appropriate `Step`
-    fn walk(&mut self, walk: Walk<C, A>) -> Step;
+    fn walk(&mut self, walk: impl Slots<C, A>) -> Step;
 }
 
-pub enum WalkChild<'a, T, A> {
-    Leaf(&'a T),
-    Annotation(&'a A),
+pub enum AnnoRef<'a, C, A> {
+    Archived(&'a A),
+    Memory(LinkAnnotation<'a, C, A>),
+}
+
+impl<'a, C, A> Deref for AnnoRef<'a, C, A> {
+    type Target = A;
+    fn deref(&self) -> &Self::Target {
+        match self {
+            AnnoRef::Archived(_) => todo!(),
+            AnnoRef::Memory(mem) => &*mem,
+        }
+    }
+}
+
+pub enum Slot<'a, C, A>
+where
+    C: Compound<A>,
+    A: Primitive + Annotation<C::Leaf>,
+{
+    Leaf(&'a C::Leaf),
+    Annotation(AnnoRef<'a, C, A>),
     Empty,
-    EndOfNode,
+    End,
+}
+
+pub trait Slots<C, A>
+where
+    C: Compound<A>,
+    A: Primitive + Annotation<C::Leaf>,
+{
+    fn slot(&self, ofs: usize) -> Slot<C, A>;
 }
 
 /// Walker that visits all leaves
@@ -111,15 +80,12 @@ where
     C::Archived: ArchivedChildren<C, A>,
     A: Primitive + Annotation<C::Leaf>,
 {
-    fn walk(&mut self, walk: Walk<C, A>) -> Step {
+    fn walk(&mut self, walk: impl Slots<C, A>) -> Step {
         for i in 0.. {
-            if let Some(step) = walk.with_child(i, |child| match child {
-                WalkChild::Leaf(_) => Some(Step::Found(i)),
-                WalkChild::Annotation(_) => Some(Step::Into(i)),
-                WalkChild::Empty => None,
-                WalkChild::EndOfNode => Some(Step::Advance),
-            }) {
-                return step;
+            match walk.slot(i) {
+                Slot::End => return Step::Abort,
+                Slot::Empty => (),
+                _ => return Step::Found(i),
             }
         }
         unreachable!()

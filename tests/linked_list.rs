@@ -174,21 +174,24 @@ fn push_pop() {
 
 #[test]
 fn push_mut() {
-    let n: u64 = 1024;
+    let n: u64 = 64;
 
     let mut list = LinkedList::<_, Cardinality>::new();
 
     for i in 0..n {
         let i: LittleEndian<u64> = i.into();
+        println!("push {:?}", i);
         list.push(i)
     }
 
     for i in 0..n {
         let i: LittleEndian<u64> = i.into();
+        println!("mutate {:?}", i);
         *list.nth_mut(i).expect("Some(branch)") += 1
     }
 
     for i in 0..n {
+        println!("read {:?}", i);
         assert_eq!(*list.nth(i).expect("Some(branch)"), n - i)
     }
 }
@@ -196,7 +199,7 @@ fn push_mut() {
 #[test]
 fn iterate_immutable() {
     // todo - make larger
-    let n: u64 = 1;
+    let n: u64 = 64;
 
     let mut list = LinkedList::<_, Cardinality>::new();
 
@@ -215,9 +218,15 @@ fn iterate_immutable() {
     let mut count = n;
 
     for leaf in branch {
+        println!("moru {:?}", leaf);
+
         count -= 1;
         assert_eq!(*leaf, count);
+
+        println!("orre");
     }
+
+    println!("toru");
 
     // branch from 7th element
     let branch = list.nth(6).expect("Some(branch)");
