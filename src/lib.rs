@@ -13,20 +13,20 @@
 //! `Branch` and `BranchMut`, types for representing branches in tree-formed
 //! data as well as methods of search.
 
-#![cfg_attr(not(feature = "host"), no_std)]
+// #![cfg_attr(not(feature = "host"), no_std)]
 #![deny(missing_docs)]
 
 #[macro_use]
 extern crate alloc;
 
 mod annotations;
-mod primitive;
 mod backend;
 mod branch;
 mod branch_mut;
 mod compound;
 mod id;
 mod link;
+mod primitive;
 mod walk;
 
 pub use annotations::{
@@ -42,9 +42,9 @@ pub use compound::{
     MutableLeaves,
 };
 pub use id::Id;
-pub use primitive::Primitive;
 pub use link::{Link, LinkAnnotation, LinkCompound, LinkCompoundMut};
-pub use walk::{First, Step, Walk, Walker};
+pub use primitive::Primitive;
+pub use walk::{First, Step, Walker};
 
 #[cfg(feature = "host")]
 mod disk;

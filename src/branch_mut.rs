@@ -12,7 +12,7 @@ use alloc::vec::Vec;
 use crate::compound::{ArchivedChildren, Child, ChildMut, Compound};
 use crate::link::LinkCompoundMut;
 use crate::primitive::Primitive;
-use crate::walk::{AllLeaves, Step, Walk, Walker};
+use crate::walk::{AllLeaves, AnnoRef, Slot, Slots, Step, Walker};
 use crate::Annotation;
 
 enum LevelNodeMut<'a, C, A> {
@@ -87,6 +87,24 @@ impl<'a, C, A> LevelMut<'a, C, A> {
 
     fn offset_mut(&mut self) -> &mut usize {
         &mut self.offset
+    }
+}
+
+impl<'a, C, A> Slots<C, A> for &LevelMut<'a, C, A>
+where
+    C: Compound<A>,
+    C::Archived: ArchivedChildren<C, A>,
+    A: Primitive + Annotation<C::Leaf>,
+{
+    fn slot(&self, ofs: usize) -> Slot<C, A> {
+        match self.node.child(self.offset + ofs) {
+            Child::Leaf(l) => Slot::Leaf(l),
+            Child::Node(node) => {
+                Slot::Annotation(AnnoRef::Memory(node.annotation()))
+            }
+            Child::Empty => Slot::Empty,
+            Child::EndOfNode => Slot::End,
+        }
     }
 }
 
@@ -177,7 +195,7 @@ impl<'a, C, A> PartialBranchMut<'a, C, A> {
             }
 
             let top = self.top_mut();
-            let step = walker.walk(Walk::new_mut(top));
+            let step = walker.walk(&*top);
 
             match step {
                 Step::Found(walk_ofs) => {

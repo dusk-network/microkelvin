@@ -16,7 +16,7 @@ use crate::branch::Branch;
 use crate::branch_mut::BranchMut;
 use crate::compound::{AnnoIter, ArchivedChildren, Compound, MutableLeaves};
 use crate::primitive::Primitive;
-use crate::walk::{Step, Walk, WalkChild, Walker};
+use crate::walk::{Slot, Slots, Step, Walker};
 
 /// The cardinality of a compound collection
 #[derive(
@@ -60,6 +60,7 @@ where
 }
 
 /// Walker method to find the nth element of a compound collection
+#[derive(Debug)]
 pub struct Offset(LittleEndian<u64>);
 
 impl<C, A> Walker<C, A> for Offset
@@ -68,29 +69,27 @@ where
     C::Archived: ArchivedChildren<C, A>,
     A: Primitive + Annotation<C::Leaf> + Borrow<Cardinality>,
 {
-    fn walk(&mut self, walk: Walk<C, A>) -> Step {
+    fn walk(&mut self, walk: impl Slots<C, A>) -> Step {
         for i in 0.. {
-            walk.with_child(i, |child| match child {
-                WalkChild::Leaf(_) => {
+            match walk.slot(i) {
+                Slot::Leaf(_) => {
                     if self.0 == 0 {
-                        Some(Step::Found(i))
+                        return Step::Found(i);
                     } else {
                         self.0 -= 1;
-                        None
                     }
                 }
-                WalkChild::Annotation(a) => {
-                    let card: &Cardinality = a.borrow();
+                Slot::Annotation(a) => {
+                    let card: &Cardinality = (*a).borrow();
                     if card.0 <= self.0 {
                         self.0 -= card.0;
-                        None
                     } else {
-                        Some(Step::Into(i))
+                        return Step::Into(i);
                     }
                 }
-                WalkChild::Empty => None,
-                WalkChild::EndOfNode => Some(Step::Abort),
-            });
+                Slot::Empty => (),
+                Slot::End => return Step::Abort,
+            };
         }
         unreachable!()
     }

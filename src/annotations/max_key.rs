@@ -16,7 +16,7 @@ use crate::branch::Branch;
 use crate::branch_mut::BranchMut;
 use crate::compound::{AnnoIter, ArchivedChildren, Compound, MutableLeaves};
 use crate::primitive::Primitive;
-use crate::walk::{Step, Walk, Walker};
+use crate::walk::{Slots, Step, Walker};
 
 /// The maximum value of a collection
 #[derive(PartialEq, Eq, Clone, Debug, Archive, Serialize)]
@@ -129,7 +129,7 @@ where
     A: Primitive + Annotation<C::Leaf> + Borrow<MaxKey<K>>,
     K: Ord + Clone,
 {
-    fn walk(&mut self, _walk: Walk<C, A>) -> Step {
+    fn walk(&mut self, _walk: impl Slots<C, A>) -> Step {
         // let mut current_max: MaxKey<K> = MaxKey::NegativeInfinity;
         // let mut current_step = Step::Abort;
 
