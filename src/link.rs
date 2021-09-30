@@ -9,8 +9,7 @@ use core::cell::{Ref, RefCell, RefMut};
 use core::mem;
 use core::ops::{Deref, DerefMut};
 
-use rkyv::ser::Serializer;
-use rkyv::{out_field, AlignedVec, Fallible};
+use rkyv::{out_field, Fallible};
 use rkyv::{Archive, Deserialize, Serialize};
 
 use crate::backend::PortalProvider;
@@ -36,13 +35,18 @@ pub struct Link<C, A> {
     inner: RefCell<LinkInner<C, A>>,
 }
 
-#[derive(Debug)]
-pub struct ArchivedLink<A: Archive>(IdHash, A::Archived);
+pub struct ArchivedLink<A>(IdHash, A);
+
+impl<A> core::fmt::Debug for ArchivedLink<A> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("ArchivedLink").finish()
+    }
+}
 
 impl<C, A> Archive for Link<C, A>
 where
     C: Compound<A>,
-    A: Primitive + Annotation<C::Leaf>,
+    A: Primitive + Archive + Annotation<C::Leaf>,
 {
     type Archived = ArchivedLink<A>;
     type Resolver = (IdHash, A::Resolver);
@@ -71,23 +75,21 @@ where
         de: &mut S,
     ) -> Result<Link<C, A>, <S as Fallible>::Error> {
         let id = Id::new_from_hash(self.0, de.portal());
-        let anno = self.1.deserialize(de)?;
         Ok(Link {
-            inner: RefCell::new(LinkInner::Ia(id, anno)),
+            inner: RefCell::new(LinkInner::Ia(id, self.1.clone())),
         })
     }
 }
 
-impl<C, A, S> Serialize<S> for Link<C, A>
+impl<C, A> Serialize<PortalSerializer> for Link<C, A>
 where
-    C: Compound<A> + Serialize<S>,
-    A: Clone + Primitive + Annotation<C::Leaf> + Serialize<S>,
-    S: Serializer + Fallible + PortalProvider + From<Portal> + Into<AlignedVec>,
+    C: Compound<A> + Serialize<PortalSerializer>,
+    A: Primitive + Annotation<C::Leaf> + Serialize<PortalSerializer>,
 {
     fn serialize(
         &self,
-        serializer: &mut S,
-    ) -> Result<Self::Resolver, <S as Fallible>::Error> {
+        serializer: &mut PortalSerializer,
+    ) -> Result<Self::Resolver, <PortalSerializer as Fallible>::Error> {
         let anno = &*self.annotation();
         let a_resolver = match anno.serialize(serializer) {
             Ok(r) => r,
@@ -174,9 +176,9 @@ where
     where
         C: Serialize<PortalSerializer>,
     {
-        let inner = &*self.inner();
+        let _inner = &*self.inner();
 
-        let ps = PortalSerializer::from(portal);
+        let _ps = PortalSerializer::from(portal);
 
         todo!()
     }

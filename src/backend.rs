@@ -63,7 +63,8 @@ impl Serializer for PortalSerializer {
     }
 
     fn write(&mut self, bytes: &[u8]) -> Result<(), <Self as Fallible>::Error> {
-        Ok(self.serializer.write(bytes).expect("Infallible"))
+        self.serializer.write(bytes).expect("Infallible");
+        Ok(())
     }
 }
 
