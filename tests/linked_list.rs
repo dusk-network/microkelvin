@@ -12,7 +12,7 @@ use microkelvin::{
 use rend::LittleEndian;
 use rkyv::{Archive, Deserialize, Serialize};
 
-#[derive(Clone, Archive, Serialize, Debug, Deserialize)]
+#[derive(Clone, Archive, Serialize, Deserialize)]
 #[archive(bound(archive = "
   T: Primitive,
   A: Primitive + Annotation<T>"))]
@@ -24,7 +24,6 @@ use rkyv::{Archive, Deserialize, Serialize};
   T::Archived:  Deserialize<T, __D>,
   A::Archived:  Deserialize<A, __D>,
   __D: PortalProvider + Sized"))]
-#[archive_attr(derive(Debug))]
 pub enum LinkedList<T, A> {
     Empty,
     Node { val: T, next: Link<Self, A> },

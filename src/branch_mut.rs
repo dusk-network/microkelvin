@@ -322,9 +322,9 @@ where
 
 impl<'a, C, A, M> core::fmt::Debug for MappedBranchMut<'a, C, A, M>
 where
-    C: Compound<A>,
-    C::Archived: ArchivedChildren<C, A>,
-    A: Primitive + Annotation<C::Leaf>,
+    C: Compound<A> + core::fmt::Debug,
+    C::Archived: ArchivedChildren<C, A> + core::fmt::Debug,
+    A: Primitive + Annotation<C::Leaf> + core::fmt::Debug,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("MappedBranchMut")
@@ -435,7 +435,6 @@ where
     }
 }
 
-#[derive(Debug)]
 pub enum MappedBranchMutIterator<'a, C, A, W, M>
 where
     C: Compound<A>,
