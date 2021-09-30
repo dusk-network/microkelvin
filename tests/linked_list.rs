@@ -17,7 +17,7 @@ use rkyv::{Archive, Deserialize, Serialize};
   T: Primitive,
   A: Primitive + Annotation<T>"))]
 #[archive(bound(serialize = "
-  Self: Compound<A>,
+  Self: Compound<A> + Archive<Resolver = LinkedListResolver<T, A>>,
   T: Serialize<PortalSerializer>,
   A: Annotation<<Self as Compound<A>>::Leaf> + Serialize<PortalSerializer>"))]
 #[archive(bound(deserialize = "
