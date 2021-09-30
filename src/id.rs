@@ -6,7 +6,7 @@
 
 use core::marker::PhantomData;
 
-use rkyv::{Archive, Deserialize, Fallible, Infallible};
+use rkyv::{Archive, Deserialize};
 
 use crate::{backend::Portal, PortalDeserializer};
 

@@ -2,35 +2,32 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 //
-// Copyright (c) DUSK NETWORK. All rights reserved.
+// Copyright (c) DUSK NETWORK. All rights reserializeved.
 
 use microkelvin::{
     Annotation, ArchivedChild, ArchivedChildren, Cardinality, Child, ChildMut,
-    Compound, First, Link, MutableLeaves, Nth, Portal, PortalProvider,
-    Primitive,
+    Compound, First, Link, MutableLeaves, Nth, PortalProvider,
+    PortalSerializer, Primitive,
 };
 use rend::LittleEndian;
-use rkyv::{ser::Serializer, AlignedVec, Archive, Deserialize, Serialize};
+use rkyv::{Archive, Deserialize, Serialize};
 
 #[derive(Clone, Archive, Serialize, Debug, Deserialize)]
 #[archive(bound(archive = "
-  A: Primitive + Annotation<T>,
-  T: Primitive"))]
+  T: Primitive,
+  A: Primitive + Annotation<T>"))]
 #[archive(bound(serialize = "
-  A: Serialize<__S>,
-  __S: Serializer + PortalProvider + From<Portal> + Into<AlignedVec>"))]
+  Self: Compound<A>,
+  T: Serialize<PortalSerializer>,
+  A: Annotation<<Self as Compound<A>>::Leaf> + Serialize<PortalSerializer>"))]
 #[archive(bound(deserialize = "
-  A::Archived:  Deserialize<A, __D>,
   T::Archived:  Deserialize<T, __D>,
+  A::Archived:  Deserialize<A, __D>,
   __D: PortalProvider + Sized"))]
 #[archive_attr(derive(Debug))]
 pub enum LinkedList<T, A> {
     Empty,
-    Node {
-        val: T,
-        #[omit_bounds]
-        next: Link<Self, A>,
-    },
+    Node { val: T, next: Link<Self, A> },
 }
 
 impl<T, A> Default for LinkedList<T, A> {
