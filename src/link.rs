@@ -17,7 +17,7 @@ use crate::backend::PortalProvider;
 use crate::id::{Id, IdHash};
 use crate::primitive::Primitive;
 
-use crate::{Annotation, Compound, Portal};
+use crate::{Annotation, Compound, Portal, PortalSerializer};
 
 #[derive(Clone, Debug)]
 pub enum LinkInner<C, A> {
@@ -93,8 +93,8 @@ where
             Ok(r) => r,
             _ => unreachable!(),
         };
-        let _portal = serializer.portal();
-        let id = self.id();
+        let portal = serializer.portal();
+        let id = self.id(portal);
         Ok((*id.hash(), a_resolver))
     }
 }
@@ -169,8 +169,15 @@ where
         }
     }
 
-    /// Computes and returns the id of the compound link is pointing to
-    pub fn id(&self) -> Id<C> {
+    /// Computes and returns the id of the compound link
+    pub fn id(&self, portal: Portal) -> Id<C>
+    where
+        C: Serialize<PortalSerializer>,
+    {
+        let inner = &*self.inner();
+
+        let ps = PortalSerializer::from(portal);
+
         todo!()
     }
 
