@@ -9,7 +9,7 @@ use core::cell::{Ref, RefCell, RefMut};
 use core::mem;
 use core::ops::{Deref, DerefMut};
 
-use rkyv::{out_field, Fallible};
+use rkyv::Fallible;
 use rkyv::{Archive, Deserialize, Serialize};
 
 use crate::backend::PortalProvider;
@@ -37,30 +37,22 @@ pub struct Link<C, A> {
 
 pub struct ArchivedLink<A>(IdHash, A);
 
-impl<A> core::fmt::Debug for ArchivedLink<A> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_tuple("ArchivedLink").finish()
-    }
-}
-
 impl<C, A> Archive for Link<C, A>
 where
     C: Compound<A>,
     A: Primitive + Archive + Annotation<C::Leaf>,
 {
     type Archived = ArchivedLink<A>;
-    type Resolver = (IdHash, A::Resolver);
+    type Resolver = (IdHash, A);
 
     unsafe fn resolve(
         &self,
-        pos: usize,
+        _pos: usize,
         resolver: Self::Resolver,
         out: *mut Self::Archived,
     ) {
         (*out).0 = resolver.0;
-        let (fp, fo) = out_field!(out.1);
-        let a = &*self.annotation();
-        a.resolve(pos + fp, resolver.1, fo);
+        (*out).1 = resolver.1;
     }
 }
 
@@ -90,14 +82,10 @@ where
         &self,
         serializer: &mut PortalSerializer,
     ) -> Result<Self::Resolver, <PortalSerializer as Fallible>::Error> {
-        let anno = &*self.annotation();
-        let a_resolver = match anno.serialize(serializer) {
-            Ok(r) => r,
-            _ => unreachable!(),
-        };
+        let anno = self.annotation().clone();
         let portal = serializer.portal();
         let id = self.id(portal);
-        Ok((*id.hash(), a_resolver))
+        Ok((*id.hash(), anno))
     }
 }
 

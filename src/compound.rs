@@ -30,7 +30,6 @@ where
 }
 
 /// The response of the `child` method on a `Compound` node.
-#[derive(Debug)]
 pub enum ArchivedChild<'a, C, A>
 where
     C: Compound<A>,
@@ -64,7 +63,7 @@ where
 }
 
 /// Trait to support branch traversal in archived nodes
-pub trait ArchivedChildren<C, A>: core::fmt::Debug
+pub trait ArchivedChildren<C, A>
 where
     C: Compound<A>,
     A: Primitive + Annotation<C::Leaf>,
@@ -74,7 +73,7 @@ where
 }
 
 /// A type that can recursively contain itself and leaves.
-pub trait Compound<A>: Sized + Archive + core::fmt::Debug
+pub trait Compound<A>: Sized + Archive
 where
     A: Primitive + Annotation<Self::Leaf>,
 {

@@ -14,7 +14,6 @@ use crate::primitive::Primitive;
 use crate::walk::{AllLeaves, AnnoRef, Slot, Slots, Step, Walker};
 use crate::Annotation;
 
-#[derive(Debug)]
 pub(crate) enum LevelNode<'a, C, A>
 where
     C: Compound<A>,
@@ -27,7 +26,6 @@ where
     Archived(&'a C::Archived),
 }
 
-#[derive(Debug)]
 pub struct Level<'a, C, A>
 where
     C: Compound<A>,
@@ -98,7 +96,6 @@ where
     }
 }
 
-#[derive(Debug)]
 pub struct PartialBranch<'a, C, A>(Vec<Level<'a, C, A>>)
 where
     C: Compound<A>,
@@ -287,7 +284,6 @@ where
 ///
 /// Branche are always guaranteed to point at a leaf, and can be dereferenced
 /// to the pointed-at leaf.
-#[derive(Debug)]
 pub struct Branch<'a, C, A>(PartialBranch<'a, C, A>)
 where
     C: Compound<A>,
@@ -317,19 +313,6 @@ where
     closure: for<'b> fn(&'b C::Leaf) -> &'b M,
 }
 
-impl<'a, C, A, M> core::fmt::Debug for MappedBranch<'a, C, A, M>
-where
-    C: Compound<A>,
-    C::Archived: ArchivedChildren<C, A>,
-    A: Primitive + Annotation<C::Leaf>,
-{
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("MappedBranch")
-            .field("inner", &self.inner)
-            .finish()
-    }
-}
-
 impl<'a, C, A, M> Deref for MappedBranch<'a, C, A, M>
 where
     C: Compound<A>,
@@ -344,7 +327,6 @@ where
     }
 }
 
-#[derive(Debug)]
 pub enum BranchIterator<'a, C, A, W>
 where
     C: Compound<A>,
@@ -416,7 +398,6 @@ where
     }
 }
 
-#[derive(Debug)]
 pub enum MappedBranchIterator<'a, C, A, W, M>
 where
     C: Compound<A>,
