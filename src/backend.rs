@@ -104,15 +104,17 @@ impl Portal {
         S: Serializer
             + Fallible
             + PortalProvider
+            + Serializer
             + From<Portal>
             + Into<AlignedVec>,
-        S::Error: core::fmt::Debug,
     {
-        let mut ser = S::from(self.clone());
-        ser.serialize_value(c).expect("Infallible");
-        let bytes = &ser.into()[..];
+        let mut ser: S = From::from(self.clone());
+        let _ = ser.serialize_value(c);
+        let avec: AlignedVec = ser.into();
+        let bytes = &avec[..];
         let hash = IdHash::new(blake3::hash(bytes).as_bytes());
         self.0.put(hash.clone(), &bytes);
+
         Id::new_from_hash(hash, self.clone())
     }
 }

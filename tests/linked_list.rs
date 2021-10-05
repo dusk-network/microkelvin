@@ -6,27 +6,31 @@
 
 use microkelvin::{
     Annotation, ArchivedChild, ArchivedChildren, Cardinality, Child, ChildMut,
-    Compound, First, Link, MutableLeaves, Nth, PortalProvider,
-    PortalSerializer, Primitive,
+    Compound, First, Link, MutableLeaves, Nth, Portal, PortalProvider,
+    Primitive,
 };
 use rend::LittleEndian;
-use rkyv::{Archive, Deserialize, Serialize};
+use rkyv::{ser::Serializer, AlignedVec, Archive, Deserialize, Serialize};
 
 #[derive(Clone, Archive, Serialize, Deserialize)]
 #[archive(bound(archive = "
   T: Primitive,
   A: Primitive + Annotation<T>"))]
 #[archive(bound(serialize = "
-  Self: Compound<A> + Archive<Resolver = LinkedListResolver<T, A>>,
-  T: Serialize<PortalSerializer>,
-  A: Annotation<<Self as Compound<A>>::Leaf> + Serialize<PortalSerializer>"))]
+  T: Serialize<__S>,
+  A: Annotation<<Self as Compound<A>>::Leaf> + Serialize<__S>,
+  __S: PortalProvider + From<Portal> + Serializer + Into<AlignedVec>"))]
 #[archive(bound(deserialize = "
   T::Archived:  Deserialize<T, __D>,
   A::Archived:  Deserialize<A, __D>,
   __D: PortalProvider + Sized"))]
 pub enum LinkedList<T, A> {
     Empty,
-    Node { val: T, next: Link<Self, A> },
+    Node {
+        val: T,
+        #[omit_bounds]
+        next: Link<Self, A>,
+    },
 }
 
 impl<T, A> Default for LinkedList<T, A> {
