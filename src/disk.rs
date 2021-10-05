@@ -1,3 +1,4 @@
+use memmap::Mmap;
 // use memmap::Mmap;
 use parking_lot::RwLock;
 use std::fs::{File, OpenOptions};
@@ -46,8 +47,10 @@ impl DiskBackend {
 }
 
 impl Backend for DiskBackend {
-    fn get(&self, _id: &IdHash, _len: usize) -> &[u8] {
-        todo!();
+    fn get<Region>(&self, id: &IdHash, _len: usize) -> Region {
+        let offset = self.index.get(id);
+
+        println!("get at offset {:?}", offset);
     }
 
     fn put(&self, id: IdHash, serialized: &[u8]) {

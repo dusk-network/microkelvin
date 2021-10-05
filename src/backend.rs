@@ -9,7 +9,7 @@ use rkyv::{
 /// The trait defining a disk or network backend for microkelvin structures.
 pub trait Backend {
     /// Get get a type stored in the backend from an `Id`
-    fn get(&self, id: &IdHash, len: usize) -> &[u8];
+    fn get(&self, id: &IdHash, len: usize) -> [u8];
 
     /// Write encoded bytes into the backend
     fn put(&self, id: IdHash, serialized: &[u8]);
