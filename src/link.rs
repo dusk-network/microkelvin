@@ -8,15 +8,16 @@ use alloc::rc::Rc;
 use core::cell::{Ref, RefCell, RefMut};
 use core::mem;
 use core::ops::{Deref, DerefMut};
+use rkyv::ser::Serializer;
 
-use rkyv::Fallible;
+use rkyv::{AlignedVec, Fallible};
 use rkyv::{Archive, Deserialize, Serialize};
 
 use crate::backend::PortalProvider;
 use crate::id::{Id, IdHash};
 use crate::primitive::Primitive;
 
-use crate::{Annotation, Compound, Portal, PortalSerializer};
+use crate::{Annotation, Compound, Portal};
 
 #[derive(Clone, Debug)]
 pub enum LinkInner<C, A> {
@@ -24,6 +25,12 @@ pub enum LinkInner<C, A> {
     C(Rc<C>),
     Ca(Rc<C>, A),
     Ia(Id<C>, A),
+}
+
+impl<C, A> Default for LinkInner<C, A> {
+    fn default() -> Self {
+        LinkInner::Placeholder
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -73,15 +80,16 @@ where
     }
 }
 
-impl<C, A> Serialize<PortalSerializer> for Link<C, A>
+impl<C, A, S> Serialize<S> for Link<C, A>
 where
-    C: Compound<A> + Serialize<PortalSerializer>,
-    A: Primitive + Annotation<C::Leaf> + Serialize<PortalSerializer>,
+    C: Compound<A> + Serialize<S>,
+    A: Primitive + Annotation<C::Leaf> + Serialize<S>,
+    S: Serializer + PortalProvider + Fallible + From<Portal> + Into<AlignedVec>,
 {
     fn serialize(
         &self,
-        serializer: &mut PortalSerializer,
-    ) -> Result<Self::Resolver, <PortalSerializer as Fallible>::Error> {
+        serializer: &mut S,
+    ) -> Result<Self::Resolver, S::Error> {
         let anno = self.annotation().clone();
         let portal = serializer.portal();
         let id = self.id(portal);
@@ -160,15 +168,33 @@ where
     }
 
     /// Computes and returns the id of the compound link
-    pub fn id(&self, portal: Portal) -> Id<C>
+    pub fn id<S>(&self, portal: Portal) -> Id<C>
     where
-        C: Serialize<PortalSerializer>,
+        C: Serialize<S>,
+        S: Serializer
+            + Fallible
+            + From<Portal>
+            + PortalProvider
+            + Into<AlignedVec>,
     {
-        let _inner = &*self.inner();
+        let mut borrow = self.inner.borrow_mut();
+        let (id, a) = match core::mem::take(&mut *borrow) {
+            LinkInner::Placeholder => unreachable!(),
+            LinkInner::C(c) => {
+                let a = A::combine(c.annotations());
+                let id = portal.put(&*c);
+                (id, a)
+            }
+            LinkInner::Ca(c, a) => {
+                let id = portal.put(&*c);
+                (id, a)
+            }
+            LinkInner::Ia(id, a) => (id, a),
+        };
 
-        let _ps = PortalSerializer::from(portal);
+        *borrow = LinkInner::Ia(id.clone(), a);
 
-        todo!()
+        id
     }
 
     /// Gets a reference to the inner compound of the link'
@@ -188,8 +214,6 @@ where
     /// Returns a Mutable reference to the underlying compound node
     ///
     /// Drops cached annotations and ids
-    ///
-    /// Can fail when trying to fetch data over i/o
     pub fn inner_mut(&mut self) -> LinkCompoundMut<C, A> {
         // assure inner value is loaded
         let _ = self.inner();
