@@ -13,18 +13,15 @@
 //! `Branch` and `BranchMut`, types for representing branches in tree-formed
 //! data as well as methods of search.
 
-// #![cfg_attr(not(feature = "host"), no_std)]
 #![deny(missing_docs)]
 
 #[macro_use]
 extern crate alloc;
 
 mod annotations;
-mod backend;
 mod branch;
 mod branch_mut;
 mod compound;
-mod id;
 mod link;
 mod primitive;
 mod walk;
@@ -32,21 +29,15 @@ mod walk;
 pub use annotations::{
     Annotation, Cardinality, Combine, GetMaxKey, Keyed, MaxKey, Nth,
 };
-pub use backend::{
-    Backend, Portal, PortalDeserializer, PortalProvider, PortalSerializer,
-};
 pub use branch::Branch;
 pub use branch_mut::BranchMut;
 pub use compound::{
     AnnoIter, ArchivedChild, ArchivedChildren, Child, ChildMut, Compound,
     MutableLeaves,
 };
-pub use id::Id;
-pub use link::{Link, LinkAnnotation, LinkCompound, LinkCompoundMut};
+pub use link::Link;
 pub use primitive::Primitive;
 pub use walk::{First, Step, Walker};
 
-#[cfg(feature = "host")]
-mod disk;
-#[cfg(feature = "host")]
-pub use disk::DiskBackend;
+mod chonker;
+pub use chonker::Chonker;

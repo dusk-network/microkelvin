@@ -6,7 +6,8 @@
 
 use core::ops::Deref;
 
-use crate::{AnnoIter, Compound, LinkAnnotation, Primitive};
+use crate::link::NodeAnnotation;
+use crate::{AnnoIter, Compound, Primitive};
 
 mod cardinality;
 mod max_key;
@@ -40,7 +41,7 @@ pub enum WrappedAnnotation<'a, C, A> {
     /// The annotation is owned
     Owned(A),
     /// The annotation is a reference
-    Link(LinkAnnotation<'a, C, A>),
+    Link(NodeAnnotation<'a, C, A>),
 }
 
 impl<'a, C, A> Deref for WrappedAnnotation<'a, C, A> {

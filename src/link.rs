@@ -7,24 +7,45 @@
 use alloc::rc::Rc;
 use core::cell::{Ref, RefCell, RefMut};
 use core::mem;
-use core::ops::{Deref, DerefMut};
 use rkyv::ser::Serializer;
 
-use rkyv::{AlignedVec, Fallible};
+use owning_ref::{OwningRef, OwningRefMut};
+use rkyv::Fallible;
 use rkyv::{Archive, Deserialize, Serialize};
 
-use crate::backend::PortalProvider;
-use crate::id::{Id, IdHash};
 use crate::primitive::Primitive;
 
-use crate::{Annotation, Compound, Portal};
+use crate::chonker::{Offset, RawOffset};
+use crate::{Annotation, Compound};
+
+pub type NodeAnnotation<'a, C, A> = OwningRef<Ref<'a, LinkInner<C, A>>, A>;
+
+pub enum NodeRef<'a, C, A>
+where
+    C: Archive,
+{
+    Memory(&'a C),
+    Archived(&'a C::Archived),
+    Referenced(OwningRef<Ref<'a, LinkInner<C, A>>, C>),
+}
+
+impl<'a, C, A> From<&'a C> for NodeRef<'a, C, A>
+where
+    C: Archive,
+{
+    fn from(c: &'a C) -> Self {
+        NodeRef::Memory(c)
+    }
+}
+
+type NodeRefMut<'a, C, A> = OwningRefMut<RefMut<'a, LinkInner<C, A>>, C>;
 
 #[derive(Clone, Debug)]
 pub enum LinkInner<C, A> {
     Placeholder,
     C(Rc<C>),
     Ca(Rc<C>, A),
-    Ia(Id<C>, A),
+    Io(Offset<C>, A),
 }
 
 impl<C, A> Default for LinkInner<C, A> {
@@ -42,15 +63,11 @@ pub struct Link<C, A> {
     inner: RefCell<LinkInner<C, A>>,
 }
 
-pub struct ArchivedLink<A>(IdHash, A);
+pub struct ArchivedLink<A>(RawOffset, A);
 
-impl<C, A> Archive for Link<C, A>
-where
-    C: Compound<A>,
-    A: Primitive + Archive + Annotation<C::Leaf>,
-{
+impl<C, A> Archive for Link<C, A> {
     type Archived = ArchivedLink<A>;
-    type Resolver = (IdHash, A);
+    type Resolver = ArchivedLink<A>;
 
     unsafe fn resolve(
         &self,
@@ -58,8 +75,7 @@ where
         resolver: Self::Resolver,
         out: *mut Self::Archived,
     ) {
-        (*out).0 = resolver.0;
-        (*out).1 = resolver.1;
+        *out = resolver
     }
 }
 
@@ -67,16 +83,13 @@ impl<C, A, S> Deserialize<Link<C, A>, S> for ArchivedLink<A>
 where
     A: Archive + Clone,
     A::Archived: Deserialize<A, S>,
-    S: Fallible + PortalProvider,
+    S: Fallible,
 {
     fn deserialize(
         &self,
-        de: &mut S,
+        _de: &mut S,
     ) -> Result<Link<C, A>, <S as Fallible>::Error> {
-        let id = Id::new_from_hash(self.0, de.portal());
-        Ok(Link {
-            inner: RefCell::new(LinkInner::Ia(id, self.1.clone())),
-        })
+        todo!()
     }
 }
 
@@ -84,16 +97,13 @@ impl<C, A, S> Serialize<S> for Link<C, A>
 where
     C: Compound<A> + Serialize<S>,
     A: Primitive + Annotation<C::Leaf> + Serialize<S>,
-    S: Serializer + PortalProvider + Fallible + From<Portal> + Into<AlignedVec>,
+    S: Serializer + Fallible,
 {
     fn serialize(
         &self,
-        serializer: &mut S,
+        _serializer: &mut S,
     ) -> Result<Self::Resolver, S::Error> {
-        let anno = self.annotation().clone();
-        let portal = serializer.portal();
-        let id = self.id(portal);
-        Ok((*id.hash(), anno))
+        todo!()
     }
 }
 
@@ -121,29 +131,22 @@ where
     }
 
     /// Returns a reference to to the annotation stored
-    pub fn annotation(&self) -> LinkAnnotation<C, A> {
-        let borrow = self.inner.borrow();
-        let a = match *borrow {
-            LinkInner::Ca(_, _) | LinkInner::Ia(_, _) => {
-                return LinkAnnotation(borrow)
+    pub fn annotation(&self) -> NodeAnnotation<C, A> {
+        let mut borrow = self.inner.borrow_mut();
+        *borrow = match mem::replace(&mut *borrow, LinkInner::Placeholder) {
+            LinkInner::C(c) => {
+                let a = A::combine(c.annotations());
+                LinkInner::Ca(c, a)
             }
-            LinkInner::C(ref c) => A::combine(c.annotations()),
-            LinkInner::Placeholder => unreachable!(),
+            other @ _ => other,
         };
 
         drop(borrow);
-        let mut borrow = self.inner.borrow_mut();
 
-        if let LinkInner::C(c) =
-            mem::replace(&mut *borrow, LinkInner::Placeholder)
-        {
-            *borrow = LinkInner::Ca(c, a)
-        } else {
-            unreachable!()
-        }
-        drop(borrow);
-        let borrow = self.inner.borrow();
-        LinkAnnotation(borrow)
+        OwningRef::new(self.inner.borrow()).map(|brw| match brw {
+            LinkInner::Ca(_, a) | LinkInner::Io(_, a) => a,
+            _ => unreachable!(),
+        })
     }
 
     /// Consumes the link and returns the inner Compound value
@@ -160,61 +163,28 @@ where
                 Ok(c) => c,
                 Err(rc) => (&*rc).clone(),
             },
-            LinkInner::Ia(_id, _) => {
+            LinkInner::Io(_, _) => {
                 todo!()
             }
             _ => unreachable!(),
         }
     }
 
-    /// Computes and returns the id of the compound link
-    pub fn id<S>(&self, portal: Portal) -> Id<C>
-    where
-        C: Serialize<S>,
-        S: Serializer
-            + Fallible
-            + From<Portal>
-            + PortalProvider
-            + Into<AlignedVec>,
-    {
-        let mut borrow = self.inner.borrow_mut();
-        let (id, a) = match core::mem::take(&mut *borrow) {
-            LinkInner::Placeholder => unreachable!(),
-            LinkInner::C(c) => {
-                let a = A::combine(c.annotations());
-                let id = portal.put(&*c);
-                (id, a)
-            }
-            LinkInner::Ca(c, a) => {
-                let id = portal.put(&*c);
-                (id, a)
-            }
-            LinkInner::Ia(id, a) => (id, a),
-        };
-
-        *borrow = LinkInner::Ia(id.clone(), a);
-
-        id
-    }
-
     /// Gets a reference to the inner compound of the link'
-    pub fn inner(&self) -> LinkCompound<C, A>
+    pub fn inner(&self) -> NodeRef<C, A>
     where
         C: Archive,
     {
-        let borrow = self.inner.borrow();
-
-        match *borrow {
-            LinkInner::Placeholder => unreachable!(),
-            LinkInner::C(_) | LinkInner::Ca(_, _) => LinkCompound(borrow),
-            LinkInner::Ia(ref _id, _) => LinkCompound(borrow),
-        }
+        todo!()
     }
 
     /// Returns a Mutable reference to the underlying compound node
     ///
     /// Drops cached annotations and ids
-    pub fn inner_mut(&mut self) -> LinkCompoundMut<C, A> {
+    pub fn inner_mut(&mut self) -> NodeRefMut<C, A>
+    where
+        C: Clone,
+    {
         // assure inner value is loaded
         let _ = self.inner();
         let mut borrow: RefMut<LinkInner<C, A>> = self.inner.borrow_mut();
@@ -223,67 +193,15 @@ where
             LinkInner::C(c) | LinkInner::Ca(c, _) => {
                 // clear all cached data
                 *borrow = LinkInner::C(c);
+
+                OwningRefMut::new(borrow).map_mut(|b| {
+                    if let LinkInner::C(c) = b {
+                        Rc::make_mut(c)
+                    } else {
+                        unreachable!()
+                    }
+                })
             }
-            _ => unreachable!(),
-        }
-        LinkCompoundMut(borrow)
-    }
-}
-
-/// A wrapped borrow of an inner link guaranteed to contain a computed
-/// annotation
-#[derive(Debug)]
-pub struct LinkAnnotation<'a, C, A>(Ref<'a, LinkInner<C, A>>);
-
-/// A wrapped borrow of an inner node guaranteed to contain a compound node
-#[derive(Debug)]
-pub struct LinkCompound<'a, C, A>(Ref<'a, LinkInner<C, A>>);
-
-/// A wrapped mutable borrow of an inner node guaranteed to contain a compound
-/// node
-#[derive(Debug)]
-pub struct LinkCompoundMut<'a, C, A>(RefMut<'a, LinkInner<C, A>>);
-
-impl<'a, C, A> Deref for LinkAnnotation<'a, C, A> {
-    type Target = A;
-
-    fn deref(&self) -> &Self::Target {
-        match *self.0 {
-            LinkInner::Ia(_, ref a) | LinkInner::Ca(_, ref a) => a,
-            _ => unreachable!(),
-        }
-    }
-}
-
-impl<'a, C, A> Deref for LinkCompound<'a, C, A> {
-    type Target = C;
-
-    fn deref(&self) -> &Self::Target {
-        match *self.0 {
-            LinkInner::C(ref c) | LinkInner::Ca(ref c, _) => c,
-            _ => unreachable!(),
-        }
-    }
-}
-
-impl<'a, C, A> Deref for LinkCompoundMut<'a, C, A> {
-    type Target = C;
-
-    fn deref(&self) -> &Self::Target {
-        match *self.0 {
-            LinkInner::C(ref c) => c,
-            _ => unreachable!(),
-        }
-    }
-}
-
-impl<'a, C, A> DerefMut for LinkCompoundMut<'a, C, A>
-where
-    C: Clone,
-{
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        match *self.0 {
-            LinkInner::C(ref mut c) => Rc::make_mut(c),
             _ => unreachable!(),
         }
     }

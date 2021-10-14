@@ -4,13 +4,17 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use core::cell::Ref;
 use core::ops::Deref;
+
+use owning_ref::OwningRef;
 
 use crate::branch::Branch;
 use crate::branch_mut::BranchMut;
 use crate::compound::{ArchivedChildren, Compound, MutableLeaves};
+use crate::link::LinkInner;
 use crate::primitive::Primitive;
-use crate::{Annotation, LinkAnnotation};
+use crate::Annotation;
 
 /// The return value from a closure to `walk` the tree.
 ///
@@ -40,7 +44,7 @@ where
 #[derive(Debug)]
 pub enum AnnoRef<'a, C, A> {
     Archived(&'a A),
-    Memory(LinkAnnotation<'a, C, A>),
+    Memory(OwningRef<Ref<'a, LinkInner<C, A>>, A>),
 }
 
 impl<'a, C, A> Deref for AnnoRef<'a, C, A> {

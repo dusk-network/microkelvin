@@ -4,50 +4,22 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use core::marker::PhantomData;
 use core::mem;
 use core::ops::{Deref, DerefMut};
 
 use alloc::vec::Vec;
 
 use crate::compound::{ArchivedChildren, Child, ChildMut, Compound};
-use crate::link::LinkCompoundMut;
 use crate::primitive::Primitive;
 use crate::walk::{AllLeaves, AnnoRef, Slot, Slots, Step, Walker};
 use crate::Annotation;
 
 #[derive(Debug)]
-enum LevelNodeMut<'a, C, A> {
-    Root(&'a mut C),
-    Val(LinkCompoundMut<'a, C, A>),
-}
-
-impl<'a, C, A> Deref for LevelNodeMut<'a, C, A> {
-    type Target = C;
-
-    fn deref(&self) -> &Self::Target {
-        match self {
-            LevelNodeMut::Root(root) => root,
-            LevelNodeMut::Val(val) => &**val,
-        }
-    }
-}
-
-impl<'a, C, A> DerefMut for LevelNodeMut<'a, C, A>
-where
-    C: Clone,
-{
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        match self {
-            LevelNodeMut::Root(target) => *target,
-            LevelNodeMut::Val(val) => val,
-        }
-    }
-}
-
-#[derive(Debug)]
 pub struct LevelMut<'a, C, A> {
     offset: usize,
-    node: LevelNodeMut<'a, C, A>,
+    node: &'a mut C,
+    _marker: PhantomData<A>,
 }
 
 impl<'a, C, A> Deref for LevelMut<'a, C, A> {
@@ -68,17 +40,11 @@ where
 }
 
 impl<'a, C, A> LevelMut<'a, C, A> {
-    fn new_root(root: &'a mut C) -> LevelMut<'a, C, A> {
+    fn new(root: &'a mut C) -> LevelMut<'a, C, A> {
         LevelMut {
             offset: 0,
-            node: LevelNodeMut::Root(root),
-        }
-    }
-
-    fn new_val(link_compound: LinkCompoundMut<'a, C, A>) -> LevelMut<'a, C, A> {
-        LevelMut {
-            offset: 0,
-            node: LevelNodeMut::Val(link_compound),
+            node: root,
+            _marker: PhantomData,
         }
     }
 
@@ -115,7 +81,7 @@ pub struct PartialBranchMut<'a, C, A>(Vec<LevelMut<'a, C, A>>);
 
 impl<'a, C, A> PartialBranchMut<'a, C, A> {
     fn new(root: &'a mut C) -> Self {
-        PartialBranchMut(vec![LevelMut::new_root(root)])
+        PartialBranchMut(vec![LevelMut::new(root)])
     }
 
     pub fn depth(&self) -> usize {
@@ -178,9 +144,9 @@ impl<'a, C, A> PartialBranchMut<'a, C, A> {
         A: Primitive + Annotation<C::Leaf>,
         W: Walker<C, A>,
     {
-        enum State<C> {
+        enum State<Level> {
             Init,
-            Push(C),
+            Push(Level),
             Pop,
         }
 
@@ -205,29 +171,14 @@ impl<'a, C, A> PartialBranchMut<'a, C, A> {
                     *top.offset_mut() += walk_ofs;
                     let ofs = top.offset();
 
-                    match &mut top.node {
-                        LevelNodeMut::Root(root) => match root.child_mut(ofs) {
-                            ChildMut::Leaf(_) => return Some(()),
-                            ChildMut::Node(n) => {
-                                let level: LevelMut<'_, C, A> =
-                                    LevelMut::new_val(n.inner_mut());
-                                let extended: LevelMut<'a, C, A> =
-                                    unsafe { core::mem::transmute(level) };
-                                state = State::Push(extended);
-                            }
-                            _ => panic!("Invalid child found"),
-                        },
-                        LevelNodeMut::Val(val) => match val.child_mut(ofs) {
-                            ChildMut::Leaf(_) => return Some(()),
-                            ChildMut::Node(n) => {
-                                let level: LevelMut<'_, C, A> =
-                                    LevelMut::new_val(n.inner_mut());
-                                let extended: LevelMut<'a, C, A> =
-                                    unsafe { core::mem::transmute(level) };
-                                state = State::Push(extended);
-                            }
-                            _ => panic!("Invalid child found"),
-                        },
+                    match top.node.child_mut(ofs) {
+                        ChildMut::Leaf(_) => return Some(()),
+                        ChildMut::Node(n) => {
+                            let extended: &'a mut C =
+                                unsafe { core::mem::transmute(n) };
+                            state = State::Push(LevelMut::new(extended));
+                        }
+                        _ => panic!("Invalid child found"),
                     }
                 }
                 Step::Advance => state = State::Pop,
@@ -379,6 +330,7 @@ where
 impl<'a, C, A> IntoIterator for BranchMut<'a, C, A>
 where
     C: Compound<A> + Clone,
+    C::Leaf: 'a,
     C::Archived: ArchivedChildren<C, A>,
     A: Primitive + Annotation<C::Leaf>,
 {
@@ -394,6 +346,7 @@ where
 impl<'a, C, A, W> Iterator for BranchMutIterator<'a, C, A, W>
 where
     C: Compound<A> + Clone,
+    C::Leaf: 'a,
     C::Archived: ArchivedChildren<C, A>,
     A: Primitive + Annotation<C::Leaf>,
     W: Walker<C, A>,
