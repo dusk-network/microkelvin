@@ -103,6 +103,7 @@ impl<B> BackendCtor<B> {
 }
 
 /// Id of a persisted GenericTree
+#[derive(Clone)]
 pub struct PersistedId(Id);
 
 impl PersistedId {
