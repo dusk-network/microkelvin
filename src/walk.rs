@@ -14,7 +14,7 @@ use crate::branch_mut::BranchMut;
 use crate::compound::{ArchivedChildren, Compound, MutableLeaves};
 use crate::link::LinkInner;
 use crate::primitive::Primitive;
-use crate::Annotation;
+use crate::{Annotation, Chonker};
 
 /// The return value from a closure to `walk` the tree.
 ///

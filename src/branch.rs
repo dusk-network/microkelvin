@@ -5,14 +5,29 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use core::ops::Deref;
+use std::marker::PhantomData;
 
 use alloc::vec::Vec;
+use rkyv::Archive;
 
 use crate::compound::{ArchivedChildren, Child, Compound};
-use crate::link::NodeRef;
 use crate::primitive::Primitive;
 use crate::walk::{AllLeaves, AnnoRef, Slot, Slots, Step, Walker};
-use crate::Annotation;
+use crate::{Annotation, Chonker};
+
+pub enum LevelNode<'a, C: Archive> {
+    Memory(&'a C),
+    Archived(&'a C::Archived),
+}
+
+impl<'a, C> From<&'a C> for LevelNode<'a, C>
+where
+    C: Archive,
+{
+    fn from(c: &'a C) -> Self {
+        LevelNode::Memory(c)
+    }
+}
 
 pub struct Level<'a, C, A>
 where
@@ -22,7 +37,8 @@ where
 {
     offset: usize,
     // pub to be accesible from `walk.rs`
-    pub(crate) node: NodeRef<'a, C, A>,
+    pub(crate) node: LevelNode<'a, C>,
+    _marker: PhantomData<A>,
 }
 
 impl<'a, C, A> Level<'a, C, A>
@@ -31,10 +47,11 @@ where
     C::Archived: ArchivedChildren<C, A>,
     A: Primitive + Annotation<C::Leaf>,
 {
-    pub fn new(root: NodeRef<'a, C, A>) -> Level<'a, C, A> {
+    pub fn new(root: LevelNode<'a, C>) -> Level<'a, C, A> {
         Level {
             offset: 0,
             node: root,
+            _marker: PhantomData,
         }
     }
 
@@ -56,7 +73,7 @@ where
 {
     fn slot(&self, ofs: usize) -> Slot<C, A> {
         match &self.node {
-            NodeRef::Memory(root) => match root.child(self.offset + ofs) {
+            LevelNode::Memory(root) => match root.child(self.offset + ofs) {
                 Child::Leaf(l) => Slot::Leaf(l),
                 Child::Node(n) => {
                     Slot::Annotation(AnnoRef::Memory(n.annotation()))
@@ -64,15 +81,7 @@ where
                 Child::Empty => Slot::End,
                 Child::EndOfNode => Slot::End,
             },
-            NodeRef::Referenced(val) => match val.child(self.offset + ofs) {
-                Child::Leaf(l) => Slot::Leaf(l),
-                Child::Node(n) => {
-                    Slot::Annotation(AnnoRef::Memory(n.annotation()))
-                }
-                Child::Empty => Slot::Empty,
-                Child::EndOfNode => Slot::End,
-            },
-            NodeRef::Archived(_) => todo!(),
+            LevelNode::Archived(_) => todo!(),
         }
     }
 }
@@ -89,7 +98,7 @@ where
     C::Archived: ArchivedChildren<C, A>,
     A: Primitive + Annotation<C::Leaf>,
 {
-    fn new(root: NodeRef<'a, C, A>) -> Self {
+    fn new(root: LevelNode<'a, C>) -> Self {
         PartialBranch(vec![Level::new(root)])
     }
 
@@ -110,15 +119,11 @@ where
         let ofs = top.offset();
 
         match &top.node {
-            NodeRef::Memory(root) => match root.child(ofs) {
+            LevelNode::Memory(root) => match root.child(ofs) {
                 Child::Leaf(l) => Some(l),
                 _ => None,
             },
-            NodeRef::Referenced(val) => match val.child(ofs) {
-                Child::Leaf(l) => Some(l),
-                _ => None,
-            },
-            NodeRef::Archived(_) => todo!(),
+            LevelNode::Archived(_) => todo!(),
         }
     }
 
@@ -178,33 +183,19 @@ where
                     *top.offset_mut() += walk_ofs;
                     let ofs = top.offset();
 
-                    // TODO: DRY
-
                     match &top.node {
-                        NodeRef::Memory(root) => match root.child(ofs) {
+                        LevelNode::Memory(root) => match root.child(ofs) {
                             Child::Leaf(_) => return Some(()),
                             Child::Node(n) => {
-                                let level: Level<'_, C, A> =
-                                    Level::new(n.inner());
-                                let extended: Level<'a, C, A> =
-                                    unsafe { core::mem::transmute(level) };
-                                state = State::Push(extended);
-                            }
-                            _ => panic!("Invalid child found"),
-                        },
-                        NodeRef::Referenced(val) => match val.child(ofs) {
-                            Child::Leaf(_) => return Some(()),
-                            Child::Node(n) => {
-                                let level: Level<'_, C, A> =
-                                    Level::new(n.inner());
-                                let extended: Level<'a, C, A> =
-                                    unsafe { core::mem::transmute(level) };
-                                state = State::Push(extended);
-                            }
-                            _ => panic!("Invalid child found"),
-                        },
+                                todo!()
 
-                        NodeRef::Archived(_) => todo!(),
+                                // let extended: Level<'a, C, A> =
+                                //     unsafe { core::mem::transmute(level) };
+                                // state = State::Push(extended);
+                            }
+                            _ => panic!("Invalid child found"),
+                        },
+                        LevelNode::Archived(_) => todo!(),
                     }
                 }
                 Step::Advance => state = State::Pop,
@@ -253,7 +244,7 @@ where
     pub fn walk<W, R>(root: R, mut walker: W) -> Option<Self>
     where
         C: Compound<A>,
-        R: Into<NodeRef<'a, C, A>>,
+        R: Into<LevelNode<'a, C>>,
         A: Annotation<C::Leaf>,
         W: Walker<C, A>,
     {
@@ -324,6 +315,7 @@ where
 impl<'a, C, A> IntoIterator for Branch<'a, C, A>
 where
     C: Compound<A>,
+    C::Leaf: 'a,
     C::Archived: ArchivedChildren<C, A>,
     A: Primitive + Annotation<C::Leaf>,
 {
@@ -339,6 +331,7 @@ where
 impl<'a, C, A, W> Iterator for BranchIterator<'a, C, A, W>
 where
     C: Compound<A>,
+    C::Leaf: 'a,
     C::Archived: ArchivedChildren<C, A>,
     A: Primitive + Annotation<C::Leaf>,
     W: Walker<C, A>,
@@ -394,6 +387,7 @@ where
 impl<'a, C, A, M> IntoIterator for MappedBranch<'a, C, A, M>
 where
     C: Compound<A>,
+    C::Leaf: 'a,
     C::Archived: ArchivedChildren<C, A>,
     A: Primitive + Annotation<C::Leaf>,
     M: 'a,
@@ -410,6 +404,7 @@ where
 impl<'a, C, A, W, M> Iterator for MappedBranchIterator<'a, C, A, W, M>
 where
     C: Compound<A>,
+    C::Leaf: 'a,
     C::Archived: ArchivedChildren<C, A>,
     A: Primitive + Annotation<C::Leaf>,
     W: Walker<C, A>,

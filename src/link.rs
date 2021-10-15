@@ -16,27 +16,9 @@ use rkyv::{Archive, Deserialize, Serialize};
 use crate::primitive::Primitive;
 
 use crate::chonker::{Offset, RawOffset};
-use crate::{Annotation, Compound};
+use crate::{Annotation, Chonker, Compound};
 
 pub type NodeAnnotation<'a, C, A> = OwningRef<Ref<'a, LinkInner<C, A>>, A>;
-
-pub enum NodeRef<'a, C, A>
-where
-    C: Archive,
-{
-    Memory(&'a C),
-    Archived(&'a C::Archived),
-    Referenced(OwningRef<Ref<'a, LinkInner<C, A>>, C>),
-}
-
-impl<'a, C, A> From<&'a C> for NodeRef<'a, C, A>
-where
-    C: Archive,
-{
-    fn from(c: &'a C) -> Self {
-        NodeRef::Memory(c)
-    }
-}
 
 type NodeRefMut<'a, C, A> = OwningRefMut<RefMut<'a, LinkInner<C, A>>, C>;
 
@@ -45,7 +27,7 @@ pub enum LinkInner<C, A> {
     Placeholder,
     C(Rc<C>),
     Ca(Rc<C>, A),
-    Io(Offset<C>, A),
+    Io(Offset<C>, A, Chonker),
 }
 
 impl<C, A> Default for LinkInner<C, A> {
@@ -144,7 +126,7 @@ where
         drop(borrow);
 
         OwningRef::new(self.inner.borrow()).map(|brw| match brw {
-            LinkInner::Ca(_, a) | LinkInner::Io(_, a) => a,
+            LinkInner::Ca(_, a) | LinkInner::Io(_, a, _) => a,
             _ => unreachable!(),
         })
     }
@@ -163,19 +145,11 @@ where
                 Ok(c) => c,
                 Err(rc) => (&*rc).clone(),
             },
-            LinkInner::Io(_, _) => {
+            LinkInner::Io(_, _, _) => {
                 todo!()
             }
             _ => unreachable!(),
         }
-    }
-
-    /// Gets a reference to the inner compound of the link'
-    pub fn inner(&self) -> NodeRef<C, A>
-    where
-        C: Archive,
-    {
-        todo!()
     }
 
     /// Returns a Mutable reference to the underlying compound node
@@ -185,8 +159,6 @@ where
     where
         C: Clone,
     {
-        // assure inner value is loaded
-        let _ = self.inner();
         let mut borrow: RefMut<LinkInner<C, A>> = self.inner.borrow_mut();
 
         match mem::replace(&mut *borrow, LinkInner::Placeholder) {

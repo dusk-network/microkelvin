@@ -5,6 +5,7 @@ use std::{
     marker::PhantomData,
     ops::Deref,
     path::Path,
+    sync::Arc,
 };
 
 use rkyv::{
@@ -77,22 +78,66 @@ impl std::fmt::Debug for Lane {
     }
 }
 
+/// Chonker
+///
+/// A hybrid memory/disk storage for an append only sequence of bytes.
+#[derive(Clone, Debug, Default)]
+pub struct Chonker(Arc<ChonkerInner>);
+
+impl Chonker {
+    /// Creates a new empty chonker
+    pub fn new() -> Self {
+        Default::default()
+    }
+
+    /// Commits a value to the chonker
+    pub fn put<T>(&self, t: &T) -> Offset<T>
+    where
+        T: Archive + Chonkable,
+    {
+        self.0.put(t)
+    }
+
+    /// Gets a value previously commited to the chonker at offset `ofs`
+    pub fn get<T>(&self, ofs: Offset<T>) -> &T::Archived
+    where
+        T: Archive,
+    {
+        self.0.get(ofs)
+    }
+
+    /// Persist the chonker to disk
+    pub fn persist<P: AsRef<Path>>(&self, path: P) -> io::Result<()> {
+        self.0.persist(path)
+    }
+    /// Restore a chonker from disk
+    pub fn restore<P: AsRef<Path>>(path: P) -> io::Result<Self> {
+        Ok(Chonker(Arc::new(ChonkerInner::restore(path)?)))
+    }
+}
+
 /// Memory backend that never re-allocates
-pub struct Chonker {
+struct ChonkerInner {
     lanes: UnsafeCell<[Lane; N_LANES]>,
     written: ReentrantMutex<RefCell<u64>>,
 }
 
-impl Default for Chonker {
+impl std::fmt::Debug for ChonkerInner {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ChonkerInner").finish()
+    }
+}
+
+impl Default for ChonkerInner {
     fn default() -> Self {
-        Chonker {
+        ChonkerInner {
             lanes: UnsafeCell::new(Default::default()),
             written: ReentrantMutex::new(RefCell::new(0)),
         }
     }
 }
 
-unsafe impl Sync for Chonker {}
+unsafe impl Sync for ChonkerInner {}
 
 const fn lane_from_offset(offset: u64) -> (usize, usize) {
     const USIZE_BITS: usize = std::mem::size_of::<usize>() * 8;
@@ -107,9 +152,9 @@ const fn lane_size_from_lane(lane: usize) -> usize {
     FIRST_CHONK_SIZE * 2usize.pow(lane as u32)
 }
 
-impl Chonker {
+impl ChonkerInner {
     /// Stores a value into the chonker
-    pub fn put<T>(&self, t: &T) -> Offset<T>
+    fn put<T>(&self, t: &T) -> Offset<T>
     where
         T: Archive + Chonkable,
     {
@@ -142,10 +187,10 @@ impl Chonker {
                     let space_left = cap - lane_written - alignment_pad;
                     // No space
                     if space_left < archived_size {
-                        // Take into account the padding left at the end of this
-                        // lane
+                        // Take into account the padding at the end of the lane
                         *written += space_left as u64;
 
+                        // Try writing in the next lane
                         lane += 1;
                         lane_written = 0;
                     } else {
@@ -176,7 +221,7 @@ impl Chonker {
     }
 
     /// Gets a value from the chonker at offset `ofs`
-    pub fn get<T>(&self, ofs: Offset<T>) -> &T::Archived
+    fn get<T>(&self, ofs: Offset<T>) -> &T::Archived
     where
         T: Archive,
     {
@@ -216,7 +261,7 @@ impl Chonker {
     }
 
     /// Persist the chonker to disk
-    pub fn persist<P: AsRef<Path>>(&self, path: P) -> io::Result<()> {
+    fn persist<P: AsRef<Path>>(&self, path: P) -> io::Result<()> {
         // We take the write guard to make sure writes block until persistance
         // is complete.
         let _write = self.written.lock();
@@ -257,7 +302,7 @@ impl Chonker {
     }
 
     /// Open a chonker from disk
-    pub fn open<P: AsRef<Path>>(path: P) -> io::Result<Self> {
+    fn restore<P: AsRef<Path>>(path: P) -> io::Result<Self> {
         // We take the write guard to make sure writes block until persistance
         // is complete.
 
@@ -289,7 +334,7 @@ impl Chonker {
             }
         }
 
-        Ok(Chonker {
+        Ok(ChonkerInner {
             lanes: UnsafeCell::new(lanes),
             written: ReentrantMutex::new(RefCell::new(written)),
         })
@@ -362,7 +407,7 @@ mod test {
 
         drop(chonker);
 
-        let new_chonker = Chonker::open(&dir)?;
+        let new_chonker = Chonker::restore(&dir)?;
 
         // read the same values from disk
 
@@ -396,7 +441,7 @@ mod test {
 
         drop(new_chonker);
 
-        let even_newer_chonker = Chonker::open(dir)?;
+        let even_newer_chonker = Chonker::restore(dir)?;
 
         // read all back again
 

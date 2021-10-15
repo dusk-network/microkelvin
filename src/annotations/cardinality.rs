@@ -121,6 +121,7 @@ where
 impl<'a, C, A> Nth<'a, A> for C
 where
     C: Compound<A>,
+    C::Leaf: 'a,
     C::Archived: ArchivedChildren<C, A>,
     A: Primitive + Annotation<C::Leaf> + Borrow<Cardinality>,
 {
