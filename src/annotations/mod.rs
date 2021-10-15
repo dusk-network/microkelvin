@@ -9,7 +9,7 @@ use core::ops::Deref;
 
 use owning_ref::OwningRef;
 
-use crate::{AnnoIter, ArchivedChildren, Compound, Primitive};
+use crate::{AnnoIter, ArchivedCompound, Compound, Primitive};
 
 mod cardinality;
 mod max_key;
@@ -25,15 +25,13 @@ pub trait Annotation<Leaf>: Default + Clone + Combine<Self> {
     fn from_leaf(leaf: &Leaf) -> Self;
 }
 
-// TODO- move C into the trait, not the method.
-
 /// Trait for defining how to combine Annotations
 pub trait Combine<A> {
     /// Combines multiple annotations
     fn combine<C>(iter: AnnoIter<C, A>) -> Self
     where
         C: Compound<A>,
-        C::Archived: ArchivedChildren<C, A>,
+        C::Archived: ArchivedCompound<C, A>,
         A: Primitive + Annotation<C::Leaf>;
 }
 

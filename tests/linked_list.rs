@@ -5,13 +5,13 @@
 // Copyright (c) DUSK NETWORK. All rights reserializeved.
 
 use microkelvin::{
-    Annotation, ArchivedChildren, Cardinality, Child, ChildMut, Compound,
+    Annotation, ArchivedCompound, Cardinality, Child, ChildMut, Compound,
     First, Link, MutableLeaves, Nth, Primitive,
 };
 use rend::LittleEndian;
-use rkyv::{ser::Serializer, Archive, Serialize};
+use rkyv::{Archive, Deserialize, Serialize};
 
-#[derive(Clone, Archive, Serialize)]
+#[derive(Clone, Archive, Serialize, Deserialize)]
 #[archive(bound(archive = "
   T: Archive,
   A: Archive"))]
@@ -26,7 +26,7 @@ impl<T, A> Default for LinkedList<T, A> {
     }
 }
 
-impl<T, A> ArchivedChildren<LinkedList<T, A>, A> for ArchivedLinkedList<T, A>
+impl<T, A> ArchivedCompound<LinkedList<T, A>, A> for ArchivedLinkedList<T, A>
 where
     T: Primitive,
     A: Primitive + Annotation<T>,

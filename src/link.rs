@@ -15,7 +15,7 @@ use rkyv::{Fallible, Infallible};
 use crate::primitive::Primitive;
 
 use crate::chonker::{Offset, RawOffset};
-use crate::{ARef, Annotation, ArchivedChildren, Chonker, Compound};
+use crate::{ARef, Annotation, ArchivedCompound, Chonker, Compound};
 
 pub enum NodeRef<'a, C>
 where
@@ -108,7 +108,7 @@ where
 impl<C, A> Link<C, A>
 where
     C: Compound<A>,
-    C::Archived: ArchivedChildren<C, A>,
+    C::Archived: ArchivedCompound<C, A>,
     A: Primitive + Annotation<C::Leaf>,
 {
     /// Create a new link

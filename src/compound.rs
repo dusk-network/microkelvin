@@ -6,7 +6,7 @@
 
 use core::marker::PhantomData;
 
-use rkyv::Archive;
+use rkyv::{Archive, Deserialize, Infallible};
 
 use crate::annotations::{ARef, Annotation};
 use crate::link::Link;
@@ -47,7 +47,7 @@ where
 }
 
 /// Trait to support branch traversal in archived nodes
-pub trait ArchivedChildren<C, A>
+pub trait ArchivedCompound<C, A>: Deserialize<C, Infallible>
 where
     C: Compound<A>,
     A: Primitive + Annotation<C::Leaf>,
@@ -104,7 +104,7 @@ impl<'a, C, A> Clone for AnnoIter<'a, C, A> {
 impl<'a, C, A> Iterator for AnnoIter<'a, C, A>
 where
     C: Compound<A>,
-    C::Archived: ArchivedChildren<C, A>,
+    C::Archived: ArchivedCompound<C, A>,
     A: Primitive + Annotation<C::Leaf> + 'a,
 {
     type Item = ARef<'a, A>;

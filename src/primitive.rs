@@ -4,9 +4,15 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use rkyv::Archive;
+use rkyv::{Archive, Deserialize, Infallible};
 
 /// Marker trait for types that have themselves as archived type
-pub trait Primitive: Archive<Archived = Self> {}
+pub trait Primitive:
+    Archive<Archived = Self> + Deserialize<Self, Infallible> + Sized
+{
+}
 
-impl<T> Primitive for T where T: Archive<Archived = T> {}
+impl<T> Primitive for T where
+    T: Archive<Archived = T> + Deserialize<T, Infallible> + Sized
+{
+}

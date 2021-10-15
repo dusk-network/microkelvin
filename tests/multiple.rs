@@ -14,11 +14,11 @@ use rend::LittleEndian;
 use rkyv::{Archive, Deserialize, Serialize};
 
 use microkelvin::{
-    AnnoIter, Annotation, ArchivedChildren, Cardinality, Combine, Compound,
+    AnnoIter, Annotation, ArchivedCompound, Cardinality, Combine, Compound,
     GetMaxKey, Keyed, MaxKey, Primitive,
 };
 
-#[derive(Default, Clone, Archive, Serialize, Debug)]
+#[derive(Default, Clone, Archive, Serialize, Debug, Deserialize)]
 #[archive(as = "Self")]
 #[archive(bound(archive = "
   K: Primitive,
@@ -62,7 +62,7 @@ where
     fn combine<C>(iter: AnnoIter<C, A>) -> Self
     where
         C: Compound<A>,
-        C::Archived: ArchivedChildren<C, A>,
+        C::Archived: ArchivedCompound<C, A>,
         A: Primitive + Annotation<C::Leaf>,
     {
         Anno {

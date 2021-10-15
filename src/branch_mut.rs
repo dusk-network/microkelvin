@@ -10,7 +10,7 @@ use core::ops::{Deref, DerefMut};
 
 use alloc::vec::Vec;
 
-use crate::compound::{ArchivedChildren, Child, ChildMut, Compound};
+use crate::compound::{ArchivedCompound, Child, ChildMut, Compound};
 use crate::primitive::Primitive;
 use crate::walk::{AllLeaves, Slot, Slots, Step, Walker};
 use crate::Annotation;
@@ -61,7 +61,7 @@ impl<'a, C, A> LevelMut<'a, C, A> {
 impl<'a, C, A> Slots<C, A> for &LevelMut<'a, C, A>
 where
     C: Compound<A>,
-    C::Archived: ArchivedChildren<C, A>,
+    C::Archived: ArchivedCompound<C, A>,
     A: Primitive + Annotation<C::Leaf>,
 {
     fn slot(&self, ofs: usize) -> Slot<C, A> {
@@ -138,7 +138,7 @@ impl<'a, C, A> PartialBranchMut<'a, C, A> {
     fn walk<W>(&mut self, walker: &mut W) -> Option<()>
     where
         C: Compound<A> + Clone,
-        C::Archived: ArchivedChildren<C, A>,
+        C::Archived: ArchivedCompound<C, A>,
         A: Primitive + Annotation<C::Leaf>,
         W: Walker<C, A>,
     {
@@ -173,8 +173,9 @@ impl<'a, C, A> PartialBranchMut<'a, C, A> {
                     match top.node.child_mut(ofs) {
                         ChildMut::Leaf(_) => return Some(()),
                         ChildMut::Node(n) => {
+                            let node = n.inner_mut();
                             let extended: &'a mut C =
-                                unsafe { core::mem::transmute(n) };
+                                unsafe { core::mem::transmute(node) };
                             state = State::Push(LevelMut::new(extended));
                         }
                         _ => panic!("Invalid child found"),
@@ -201,7 +202,7 @@ impl<'a, C, A> BranchMut<'a, C, A> {
     ) -> MappedBranchMut<'a, C, A, M>
     where
         C: Compound<A>,
-        C::Archived: ArchivedChildren<C, A>,
+        C::Archived: ArchivedCompound<C, A>,
         A: Primitive + Annotation<C::Leaf>,
     {
         MappedBranchMut {
@@ -215,7 +216,7 @@ impl<'a, C, A> BranchMut<'a, C, A> {
     pub fn walk<W>(root: &'a mut C, mut walker: W) -> Option<Self>
     where
         C: Compound<A> + Clone,
-        C::Archived: ArchivedChildren<C, A>,
+        C::Archived: ArchivedCompound<C, A>,
         A: Primitive + Annotation<C::Leaf>,
         W: Walker<C, A>,
     {
@@ -238,7 +239,7 @@ pub struct BranchMut<'a, C, A>(PartialBranchMut<'a, C, A>);
 impl<'a, C, A> Deref for BranchMut<'a, C, A>
 where
     C: Compound<A>,
-    C::Archived: ArchivedChildren<C, A>,
+    C::Archived: ArchivedCompound<C, A>,
     A: Primitive + Annotation<C::Leaf>,
 {
     type Target = C::Leaf;
@@ -251,7 +252,7 @@ where
 impl<'a, C, A> DerefMut for BranchMut<'a, C, A>
 where
     C: Compound<A> + Clone,
-    C::Archived: ArchivedChildren<C, A>,
+    C::Archived: ArchivedCompound<C, A>,
     A: Primitive + Annotation<C::Leaf>,
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
@@ -263,7 +264,7 @@ where
 pub struct MappedBranchMut<'a, C, A, M>
 where
     C: Compound<A>,
-    C::Archived: ArchivedChildren<C, A>,
+    C::Archived: ArchivedCompound<C, A>,
     A: Primitive + Annotation<C::Leaf>,
 {
     inner: BranchMut<'a, C, A>,
@@ -273,7 +274,7 @@ where
 impl<'a, C, A, M> core::fmt::Debug for MappedBranchMut<'a, C, A, M>
 where
     C: Compound<A> + core::fmt::Debug,
-    C::Archived: ArchivedChildren<C, A> + core::fmt::Debug,
+    C::Archived: ArchivedCompound<C, A> + core::fmt::Debug,
     A: Primitive + Annotation<C::Leaf> + core::fmt::Debug,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -286,7 +287,7 @@ where
 impl<'a, C, A, M> Deref for MappedBranchMut<'a, C, A, M>
 where
     C: Compound<A> + Clone,
-    C::Archived: ArchivedChildren<C, A>,
+    C::Archived: ArchivedCompound<C, A>,
     A: Primitive + Annotation<C::Leaf>,
 {
     type Target = M;
@@ -304,7 +305,7 @@ where
 impl<'a, C, A, M> DerefMut for MappedBranchMut<'a, C, A, M>
 where
     C: Compound<A> + Clone,
-    C::Archived: ArchivedChildren<C, A>,
+    C::Archived: ArchivedCompound<C, A>,
     A: Primitive + Annotation<C::Leaf>,
 {
     fn deref_mut(&mut self) -> &mut M {
@@ -318,7 +319,7 @@ where
 pub enum BranchMutIterator<'a, C, A, W>
 where
     C: Compound<A> + Clone,
-    C::Archived: ArchivedChildren<C, A>,
+    C::Archived: ArchivedCompound<C, A>,
     A: Primitive + Annotation<C::Leaf>,
 {
     Initial(BranchMut<'a, C, A>, W),
@@ -330,7 +331,7 @@ impl<'a, C, A> IntoIterator for BranchMut<'a, C, A>
 where
     C: Compound<A> + Clone,
     C::Leaf: 'a,
-    C::Archived: ArchivedChildren<C, A>,
+    C::Archived: ArchivedCompound<C, A>,
     A: Primitive + Annotation<C::Leaf>,
 {
     type Item = &'a mut C::Leaf;
@@ -346,7 +347,7 @@ impl<'a, C, A, W> Iterator for BranchMutIterator<'a, C, A, W>
 where
     C: Compound<A> + Clone,
     C::Leaf: 'a,
-    C::Archived: ArchivedChildren<C, A>,
+    C::Archived: ArchivedCompound<C, A>,
     A: Primitive + Annotation<C::Leaf>,
     W: Walker<C, A>,
 {
@@ -390,7 +391,7 @@ where
 pub enum MappedBranchMutIterator<'a, C, A, W, M>
 where
     C: Compound<A>,
-    C::Archived: ArchivedChildren<C, A>,
+    C::Archived: ArchivedCompound<C, A>,
     A: Primitive + Annotation<C::Leaf>,
 {
     Initial(MappedBranchMut<'a, C, A, M>, W),
@@ -401,7 +402,7 @@ where
 impl<'a, C, A, M> IntoIterator for MappedBranchMut<'a, C, A, M>
 where
     C: Compound<A> + Clone,
-    C::Archived: ArchivedChildren<C, A>,
+    C::Archived: ArchivedCompound<C, A>,
     A: Primitive + Annotation<C::Leaf>,
     M: 'a,
 {
@@ -417,7 +418,7 @@ where
 impl<'a, C, A, W, M> Iterator for MappedBranchMutIterator<'a, C, A, W, M>
 where
     C: Compound<A> + Clone,
-    C::Archived: ArchivedChildren<C, A>,
+    C::Archived: ArchivedCompound<C, A>,
     A: Primitive + Annotation<C::Leaf>,
     W: Walker<C, A>,
     M: 'a,

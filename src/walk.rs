@@ -7,7 +7,7 @@
 use crate::annotations::{ARef, Annotation};
 use crate::branch::Branch;
 use crate::branch_mut::BranchMut;
-use crate::compound::{ArchivedChildren, Compound, MutableLeaves};
+use crate::compound::{ArchivedCompound, Compound, MutableLeaves};
 use crate::primitive::Primitive;
 
 /// The return value from a closure to `walk` the tree.
@@ -27,7 +27,7 @@ pub enum Step {
 pub trait Walker<C, A>
 where
     C: Compound<A>,
-    C::Archived: ArchivedChildren<C, A>,
+    C::Archived: ArchivedCompound<C, A>,
     A: Primitive + Annotation<C::Leaf>,
 {
     /// Walk the tree node, returning the appropriate `Step`
@@ -61,7 +61,7 @@ pub struct AllLeaves;
 impl<C, A> Walker<C, A> for AllLeaves
 where
     C: Compound<A>,
-    C::Archived: ArchivedChildren<C, A>,
+    C::Archived: ArchivedCompound<C, A>,
     A: Primitive + Annotation<C::Leaf>,
 {
     fn walk(&mut self, walk: impl Slots<C, A>) -> Step {
@@ -81,7 +81,7 @@ where
 pub trait First<'a, A>
 where
     Self: Compound<A>,
-    Self::Archived: ArchivedChildren<Self, A>,
+    Self::Archived: ArchivedCompound<Self, A>,
     A: Primitive + Annotation<Self::Leaf>,
 {
     /// Construct a `Branch` pointing to the first element, if not empty
@@ -96,7 +96,7 @@ where
 impl<'a, C, A> First<'a, A> for C
 where
     C: Compound<A>,
-    C::Archived: ArchivedChildren<C, A>,
+    C::Archived: ArchivedCompound<C, A>,
     A: Primitive + Annotation<C::Leaf>,
 {
     fn first(&'a self) -> Option<Branch<'a, Self, A>> {

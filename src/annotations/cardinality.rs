@@ -14,7 +14,7 @@ use rkyv::{Archive, Deserialize, Serialize};
 use crate::annotations::{Annotation, Combine};
 use crate::branch::Branch;
 use crate::branch_mut::BranchMut;
-use crate::compound::{AnnoIter, ArchivedChildren, Compound, MutableLeaves};
+use crate::compound::{AnnoIter, ArchivedCompound, Compound, MutableLeaves};
 use crate::primitive::Primitive;
 use crate::walk::{Slot, Slots, Step, Walker};
 
@@ -50,7 +50,7 @@ where
     fn combine<C>(iter: AnnoIter<C, A>) -> Self
     where
         C: Compound<A>,
-        C::Archived: ArchivedChildren<C, A>,
+        C::Archived: ArchivedCompound<C, A>,
         A: Primitive + Annotation<C::Leaf>,
     {
         Cardinality(iter.fold(LittleEndian::from(0), |sum, ann| {
@@ -67,7 +67,7 @@ pub struct Offset(LittleEndian<u64>);
 impl<C, A> Walker<C, A> for Offset
 where
     C: Compound<A>,
-    C::Archived: ArchivedChildren<C, A>,
+    C::Archived: ArchivedCompound<C, A>,
     A: Primitive + Annotation<C::Leaf> + Borrow<Cardinality>,
 {
     fn walk(&mut self, walk: impl Slots<C, A>) -> Step {
@@ -101,7 +101,7 @@ where
 pub trait Nth<'a, A>
 where
     Self: Compound<A>,
-    Self::Archived: ArchivedChildren<Self, A>,
+    Self::Archived: ArchivedCompound<Self, A>,
     A: Primitive + Annotation<Self::Leaf>,
 {
     /// Construct a `Branch` pointing to the `nth` element, if any
@@ -123,7 +123,7 @@ impl<'a, C, A> Nth<'a, A> for C
 where
     C: Compound<A>,
     C::Leaf: 'a,
-    C::Archived: ArchivedChildren<C, A>,
+    C::Archived: ArchivedCompound<C, A>,
     A: Primitive + Annotation<C::Leaf> + Borrow<Cardinality>,
 {
     fn nth<N: Into<LittleEndian<u64>>>(

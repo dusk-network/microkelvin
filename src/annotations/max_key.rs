@@ -9,17 +9,17 @@ use core::borrow::Borrow;
 use core::cmp::Ordering;
 use core::marker::PhantomData;
 
-use rkyv::{Archive, Serialize};
+use rkyv::{Archive, Deserialize, Serialize};
 
 use crate::annotations::{Annotation, Combine};
 use crate::branch::Branch;
 use crate::branch_mut::BranchMut;
-use crate::compound::{AnnoIter, ArchivedChildren, Compound, MutableLeaves};
+use crate::compound::{AnnoIter, ArchivedCompound, Compound, MutableLeaves};
 use crate::primitive::Primitive;
 use crate::walk::{Slot, Slots, Step, Walker};
 
 /// The maximum value of a collection
-#[derive(PartialEq, Eq, Clone, Debug, Archive, Serialize)]
+#[derive(PartialEq, Eq, Clone, Debug, Archive, Serialize, Deserialize)]
 #[archive(as = "Self")]
 #[archive(bound(archive = "K: Primitive"))]
 pub enum MaxKey<K> {
@@ -98,7 +98,7 @@ where
     fn combine<C>(iter: AnnoIter<C, A>) -> Self
     where
         C: Compound<A>,
-        C::Archived: ArchivedChildren<C, A>,
+        C::Archived: ArchivedCompound<C, A>,
         A: Annotation<C::Leaf>,
     {
         iter.fold(MaxKey::NegativeInfinity, |max, ann| {
@@ -125,7 +125,7 @@ impl<K> Default for FindMaxKey<K> {
 impl<C, A, K> Walker<C, A> for FindMaxKey<K>
 where
     C: Compound<A>,
-    C::Archived: ArchivedChildren<C, A>,
+    C::Archived: ArchivedCompound<C, A>,
     C::Leaf: Keyed<K>,
     A: Primitive + Annotation<C::Leaf> + Borrow<MaxKey<K>>,
     K: Ord + Clone,
@@ -165,7 +165,7 @@ pub trait GetMaxKey<'a, A, K>
 where
     Self: Compound<A>,
     Self::Leaf: Keyed<K> + Archive,
-    Self::Archived: ArchivedChildren<Self, A>,
+    Self::Archived: ArchivedCompound<Self, A>,
     A: Primitive + Annotation<Self::Leaf> + Borrow<MaxKey<K>>,
     K: Ord,
 {
@@ -182,7 +182,7 @@ impl<'a, C, A, K> GetMaxKey<'a, A, K> for C
 where
     C: Compound<A>,
     C::Leaf: Keyed<K>,
-    C::Archived: ArchivedChildren<C, A>,
+    C::Archived: ArchivedCompound<C, A>,
     A: Primitive + Annotation<C::Leaf> + Borrow<MaxKey<K>>,
     K: Ord + Clone,
 {
