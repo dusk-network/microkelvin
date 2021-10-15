@@ -8,8 +8,8 @@ use core::marker::PhantomData;
 
 use rkyv::Archive;
 
-use crate::annotations::{Annotation, WrappedAnnotation};
-use crate::link::{Link, NodeRef};
+use crate::annotations::{ARef, Annotation};
+use crate::link::Link;
 use crate::primitive::Primitive;
 
 /// The response of the `child` method on a `Compound` node.
@@ -22,7 +22,7 @@ where
     /// Child is a leaf
     Leaf(&'a C::Leaf),
     /// Child is an annotated subtree node
-    Node(NodeRef<'a, C, A>),
+    Node(&'a Link<C, A>),
     /// Empty slot
     Empty,
     /// No more children
@@ -107,7 +107,7 @@ where
     C::Archived: ArchivedChildren<C, A>,
     A: Primitive + Annotation<C::Leaf> + 'a,
 {
-    type Item = WrappedAnnotation<'a, C, A>;
+    type Item = ARef<'a, A>;
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
@@ -117,11 +117,11 @@ where
                 Child::EndOfNode => return None,
                 Child::Leaf(l) => {
                     self.ofs += 1;
-                    return Some(WrappedAnnotation::Owned(A::from_leaf(l)));
+                    return Some(ARef::Owned(A::from_leaf(l)));
                 }
                 Child::Node(a) => {
                     self.ofs += 1;
-                    return Some(WrappedAnnotation::Link(a.annotation()));
+                    return Some(a.annotation());
                 }
             }
         }

@@ -4,14 +4,11 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use core::ops::Deref;
-
+use crate::annotations::{ARef, Annotation};
 use crate::branch::Branch;
 use crate::branch_mut::BranchMut;
 use crate::compound::{ArchivedChildren, Compound, MutableLeaves};
-use crate::link::NodeAnnotation;
 use crate::primitive::Primitive;
-use crate::Annotation;
 
 /// The return value from a closure to `walk` the tree.
 ///
@@ -37,23 +34,6 @@ where
     fn walk(&mut self, walk: impl Slots<C, A>) -> Step;
 }
 
-/// A reference to an annotation, either archived or in memory
-#[derive(Debug)]
-pub enum AnnoRef<'a, C, A> {
-    Memory(&'a A),
-    Referenced(NodeAnnotation<'a, C, A>),
-}
-
-impl<'a, C, A> Deref for AnnoRef<'a, C, A> {
-    type Target = A;
-    fn deref(&self) -> &Self::Target {
-        match self {
-            AnnoRef::Archived(_) => todo!(),
-            AnnoRef::Memory(mem) => &*mem,
-        }
-    }
-}
-
 #[derive(Debug)]
 pub enum Slot<'a, C, A>
 where
@@ -61,7 +41,7 @@ where
     A: Primitive + Annotation<C::Leaf>,
 {
     Leaf(&'a C::Leaf),
-    Annotation(AnnoRef<'a, C, A>),
+    Annotation(ARef<'a, A>),
     Empty,
     End,
 }

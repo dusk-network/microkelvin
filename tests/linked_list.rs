@@ -5,8 +5,8 @@
 // Copyright (c) DUSK NETWORK. All rights reserializeved.
 
 use microkelvin::{
-    Annotation, ArchivedChild, ArchivedChildren, Cardinality, Child, ChildMut,
-    Chonker, Compound, First, Link, MutableLeaves, Nth, Primitive,
+    Annotation, ArchivedChildren, Cardinality, Child, ChildMut, Compound,
+    First, Link, MutableLeaves, Nth, Primitive,
 };
 use rend::LittleEndian;
 use rkyv::{ser::Serializer, Archive, Serialize};
@@ -31,10 +31,7 @@ where
     T: Primitive,
     A: Primitive + Annotation<T>,
 {
-    fn archived_child(
-        &self,
-        _ofs: usize,
-    ) -> ArchivedChild<LinkedList<T, A>, A> {
+    fn child(&self, _ofs: usize) -> Child<LinkedList<T, A>, A> {
         todo!()
     }
 }

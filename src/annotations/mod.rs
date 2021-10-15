@@ -4,9 +4,11 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use core::cell::Ref;
 use core::ops::Deref;
 
-use crate::link::NodeAnnotation;
+use owning_ref::OwningRef;
+
 use crate::{AnnoIter, ArchivedChildren, Compound, Primitive};
 
 mod cardinality;
@@ -38,20 +40,23 @@ pub trait Combine<A> {
 /// A wrapped annotation that is either owning it's a or providing an annotated
 /// link
 #[derive(Debug)]
-pub enum WrappedAnnotation<'a, C, A> {
+pub enum ARef<'a, A> {
     /// The annotation is owned
     Owned(A),
     /// The annotation is a reference
-    Link(NodeAnnotation<'a, C, A>),
+    Borrowed(&'a A),
+    /// Referenced
+    Referenced(OwningRef<Ref<'a, Option<A>>, A>),
 }
 
-impl<'a, C, A> Deref for WrappedAnnotation<'a, C, A> {
+impl<'a, A> Deref for ARef<'a, A> {
     type Target = A;
 
     fn deref(&self) -> &Self::Target {
         match self {
-            WrappedAnnotation::Owned(ref a) => a,
-            WrappedAnnotation::Link(a) => a,
+            ARef::Owned(ref a) => a,
+            ARef::Borrowed(a) => *a,
+            ARef::Referenced(a) => a,
         }
     }
 }

@@ -12,7 +12,7 @@ use alloc::vec::Vec;
 
 use crate::compound::{ArchivedChildren, Child, ChildMut, Compound};
 use crate::primitive::Primitive;
-use crate::walk::{AllLeaves, AnnoRef, Slot, Slots, Step, Walker};
+use crate::walk::{AllLeaves, Slot, Slots, Step, Walker};
 use crate::Annotation;
 
 #[derive(Debug)]
@@ -67,9 +67,7 @@ where
     fn slot(&self, ofs: usize) -> Slot<C, A> {
         match self.node.child(self.offset + ofs) {
             Child::Leaf(l) => Slot::Leaf(l),
-            Child::Node(node) => {
-                Slot::Annotation(AnnoRef::Referenced(node.annotation()))
-            }
+            Child::Node(node) => Slot::Annotation(node.annotation()),
             Child::Empty => Slot::Empty,
             Child::EndOfNode => Slot::End,
         }

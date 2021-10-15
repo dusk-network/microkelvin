@@ -27,7 +27,7 @@ mod primitive;
 mod walk;
 
 pub use annotations::{
-    Annotation, Cardinality, Combine, GetMaxKey, Keyed, MaxKey, Nth,
+    ARef, Annotation, Cardinality, Combine, GetMaxKey, Keyed, MaxKey, Nth,
 };
 pub use branch::Branch;
 pub use branch_mut::BranchMut;
