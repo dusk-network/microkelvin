@@ -16,9 +16,50 @@ use rkyv::{Archive, Deserialize, Serialize};
 use crate::primitive::Primitive;
 
 use crate::chonker::{Offset, RawOffset};
-use crate::{Annotation, Chonker, Compound};
+use crate::{Annotation, ArchivedChildren, Child, Chonker, Compound};
 
 pub type NodeAnnotation<'a, C, A> = OwningRef<Ref<'a, LinkInner<C, A>>, A>;
+
+pub enum NodeRef<'a, C, A>
+where
+    C: Archive,
+{
+    Archived(OwningRef<Ref<'a, LinkInner<C, A>>, (C::Archived, A)>),
+    Referenced(OwningRef<Ref<'a, LinkInner<C, A>>, (C, A)>),
+}
+
+impl<'a, C, A> std::fmt::Debug for NodeRef<'a, C, A>
+where
+    C: Archive,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Archived(_) => write!(f, "Archived"),
+            Self::Referenced(_) => write!(f, "Referenced"),
+        }
+    }
+}
+
+impl<'a, C, A> NodeRef<'a, C, A>
+where
+    C: Compound<A>,
+    C::Archived: ArchivedChildren<C, A>,
+    A: Archive<Archived = A> + Annotation<C::Leaf>,
+{
+    pub fn child(&self, ofs: usize) -> Child<'a, C, A> {
+        match self {
+            NodeRef::Archived(a) => (*a).0.child(ofs),
+            NodeRef::Referenced(r) => (*r).0.child(ofs),
+        }
+    }
+
+    pub fn annotation(&self) -> NodeAnnotation<'a, C, A> {
+        match self {
+            NodeRef::Archived(a) => a,
+            NodeRef::Referenced(r) => r,
+        }
+    }
+}
 
 type NodeRefMut<'a, C, A> = OwningRefMut<RefMut<'a, LinkInner<C, A>>, C>;
 
@@ -149,6 +190,27 @@ where
                 todo!()
             }
             _ => unreachable!(),
+        }
+    }
+
+    /// Returns a reference to the inner node, possibly in its archived form
+    pub fn inner(&self) -> NodeRef<C, A> {
+        let borrow: Ref<LinkInner<C, A>> = self.inner.borrow();
+
+        match &*borrow {
+            LinkInner::C(c) | LinkInner::Ca(c, _) => NodeRef::Referenced(
+                OwningRef::new(borrow).map(|brw| match brw {
+                    LinkInner::C(c) | LinkInner::Ca(c, _) => &(**c),
+                    _ => unreachable!("fixme: make unchecked?"),
+                }),
+            ),
+            LinkInner::Io(_, _, _) => {
+                NodeRef::Archived(OwningRef::new(borrow).map(|brw| match brw {
+                    LinkInner::Io(ofs, _, ch) => ch.get(*ofs),
+                    _ => unreachable!("fixme: make unchecked?"),
+                }))
+            }
+            LinkInner::Placeholder => unreachable!(),
         }
     }
 

@@ -9,7 +9,7 @@ use core::marker::PhantomData;
 use rkyv::Archive;
 
 use crate::annotations::{Annotation, WrappedAnnotation};
-use crate::link::{ArchivedLink, Link};
+use crate::link::{Link, NodeRef};
 use crate::primitive::Primitive;
 
 /// The response of the `child` method on a `Compound` node.
@@ -22,23 +22,7 @@ where
     /// Child is a leaf
     Leaf(&'a C::Leaf),
     /// Child is an annotated subtree node
-    Node(&'a Link<C, A>),
-    /// Empty slot
-    Empty,
-    /// No more children
-    EndOfNode,
-}
-
-/// The response of the `child` method on a `Compound` node.
-pub enum ArchivedChild<'a, C, A>
-where
-    C: Compound<A>,
-    A: Primitive + Annotation<C::Leaf>,
-{
-    /// Child is a leaf
-    Leaf(&'a C::Leaf),
-    /// Child is an annotated subtree node
-    Node(&'a ArchivedLink<A>),
+    Node(NodeRef<'a, C, A>),
     /// Empty slot
     Empty,
     /// No more children
@@ -69,7 +53,7 @@ where
     A: Primitive + Annotation<C::Leaf>,
 {
     /// Returns an archived child
-    fn archived_child(&self, ofs: usize) -> ArchivedChild<C, A>;
+    fn child(&self, ofs: usize) -> Child<C, A>;
 }
 
 /// A type that can recursively contain itself and leaves.
@@ -120,12 +104,14 @@ impl<'a, C, A> Clone for AnnoIter<'a, C, A> {
 impl<'a, C, A> Iterator for AnnoIter<'a, C, A>
 where
     C: Compound<A>,
+    C::Archived: ArchivedChildren<C, A>,
     A: Primitive + Annotation<C::Leaf> + 'a,
 {
     type Item = WrappedAnnotation<'a, C, A>;
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
+            println!("looping here D");
             match self.node.child(self.ofs) {
                 Child::Empty => self.ofs += 1,
                 Child::EndOfNode => return None,

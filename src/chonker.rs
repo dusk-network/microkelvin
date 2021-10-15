@@ -352,7 +352,7 @@ mod test {
     fn many_raw() {
         let chonker = Chonker::default();
 
-        const N: usize = 1024 * 1024;
+        const N: usize = 1024 * 64;
 
         let mut references = vec![];
 
@@ -383,7 +383,7 @@ mod test {
     fn many_raw_persist() -> io::Result<()> {
         let chonker = Chonker::default();
 
-        const N: usize = 1024 * 1024;
+        const N: usize = 1024 * 64;
 
         let mut references = vec![];
 

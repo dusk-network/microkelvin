@@ -7,7 +7,7 @@
 use core::ops::Deref;
 
 use crate::link::NodeAnnotation;
-use crate::{AnnoIter, Compound, Primitive};
+use crate::{AnnoIter, ArchivedChildren, Compound, Primitive};
 
 mod cardinality;
 mod max_key;
@@ -31,6 +31,7 @@ pub trait Combine<A> {
     fn combine<C>(iter: AnnoIter<C, A>) -> Self
     where
         C: Compound<A>,
+        C::Archived: ArchivedChildren<C, A>,
         A: Primitive + Annotation<C::Leaf>;
 }
 

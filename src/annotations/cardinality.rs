@@ -50,6 +50,7 @@ where
     fn combine<C>(iter: AnnoIter<C, A>) -> Self
     where
         C: Compound<A>,
+        C::Archived: ArchivedChildren<C, A>,
         A: Primitive + Annotation<C::Leaf>,
     {
         Cardinality(iter.fold(LittleEndian::from(0), |sum, ann| {

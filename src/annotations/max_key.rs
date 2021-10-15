@@ -98,6 +98,7 @@ where
     fn combine<C>(iter: AnnoIter<C, A>) -> Self
     where
         C: Compound<A>,
+        C::Archived: ArchivedChildren<C, A>,
         A: Annotation<C::Leaf>,
     {
         iter.fold(MaxKey::NegativeInfinity, |max, ann| {

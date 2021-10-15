@@ -68,7 +68,7 @@ where
         match self.node.child(self.offset + ofs) {
             Child::Leaf(l) => Slot::Leaf(l),
             Child::Node(node) => {
-                Slot::Annotation(AnnoRef::Memory(node.annotation()))
+                Slot::Annotation(AnnoRef::Referenced(node.annotation()))
             }
             Child::Empty => Slot::Empty,
             Child::EndOfNode => Slot::End,
@@ -152,6 +152,7 @@ impl<'a, C, A> PartialBranchMut<'a, C, A> {
 
         let mut state = State::Init;
         loop {
+            println!("looping here A");
             match mem::replace(&mut state, State::Init) {
                 State::Init => (),
                 State::Push(push) => self.0.push(push),

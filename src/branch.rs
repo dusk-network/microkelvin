@@ -5,28 +5,22 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use core::ops::Deref;
-use std::marker::PhantomData;
 
 use alloc::vec::Vec;
 use rkyv::Archive;
 
 use crate::compound::{ArchivedChildren, Child, Compound};
+use crate::link::NodeRef;
 use crate::primitive::Primitive;
 use crate::walk::{AllLeaves, AnnoRef, Slot, Slots, Step, Walker};
-use crate::{Annotation, Chonker};
+use crate::Annotation;
 
-pub enum LevelNode<'a, C: Archive> {
-    Memory(&'a C),
-    Archived(&'a C::Archived),
-}
-
-impl<'a, C> From<&'a C> for LevelNode<'a, C>
+pub enum LevelNode<'a, C, A>
 where
     C: Archive,
 {
-    fn from(c: &'a C) -> Self {
-        LevelNode::Memory(c)
-    }
+    Root(&'a C),
+    Internal(NodeRef<'a, C, A>),
 }
 
 pub struct Level<'a, C, A>
@@ -37,8 +31,7 @@ where
 {
     offset: usize,
     // pub to be accesible from `walk.rs`
-    pub(crate) node: LevelNode<'a, C>,
-    _marker: PhantomData<A>,
+    pub(crate) node: LevelNode<'a, C, A>,
 }
 
 impl<'a, C, A> Level<'a, C, A>
@@ -47,11 +40,10 @@ where
     C::Archived: ArchivedChildren<C, A>,
     A: Primitive + Annotation<C::Leaf>,
 {
-    pub fn new(root: LevelNode<'a, C>) -> Level<'a, C, A> {
+    pub fn new(root: LevelNode<'a, C, A>) -> Level<'a, C, A> {
         Level {
             offset: 0,
             node: root,
-            _marker: PhantomData,
         }
     }
 
@@ -72,16 +64,21 @@ where
     A: Primitive + Annotation<C::Leaf>,
 {
     fn slot(&self, ofs: usize) -> Slot<C, A> {
-        match &self.node {
-            LevelNode::Memory(root) => match root.child(self.offset + ofs) {
-                Child::Leaf(l) => Slot::Leaf(l),
-                Child::Node(n) => {
-                    Slot::Annotation(AnnoRef::Memory(n.annotation()))
-                }
-                Child::Empty => Slot::End,
-                Child::EndOfNode => Slot::End,
+        let child = match &self.node {
+            LevelNode::Root(root) => root.child(self.offset + ofs),
+            LevelNode::Internal(refr) => match refr {
+                NodeRef::Referenced(r) => (*r).0.child(self.offset + ofs),
+                NodeRef::Archived(a) => todo!("b"),
             },
-            LevelNode::Archived(_) => todo!(),
+        };
+
+        match child {
+            Child::Leaf(l) => Slot::Leaf(l),
+            Child::Node(n) => {
+                Slot::Annotation(AnnoRef::Referenced(n.annotation()))
+            }
+            Child::Empty => return Slot::Empty,
+            Child::EndOfNode => return Slot::End,
         }
     }
 }
@@ -98,7 +95,7 @@ where
     C::Archived: ArchivedChildren<C, A>,
     A: Primitive + Annotation<C::Leaf>,
 {
-    fn new(root: LevelNode<'a, C>) -> Self {
+    fn new(root: LevelNode<'a, C, A>) -> Self {
         PartialBranch(vec![Level::new(root)])
     }
 
@@ -119,11 +116,11 @@ where
         let ofs = top.offset();
 
         match &top.node {
-            LevelNode::Memory(root) => match root.child(ofs) {
+            LevelNode::Root(root) => match root.child(ofs) {
                 Child::Leaf(l) => Some(l),
                 _ => None,
             },
-            LevelNode::Archived(_) => todo!(),
+            LevelNode::Internal(_) => todo!(),
         }
     }
 
@@ -165,6 +162,7 @@ where
 
         let mut state = State::Init;
         loop {
+            println!("looping here B");
             match core::mem::replace(&mut state, State::Init) {
                 State::Init => (),
                 State::Push(push) => self.0.push(push),
@@ -183,19 +181,20 @@ where
                     *top.offset_mut() += walk_ofs;
                     let ofs = top.offset();
 
-                    match &top.node {
-                        LevelNode::Memory(root) => match root.child(ofs) {
-                            Child::Leaf(_) => return Some(()),
-                            Child::Node(n) => {
-                                todo!()
+                    let child = match &top.node {
+                        LevelNode::Root(root) => root.child(ofs),
+                        LevelNode::Internal(refr) => refr.child(ofs),
+                    };
 
-                                // let extended: Level<'a, C, A> =
-                                //     unsafe { core::mem::transmute(level) };
-                                // state = State::Push(extended);
-                            }
-                            _ => panic!("Invalid child found"),
-                        },
-                        LevelNode::Archived(_) => todo!(),
+                    match child {
+                        Child::Leaf(_) => return Some(()),
+                        Child::Node(n) => {
+                            let level = Level::new(LevelNode::Internal(n));
+                            let extended: Level<'a, C, A> =
+                                unsafe { core::mem::transmute(level) };
+                            state = State::Push(extended);
+                        }
+                        _ => panic!("Invalid child found"),
                     }
                 }
                 Step::Advance => state = State::Pop,
@@ -241,14 +240,13 @@ where
 
     /// Performs a tree walk, returning either a valid branch or None if the
     /// walk failed.
-    pub fn walk<W, R>(root: R, mut walker: W) -> Option<Self>
+    pub fn walk<W>(root: &'a C, mut walker: W) -> Option<Self>
     where
         C: Compound<A>,
-        R: Into<LevelNode<'a, C>>,
         A: Annotation<C::Leaf>,
         W: Walker<C, A>,
     {
-        let mut partial = PartialBranch::new(root.into());
+        let mut partial = PartialBranch::new(LevelNode::Root(root));
         partial.walk(&mut walker).map(|()| Branch(partial))
     }
 }
