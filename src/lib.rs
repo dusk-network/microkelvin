@@ -39,4 +39,4 @@ pub use primitive::Primitive;
 pub use walk::{First, Step, Walker};
 
 mod chonker;
-pub use chonker::Chonker;
+pub use chonker::{Chonker, Chonky};

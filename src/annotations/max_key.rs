@@ -181,7 +181,7 @@ where
 impl<'a, C, A, K> GetMaxKey<'a, A, K> for C
 where
     C: Compound<A>,
-    C::Leaf: Keyed<K>,
+    C::Leaf: Archive + Keyed<K>,
     C::Archived: ArchivedCompound<C, A>,
     A: Primitive + Annotation<C::Leaf> + Borrow<MaxKey<K>>,
     K: Ord + Clone,

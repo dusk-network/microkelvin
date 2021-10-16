@@ -10,14 +10,13 @@ use rkyv::{Archive, Deserialize, Infallible};
 
 use crate::annotations::{ARef, Annotation};
 use crate::link::Link;
-use crate::primitive::Primitive;
 
 /// The response of the `child` method on a `Compound` node.
 #[derive(Debug)]
 pub enum Child<'a, C, A>
 where
     C: Compound<A>,
-    A: Primitive + Annotation<C::Leaf>,
+    A: Annotation<C::Leaf>,
 {
     /// Child is a leaf
     Leaf(&'a C::Leaf),
@@ -34,7 +33,7 @@ where
 pub enum ChildMut<'a, C, A>
 where
     C: Compound<A>,
-    A: Primitive + Annotation<C::Leaf>,
+    A: Annotation<C::Leaf>,
 {
     /// Child is a leaf
     Leaf(&'a mut C::Leaf),
@@ -50,7 +49,7 @@ where
 pub trait ArchivedCompound<C, A>: Deserialize<C, Infallible>
 where
     C: Compound<A>,
-    A: Primitive + Annotation<C::Leaf>,
+    A: Annotation<C::Leaf>,
 {
     /// Returns an archived child
     fn child(&self, ofs: usize) -> Child<C, A>;
@@ -59,10 +58,10 @@ where
 /// A type that can recursively contain itself and leaves.
 pub trait Compound<A>: Sized + Archive
 where
-    A: Primitive + Annotation<Self::Leaf>,
+    A: Annotation<Self::Leaf>,
 {
     /// The leaf type of the Compound collection
-    type Leaf: Primitive;
+    type Leaf;
 
     /// Get a reference to a child    
     fn child(&self, ofs: usize) -> Child<Self, A>;
@@ -105,13 +104,12 @@ impl<'a, C, A> Iterator for AnnoIter<'a, C, A>
 where
     C: Compound<A>,
     C::Archived: ArchivedCompound<C, A>,
-    A: Primitive + Annotation<C::Leaf> + 'a,
+    A: Annotation<C::Leaf> + 'a,
 {
     type Item = ARef<'a, A>;
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            println!("looping here D");
             match self.node.child(self.ofs) {
                 Child::Empty => self.ofs += 1,
                 Child::EndOfNode => return None,

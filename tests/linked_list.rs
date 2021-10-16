@@ -5,19 +5,28 @@
 // Copyright (c) DUSK NETWORK. All rights reserializeved.
 
 use microkelvin::{
-    Annotation, ArchivedCompound, Cardinality, Child, ChildMut, Compound,
-    First, Link, MutableLeaves, Nth, Primitive,
+    Annotation, ArchivedCompound, Cardinality, Child, ChildMut, Chonker,
+    Chonky, Compound, First, Link, MutableLeaves, Nth,
 };
 use rend::LittleEndian;
-use rkyv::{Archive, Deserialize, Serialize};
+use rkyv::{ser::Serializer, Archive, Deserialize, Infallible, Serialize};
 
 #[derive(Clone, Archive, Serialize, Deserialize)]
-#[archive(bound(archive = "
-  T: Archive,
-  A: Archive"))]
+#[archive(bound(serialize = "
+  A: Annotation<T> + Serialize<__S>,
+  __S: Serializer + Sized + Chonky"))]
+#[archive(bound(deserialize = "
+  A: Archive + Clone,
+  A::Archived: Deserialize<A, __D>,
+  T::Archived: Deserialize<T, __D>,
+  __D: Sized"))]
 pub enum LinkedList<T, A> {
     Empty,
-    Node { val: T, next: Link<Self, A> },
+    Node {
+        val: T,
+        #[omit_bounds]
+        next: Link<Self, A>,
+    },
 }
 
 impl<T, A> Default for LinkedList<T, A> {
@@ -28,8 +37,9 @@ impl<T, A> Default for LinkedList<T, A> {
 
 impl<T, A> ArchivedCompound<LinkedList<T, A>, A> for ArchivedLinkedList<T, A>
 where
-    T: Primitive,
-    A: Primitive + Annotation<T>,
+    T: Archive,
+    T::Archived: Deserialize<T, Infallible>,
+    A: Annotation<T>,
 {
     fn child(&self, _ofs: usize) -> Child<LinkedList<T, A>, A> {
         todo!()
@@ -38,8 +48,8 @@ where
 
 impl<T, A> Compound<A> for LinkedList<T, A>
 where
-    T: Primitive,
-    A: Primitive + Annotation<T>,
+    T: Archive,
+    A: Annotation<T>,
 {
     type Leaf = T;
 
@@ -66,8 +76,7 @@ impl<T, A> MutableLeaves for LinkedList<T, A> where A: Archive + Annotation<T> {
 
 impl<T, A> LinkedList<T, A>
 where
-    T: Primitive,
-    A: Primitive + Annotation<T>,
+    A: Annotation<T>,
 {
     pub fn new() -> Self {
         Default::default()
@@ -318,4 +327,26 @@ fn deref_mapped_mutable_branch() {
     let mapped = branch_mut.map_leaf(|x| x);
 
     assert_eq!(core::ops::Deref::deref(&mapped), &31);
+}
+
+#[test]
+fn push_nth_persist() {
+    let chonker = Chonker::default();
+
+    let n = 1024;
+
+    let mut list = LinkedList::<_, Cardinality>::new();
+
+    for i in 0..n {
+        let i: LittleEndian<u64> = i.into();
+        list.push(i)
+    }
+
+    for i in 0..n {
+        assert_eq!(*list.nth(i).expect("Some(branch)"), n - i - 1)
+    }
+
+    let ofs = chonker.put(&list);
+
+    let _restored = chonker.get(ofs);
 }

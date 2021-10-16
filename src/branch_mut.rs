@@ -150,7 +150,6 @@ impl<'a, C, A> PartialBranchMut<'a, C, A> {
 
         let mut state = State::Init;
         loop {
-            println!("looping here A");
             match mem::replace(&mut state, State::Init) {
                 State::Init => (),
                 State::Push(push) => self.0.push(push),

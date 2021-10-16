@@ -63,7 +63,7 @@ where
     where
         C: Compound<A>,
         C::Archived: ArchivedCompound<C, A>,
-        A: Primitive + Annotation<C::Leaf>,
+        A: Annotation<C::Leaf>,
     {
         Anno {
             max: MaxKey::combine(iter.clone()),

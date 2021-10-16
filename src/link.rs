@@ -12,17 +12,12 @@ use owning_ref::OwningRef;
 use rkyv::{Archive, Deserialize, Serialize};
 use rkyv::{Fallible, Infallible};
 
-use crate::primitive::Primitive;
-
-use crate::chonker::{Offset, RawOffset};
+use crate::chonker::{Chonkable, Chonky, Offset, RawOffset};
 use crate::{ARef, Annotation, ArchivedCompound, Chonker, Compound};
 
-pub enum NodeRef<'a, C>
-where
-    C: Archive,
-{
+pub enum NodeRef<'a, C, CA> {
     Memory(&'a C),
-    Archived(&'a C::Archived),
+    Archived(&'a CA),
 }
 
 #[derive(Clone, Debug)]
@@ -53,7 +48,7 @@ pub struct ArchivedLink<A>(RawOffset, A);
 
 impl<C, A> Archive for Link<C, A> {
     type Archived = ArchivedLink<A>;
-    type Resolver = ArchivedLink<A>;
+    type Resolver = (RawOffset, A);
 
     unsafe fn resolve(
         &self,
@@ -61,7 +56,7 @@ impl<C, A> Archive for Link<C, A> {
         resolver: Self::Resolver,
         out: *mut <Self as Archive>::Archived,
     ) {
-        *out = resolver
+        *out = ArchivedLink(resolver.0, resolver.1)
     }
 }
 
@@ -81,15 +76,27 @@ where
 
 impl<C, A, S> Serialize<S> for Link<C, A>
 where
-    C: Compound<A> + Serialize<S>,
-    A: Primitive + Annotation<C::Leaf> + Serialize<S>,
-    S: Serializer + Fallible,
+    C: Compound<A> + Serialize<S> + Chonkable,
+    A: Annotation<C::Leaf> + Serialize<S>,
+    S: Serializer + Fallible + Chonky,
 {
     fn serialize(
         &self,
-        _serializer: &mut S,
+        serializer: &mut S,
     ) -> Result<Self::Resolver, S::Error> {
-        todo!()
+        match self {
+            Link::Memory { rc, annotation } => {
+                let a = if let Some(a) = &*annotation.borrow() {
+                    a.clone()
+                } else {
+                    todo!()
+                };
+                let to_insert = &(**rc);
+                let ofs = serializer.chonker().put(to_insert).into_raw();
+                Ok((ofs, a))
+            }
+            Link::Archived { .. } => todo!(),
+        }
     }
 }
 
@@ -105,12 +112,7 @@ where
     }
 }
 
-impl<C, A> Link<C, A>
-where
-    C: Compound<A>,
-    C::Archived: ArchivedCompound<C, A>,
-    A: Primitive + Annotation<C::Leaf>,
-{
+impl<C, A> Link<C, A> {
     /// Create a new link
     pub fn new(compound: C) -> Self {
         Link::Memory {
@@ -120,7 +122,12 @@ where
     }
 
     /// Returns a reference to to the annotation stored
-    pub fn annotation(&self) -> ARef<A> {
+    pub fn annotation(&self) -> ARef<A>
+    where
+        C: Archive + Compound<A>,
+        C::Archived: ArchivedCompound<C, A>,
+        A: Annotation<C::Leaf>,
+    {
         match self {
             Link::Memory { annotation, rc } => {
                 let borrow = annotation.borrow();
@@ -160,7 +167,10 @@ where
     }
 
     /// Returns a reference to the inner node, possibly in its archived form
-    pub fn inner(&self) -> NodeRef<C> {
+    pub fn inner(&self) -> NodeRef<C, C::Archived>
+    where
+        C: Archive,
+    {
         match self {
             Link::Memory { rc, .. } => NodeRef::Memory(&(*rc)),
             Link::Archived { ofs, chonker, .. } => {
@@ -174,7 +184,7 @@ where
     /// Drops cached annotations and ids
     pub fn inner_mut(&mut self) -> &mut C
     where
-        C: Clone,
+        C: Archive + Clone,
         C::Archived: Deserialize<C, Infallible>,
     {
         match self {

@@ -55,6 +55,16 @@ impl<T> Offset<T> {
         debug_assert!(ofs % std::mem::align_of::<T>() as u64 == 0);
         Offset(ofs, PhantomData)
     }
+
+    pub fn into_raw(self) -> RawOffset {
+        RawOffset(self.0)
+    }
+}
+
+/// Support trait for serializers/deserializers.
+pub trait Chonky {
+    /// Return a reference to the associated chonker
+    fn chonker(&self) -> &Chonker;
 }
 
 const FIRST_CHONK_SIZE: usize = 64 * 1024;

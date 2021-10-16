@@ -159,7 +159,6 @@ where
 
         let mut state = State::Init;
         loop {
-            println!("looping here B");
             match core::mem::replace(&mut state, State::Init) {
                 State::Init => (),
                 State::Push(push) => self.0.push(push),

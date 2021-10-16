@@ -20,7 +20,9 @@ pub use cardinality::{Cardinality, Nth};
 pub use max_key::{GetMaxKey, Keyed, MaxKey};
 
 /// The trait defining an annotation type over a leaf
-pub trait Annotation<Leaf>: Default + Clone + Combine<Self> {
+pub trait Annotation<Leaf>:
+    Default + Clone + Combine<Self> + Primitive
+{
     /// Creates an annotation from the leaf type
     fn from_leaf(leaf: &Leaf) -> Self;
 }
