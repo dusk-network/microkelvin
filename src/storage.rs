@@ -9,37 +9,50 @@ use std::{
 };
 
 use rkyv::{
-    archived_root, ser::Serializer, AlignedVec, Archive, Fallible, Infallible,
-    Serialize,
+    archived_root, ser::Serializer, AlignedVec, Archive, Deserialize, Fallible,
+    Infallible, Serialize,
 };
 
 use parking_lot::RwLock;
 
 use memmap::Mmap;
 
-pub struct Offset<T>(u64, PhantomData<T>);
+pub struct Stored<T> {
+    offset: RawOffset,
+    portal: Portal,
+    _marker: PhantomData<T>,
+}
 
+impl<T> Clone for Stored<T> {
+    fn clone(&self) -> Self {
+        Stored {
+            offset: self.offset.clone(),
+            portal: self.portal.clone(),
+            _marker: PhantomData,
+        }
+    }
+}
+
+impl<T> Stored<T>
+where
+    T: Archive,
+{
+    pub fn restore(&self) -> T
+    where
+        T::Archived: Deserialize<T, Infallible>,
+    {
+        self.archived().deserialize(&mut rkyv::Infallible).unwrap()
+    }
+
+    pub fn archived(&self) -> &T::Archived {
+        self.portal.get::<T>(self.offset)
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
 pub struct RawOffset(u64);
 
-/// Helper trait to constrain serializers used with Storage;
-pub trait StorageSerializer: Serializer + Sized + BorrowMut<Storage> {}
-impl<T> StorageSerializer for T where T: Serializer + Sized + BorrowMut<Storage> {}
-
-impl<T> std::fmt::Debug for Offset<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_tuple("Offset").field(&self.0).finish()
-    }
-}
-
-impl<T> Clone for Offset<T> {
-    fn clone(&self) -> Self {
-        Offset::new(self.0)
-    }
-}
-
-impl<T> Copy for Offset<T> {}
-
-impl<T> Deref for Offset<T> {
+impl Deref for RawOffset {
     type Target = u64;
 
     fn deref(&self) -> &u64 {
@@ -47,14 +60,34 @@ impl<T> Deref for Offset<T> {
     }
 }
 
-impl<T> Offset<T> {
-    fn new(ofs: u64) -> Self {
-        debug_assert!(ofs % std::mem::align_of::<T>() as u64 == 0);
-        Offset(ofs, PhantomData)
+impl RawOffset {
+    fn new(u: u64) -> Self {
+        RawOffset(u)
+    }
+}
+
+/// Helper trait to constrain serializers used with Storage;
+pub trait StorageSerializer: Serializer + Sized + BorrowMut<Storage> {}
+impl<T> StorageSerializer for T where T: Serializer + Sized + BorrowMut<Storage> {}
+
+impl<T> std::fmt::Debug for Stored<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("Offset").field(&self.offset).finish()
+    }
+}
+
+impl<T> Stored<T> {
+    fn new(offset: RawOffset, portal: Portal) -> Self {
+        debug_assert!(*offset % std::mem::align_of::<T>() as u64 == 0);
+        Stored {
+            offset,
+            portal,
+            _marker: PhantomData,
+        }
     }
 
     pub fn into_raw(self) -> RawOffset {
-        RawOffset(self.0)
+        self.offset
     }
 }
 
@@ -92,15 +125,24 @@ impl Portal {
     }
 
     /// Commits a value to the portal
-    pub fn put<T>(&self, t: &T) -> Offset<T>
+    pub fn put<T>(&self, t: &T) -> Stored<T>
     where
         T: Archive + Serialize<Storage>,
     {
-        self.0.write().put(t)
+        let portal = self.clone();
+        self.0.write().put(t, portal)
+    }
+
+    /// Commits a value to the portal
+    pub fn put_raw<T>(&self, t: &T) -> RawOffset
+    where
+        T: Archive + Serialize<Storage>,
+    {
+        self.0.write().put_raw(t)
     }
 
     /// Gets a value previously commited to the portal at offset `ofs`
-    pub fn get<'a, T>(&'a self, ofs: Offset<T>) -> &'a T::Archived
+    pub fn get<'a, T>(&'a self, ofs: RawOffset) -> &'a T::Archived
     where
         T: Archive,
     {
@@ -218,17 +260,27 @@ const fn lane_size_from_lane(lane: usize) -> usize {
 
 impl Storage {
     /// Commits a value to the portal
-    pub fn put<T>(&mut self, t: &T) -> Offset<T>
+    pub fn put<T>(&mut self, t: &T, portal: Portal) -> Stored<T>
     where
         T: Archive + Serialize<Storage>,
     {
         let _ = self.serialize_value(t);
         let ofs = self.written - std::mem::size_of::<T::Archived>();
-        Offset::new(ofs as u64)
+        Stored::new(ofs as u64, portal)
+    }
+
+    /// Commits a value to the portal
+    pub fn put_raw<T>(&mut self, t: &T) -> RawOffset
+    where
+        T: Archive + Serialize<Storage>,
+    {
+        let _ = self.serialize_value(t);
+        let ofs = self.written - std::mem::size_of::<T::Archived>();
+        RawOffset::new(ofs as u64)
     }
 
     /// Gets a value from the portal at offset `ofs`
-    fn get<T>(&self, ofs: Offset<T>) -> &T::Archived
+    fn get<T>(&self, ofs: RawOffset) -> &T::Archived
     where
         T: Archive,
     {

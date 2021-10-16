@@ -10,6 +10,7 @@ use rkyv::{Archive, Deserialize, Infallible};
 
 use crate::annotations::{ARef, Annotation};
 use crate::link::Link;
+use crate::storage::Stored;
 
 /// The response of the `child` method on a `Compound` node.
 #[derive(Debug)]
@@ -56,7 +57,7 @@ where
 }
 
 /// A type that can recursively contain itself and leaves.
-pub trait Compound<A>: Sized + Archive
+pub trait Compound<A>: Sized
 where
     A: Annotation<Self::Leaf>,
 {
@@ -102,9 +103,10 @@ impl<'a, C, A> Clone for AnnoIter<'a, C, A> {
 
 impl<'a, C, A> Iterator for AnnoIter<'a, C, A>
 where
-    C: Compound<A>,
+    A: 'a,
+    C: Archive + Compound<A>,
     C::Archived: ArchivedCompound<C, A>,
-    A: Annotation<C::Leaf> + 'a,
+    A: Annotation<C::Leaf>,
 {
     type Item = ARef<'a, A>;
 
@@ -123,6 +125,23 @@ where
                 }
             }
         }
+    }
+}
+
+impl<C, A> Compound<A> for Stored<C>
+where
+    C: Compound<A> + Archive,
+    C::Archived: ArchivedCompound<C, A>,
+    A: Annotation<C::Leaf>,
+{
+    type Leaf = C::Leaf;
+
+    fn child(&self, _ofs: usize) -> Child<Self, A> {
+        todo!()
+    }
+
+    fn child_mut(&mut self, _ofs: usize) -> ChildMut<Self, A> {
+        todo!()
     }
 }
 

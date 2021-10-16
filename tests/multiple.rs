@@ -61,7 +61,7 @@ where
 {
     fn combine<C>(iter: AnnoIter<C, A>) -> Self
     where
-        C: Compound<A>,
+        C: Archive + Compound<A>,
         C::Archived: ArchivedCompound<C, A>,
         A: Annotation<C::Leaf>,
     {

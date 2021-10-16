@@ -8,6 +8,7 @@ use core::cell::Ref;
 use core::ops::Deref;
 
 use owning_ref::OwningRef;
+use rkyv::Archive;
 
 use crate::{AnnoIter, ArchivedCompound, Compound, Primitive};
 
@@ -32,9 +33,9 @@ pub trait Combine<A> {
     /// Combines multiple annotations
     fn combine<C>(iter: AnnoIter<C, A>) -> Self
     where
-        C: Compound<A>,
+        C: Archive + Compound<A>,
         C::Archived: ArchivedCompound<C, A>,
-        A: Primitive + Annotation<C::Leaf>;
+        A: Annotation<C::Leaf>;
 }
 
 /// A wrapped annotation that is either owning it's a or providing an annotated

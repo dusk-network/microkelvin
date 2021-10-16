@@ -15,7 +15,6 @@ use crate::annotations::{Annotation, Combine};
 use crate::branch::Branch;
 use crate::branch_mut::BranchMut;
 use crate::compound::{AnnoIter, ArchivedCompound, Compound, MutableLeaves};
-use crate::primitive::Primitive;
 use crate::walk::{Slot, Slots, Step, Walker};
 
 /// The cardinality of a compound collection
@@ -49,9 +48,9 @@ where
 {
     fn combine<C>(iter: AnnoIter<C, A>) -> Self
     where
-        C: Compound<A>,
+        C: Archive + Compound<A>,
         C::Archived: ArchivedCompound<C, A>,
-        A: Primitive + Annotation<C::Leaf>,
+        A: Annotation<C::Leaf>,
     {
         Cardinality(iter.fold(LittleEndian::from(0), |sum, ann| {
             let add: LittleEndian<_> = (*ann).borrow().0;
@@ -66,9 +65,9 @@ pub struct Offset(LittleEndian<u64>);
 
 impl<C, A> Walker<C, A> for Offset
 where
-    C: Compound<A>,
+    C: Archive + Compound<A>,
     C::Archived: ArchivedCompound<C, A>,
-    A: Primitive + Annotation<C::Leaf> + Borrow<Cardinality>,
+    A: Annotation<C::Leaf> + Borrow<Cardinality>,
 {
     fn walk(&mut self, walk: impl Slots<C, A>) -> Step {
         for i in 0.. {
@@ -100,9 +99,9 @@ where
 /// Cardinality annotation
 pub trait Nth<'a, A>
 where
-    Self: Compound<A>,
+    Self: Archive + Compound<A>,
     Self::Archived: ArchivedCompound<Self, A>,
-    A: Primitive + Annotation<Self::Leaf>,
+    A: Annotation<Self::Leaf>,
 {
     /// Construct a `Branch` pointing to the `nth` element, if any
     fn nth<N: Into<LittleEndian<u64>>>(
@@ -121,15 +120,14 @@ where
 
 impl<'a, C, A> Nth<'a, A> for C
 where
-    C: Compound<A>,
-    C::Leaf: 'a,
+    C: Archive + Compound<A>,
     C::Archived: ArchivedCompound<C, A>,
-    A: Primitive + Annotation<C::Leaf> + Borrow<Cardinality>,
+    A: Annotation<C::Leaf> + Borrow<Cardinality>,
 {
     fn nth<N: Into<LittleEndian<u64>>>(
         &'a self,
         ofs: N,
-    ) -> Option<Branch<'a, Self, A>> {
+    ) -> Option<Branch<'a, C, A>> {
         // Return the first that satisfies the walk
         Branch::<_, A>::walk(self, Offset(ofs.into()))
     }
@@ -137,7 +135,7 @@ where
     fn nth_mut<N: Into<LittleEndian<u64>>>(
         &'a mut self,
         ofs: N,
-    ) -> Option<BranchMut<'a, Self, A>>
+    ) -> Option<BranchMut<'a, C, A>>
     where
         C: MutableLeaves + Clone,
     {

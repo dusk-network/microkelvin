@@ -13,7 +13,7 @@ use owning_ref::OwningRef;
 use rkyv::{Archive, Deserialize, Serialize};
 use rkyv::{Fallible, Infallible};
 
-use crate::storage::{Offset, RawOffset, Storage};
+use crate::storage::{RawOffset, Storage, Stored};
 use crate::{ARef, Annotation, ArchivedCompound, Compound, Portal};
 
 pub enum NodeRef<'a, C, CA> {
@@ -37,7 +37,7 @@ pub enum Link<C, A> {
     /// A Link to an archived node
     Archived {
         /// archived at offset
-        ofs: Offset<C>,
+        stored: Stored<C>,
         /// the final annotation
         a: A,
         /// link to the chonky boi
@@ -93,7 +93,7 @@ where
                     todo!()
                 };
                 let to_insert = &(**rc);
-                let ofs = serializer.borrow_mut().put(to_insert).into_raw();
+                let ofs = serializer.borrow_mut().put_raw(to_insert);
                 Ok((ofs, a))
             }
             Link::Archived { .. } => todo!(),
@@ -174,8 +174,8 @@ impl<C, A> Link<C, A> {
     {
         match self {
             Link::Memory { rc, .. } => NodeRef::Memory(&(*rc)),
-            Link::Archived { ofs, portal, .. } => {
-                NodeRef::Archived(portal.get(*ofs))
+            Link::Archived { stored, portal, .. } => {
+                NodeRef::Archived(stored.archived())
             }
         }
     }
@@ -194,9 +194,9 @@ impl<C, A> Link<C, A> {
                 annotation.borrow_mut().take();
                 return Rc::make_mut(rc);
             }
-            Link::Archived { ofs, portal, .. } => {
-                let archived = portal.get(*ofs);
-                let c = archived.deserialize(&mut rkyv::Infallible).unwrap();
+            Link::Archived { stored, portal, .. } => {
+                let c = stored.restore();
+
                 *self = Link::Memory {
                     rc: Rc::new(c),
                     annotation: RefCell::new(None),

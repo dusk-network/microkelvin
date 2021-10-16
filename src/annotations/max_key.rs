@@ -14,9 +14,10 @@ use rkyv::{Archive, Deserialize, Serialize};
 use crate::annotations::{Annotation, Combine};
 use crate::branch::Branch;
 use crate::branch_mut::BranchMut;
-use crate::compound::{AnnoIter, ArchivedCompound, Compound, MutableLeaves};
+use crate::compound::{AnnoIter, Compound, MutableLeaves};
 use crate::primitive::Primitive;
 use crate::walk::{Slot, Slots, Step, Walker};
+use crate::ArchivedCompound;
 
 /// The maximum value of a collection
 #[derive(PartialEq, Eq, Clone, Debug, Archive, Serialize, Deserialize)]
@@ -97,7 +98,7 @@ where
 {
     fn combine<C>(iter: AnnoIter<C, A>) -> Self
     where
-        C: Compound<A>,
+        C: Archive + Compound<A>,
         C::Archived: ArchivedCompound<C, A>,
         A: Annotation<C::Leaf>,
     {
@@ -124,10 +125,10 @@ impl<K> Default for FindMaxKey<K> {
 
 impl<C, A, K> Walker<C, A> for FindMaxKey<K>
 where
-    C: Compound<A>,
+    C: Archive + Compound<A>,
     C::Archived: ArchivedCompound<C, A>,
     C::Leaf: Keyed<K>,
-    A: Primitive + Annotation<C::Leaf> + Borrow<MaxKey<K>>,
+    A: Annotation<C::Leaf> + Borrow<MaxKey<K>>,
     K: Ord + Clone,
 {
     fn walk(&mut self, walk: impl Slots<C, A>) -> Step {
@@ -163,11 +164,11 @@ where
 /// annotation
 pub trait GetMaxKey<'a, A, K>
 where
-    Self: Compound<A>,
-    Self::Leaf: Keyed<K> + Archive,
+    Self: Archive + Compound<A>,
     Self::Archived: ArchivedCompound<Self, A>,
-    A: Primitive + Annotation<Self::Leaf> + Borrow<MaxKey<K>>,
-    K: Ord,
+    Self::Leaf: Keyed<K>,
+    A: Annotation<Self::Leaf> + Borrow<MaxKey<K>>,
+    K: Ord + Clone,
 {
     /// Construct a `Branch` pointing to the element with the largest key
     fn max_key(&'a self) -> Option<Branch<'a, Self, A>>;
@@ -180,10 +181,10 @@ where
 
 impl<'a, C, A, K> GetMaxKey<'a, A, K> for C
 where
-    C: Compound<A>,
-    C::Leaf: Archive + Keyed<K>,
+    C: Archive + Compound<A>,
     C::Archived: ArchivedCompound<C, A>,
-    A: Primitive + Annotation<C::Leaf> + Borrow<MaxKey<K>>,
+    C::Leaf: Keyed<K>,
+    A: Annotation<C::Leaf> + Borrow<MaxKey<K>>,
     K: Ord + Clone,
 {
     fn max_key(&'a self) -> Option<Branch<'a, Self, A>> {

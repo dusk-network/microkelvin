@@ -4,11 +4,12 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use rkyv::Archive;
+
 use crate::annotations::{ARef, Annotation};
 use crate::branch::Branch;
 use crate::branch_mut::BranchMut;
 use crate::compound::{ArchivedCompound, Compound, MutableLeaves};
-use crate::primitive::Primitive;
 
 /// The return value from a closure to `walk` the tree.
 ///
@@ -26,9 +27,9 @@ pub enum Step {
 /// The trait used to construct a `Branch` or to iterate through a tree.
 pub trait Walker<C, A>
 where
-    C: Compound<A>,
+    C: Archive + Compound<A>,
     C::Archived: ArchivedCompound<C, A>,
-    A: Primitive + Annotation<C::Leaf>,
+    A: Annotation<C::Leaf>,
 {
     /// Walk the tree node, returning the appropriate `Step`
     fn walk(&mut self, walk: impl Slots<C, A>) -> Step;
@@ -38,7 +39,7 @@ where
 pub enum Slot<'a, C, A>
 where
     C: Compound<A>,
-    A: Primitive + Annotation<C::Leaf>,
+    A: Annotation<C::Leaf>,
 {
     Leaf(&'a C::Leaf),
     Annotation(ARef<'a, A>),
@@ -49,7 +50,7 @@ where
 pub trait Slots<C, A>
 where
     C: Compound<A>,
-    A: Primitive + Annotation<C::Leaf>,
+    A: Annotation<C::Leaf>,
 {
     fn slot(&self, ofs: usize) -> Slot<C, A>;
 }
@@ -60,9 +61,9 @@ pub struct AllLeaves;
 
 impl<C, A> Walker<C, A> for AllLeaves
 where
-    C: Compound<A>,
+    C: Archive + Compound<A>,
     C::Archived: ArchivedCompound<C, A>,
-    A: Primitive + Annotation<C::Leaf>,
+    A: Annotation<C::Leaf>,
 {
     fn walk(&mut self, walk: impl Slots<C, A>) -> Step {
         for i in 0.. {
@@ -80,9 +81,9 @@ where
 /// Cardinality annotation
 pub trait First<'a, A>
 where
-    Self: Compound<A>,
+    Self: Archive + Compound<A>,
     Self::Archived: ArchivedCompound<Self, A>,
-    A: Primitive + Annotation<Self::Leaf>,
+    A: Annotation<Self::Leaf>,
 {
     /// Construct a `Branch` pointing to the first element, if not empty
     fn first(&'a self) -> Option<Branch<'a, Self, A>>;
@@ -95,9 +96,9 @@ where
 
 impl<'a, C, A> First<'a, A> for C
 where
-    C: Compound<A>,
+    C: Archive + Compound<A>,
     C::Archived: ArchivedCompound<C, A>,
-    A: Primitive + Annotation<C::Leaf>,
+    A: Annotation<C::Leaf>,
 {
     fn first(&'a self) -> Option<Branch<'a, Self, A>> {
         Branch::<_, A>::walk(self, AllLeaves)

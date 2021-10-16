@@ -9,9 +9,9 @@ use core::mem;
 use core::ops::{Deref, DerefMut};
 
 use alloc::vec::Vec;
+use rkyv::Archive;
 
 use crate::compound::{ArchivedCompound, Child, ChildMut, Compound};
-use crate::primitive::Primitive;
 use crate::walk::{AllLeaves, Slot, Slots, Step, Walker};
 use crate::Annotation;
 
@@ -60,9 +60,9 @@ impl<'a, C, A> LevelMut<'a, C, A> {
 
 impl<'a, C, A> Slots<C, A> for &LevelMut<'a, C, A>
 where
-    C: Compound<A>,
+    C: Archive + Compound<A>,
     C::Archived: ArchivedCompound<C, A>,
-    A: Primitive + Annotation<C::Leaf>,
+    A: Annotation<C::Leaf>,
 {
     fn slot(&self, ofs: usize) -> Slot<C, A> {
         match self.node.child(self.offset + ofs) {
@@ -96,8 +96,8 @@ impl<'a, C, A> PartialBranchMut<'a, C, A> {
 
     fn leaf(&self) -> Option<&C::Leaf>
     where
-        C: Compound<A>,
-        A: Primitive + Annotation<C::Leaf>,
+        C: Archive + Compound<A>,
+        A: Annotation<C::Leaf>,
     {
         let top = self.top();
         let ofs = top.offset();
@@ -111,7 +111,7 @@ impl<'a, C, A> PartialBranchMut<'a, C, A> {
     fn leaf_mut(&mut self) -> Option<&mut C::Leaf>
     where
         C: Compound<A> + Clone,
-        A: Primitive + Annotation<C::Leaf>,
+        A: Annotation<C::Leaf>,
     {
         let top = self.top_mut();
         let ofs = top.offset();
@@ -137,9 +137,9 @@ impl<'a, C, A> PartialBranchMut<'a, C, A> {
 
     fn walk<W>(&mut self, walker: &mut W) -> Option<()>
     where
-        C: Compound<A> + Clone,
+        C: Archive + Compound<A> + Clone,
         C::Archived: ArchivedCompound<C, A>,
-        A: Primitive + Annotation<C::Leaf>,
+        A: Annotation<C::Leaf>,
         W: Walker<C, A>,
     {
         enum State<Level> {
@@ -200,9 +200,9 @@ impl<'a, C, A> BranchMut<'a, C, A> {
         closure: for<'b> fn(&'b mut C::Leaf) -> &'b mut M,
     ) -> MappedBranchMut<'a, C, A, M>
     where
-        C: Compound<A>,
+        C: Archive + Compound<A>,
         C::Archived: ArchivedCompound<C, A>,
-        A: Primitive + Annotation<C::Leaf>,
+        A: Annotation<C::Leaf>,
     {
         MappedBranchMut {
             inner: self,
@@ -214,9 +214,9 @@ impl<'a, C, A> BranchMut<'a, C, A> {
     /// walk failed.
     pub fn walk<W>(root: &'a mut C, mut walker: W) -> Option<Self>
     where
-        C: Compound<A> + Clone,
+        C: Archive + Compound<A> + Clone,
         C::Archived: ArchivedCompound<C, A>,
-        A: Primitive + Annotation<C::Leaf>,
+        A: Annotation<C::Leaf>,
         W: Walker<C, A>,
     {
         let mut partial = PartialBranchMut::new(root);
@@ -237,9 +237,9 @@ pub struct BranchMut<'a, C, A>(PartialBranchMut<'a, C, A>);
 
 impl<'a, C, A> Deref for BranchMut<'a, C, A>
 where
-    C: Compound<A>,
+    C: Archive + Compound<A>,
     C::Archived: ArchivedCompound<C, A>,
-    A: Primitive + Annotation<C::Leaf>,
+    A: Annotation<C::Leaf>,
 {
     type Target = C::Leaf;
 
@@ -250,9 +250,9 @@ where
 
 impl<'a, C, A> DerefMut for BranchMut<'a, C, A>
 where
-    C: Compound<A> + Clone,
+    C: Archive + Compound<A> + Clone,
     C::Archived: ArchivedCompound<C, A>,
-    A: Primitive + Annotation<C::Leaf>,
+    A: Annotation<C::Leaf>,
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.0.leaf_mut().expect("Invalid branch")
@@ -262,9 +262,9 @@ where
 /// A `BranchMut` with a mapped leaf
 pub struct MappedBranchMut<'a, C, A, M>
 where
-    C: Compound<A>,
+    C: Archive + Compound<A>,
     C::Archived: ArchivedCompound<C, A>,
-    A: Primitive + Annotation<C::Leaf>,
+    A: Annotation<C::Leaf>,
 {
     inner: BranchMut<'a, C, A>,
     closure: for<'b> fn(&'b mut C::Leaf) -> &'b mut M,
@@ -272,9 +272,9 @@ where
 
 impl<'a, C, A, M> core::fmt::Debug for MappedBranchMut<'a, C, A, M>
 where
-    C: Compound<A> + core::fmt::Debug,
+    C: Archive + Compound<A> + core::fmt::Debug,
     C::Archived: ArchivedCompound<C, A> + core::fmt::Debug,
-    A: Primitive + Annotation<C::Leaf> + core::fmt::Debug,
+    A: Annotation<C::Leaf> + core::fmt::Debug,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("MappedBranchMut")
@@ -285,9 +285,9 @@ where
 
 impl<'a, C, A, M> Deref for MappedBranchMut<'a, C, A, M>
 where
-    C: Compound<A> + Clone,
+    C: Archive + Compound<A> + Clone,
     C::Archived: ArchivedCompound<C, A>,
-    A: Primitive + Annotation<C::Leaf>,
+    A: Annotation<C::Leaf>,
 {
     type Target = M;
 
@@ -303,9 +303,9 @@ where
 
 impl<'a, C, A, M> DerefMut for MappedBranchMut<'a, C, A, M>
 where
-    C: Compound<A> + Clone,
+    C: Archive + Compound<A> + Clone,
     C::Archived: ArchivedCompound<C, A>,
-    A: Primitive + Annotation<C::Leaf>,
+    A: Annotation<C::Leaf>,
 {
     fn deref_mut(&mut self) -> &mut M {
         (self.closure)(&mut *self.inner)
@@ -317,9 +317,9 @@ where
 #[derive(Debug)]
 pub enum BranchMutIterator<'a, C, A, W>
 where
-    C: Compound<A> + Clone,
+    C: Archive + Compound<A> + Clone,
     C::Archived: ArchivedCompound<C, A>,
-    A: Primitive + Annotation<C::Leaf>,
+    A: Annotation<C::Leaf>,
 {
     Initial(BranchMut<'a, C, A>, W),
     Intermediate(BranchMut<'a, C, A>, W),
@@ -328,10 +328,10 @@ where
 
 impl<'a, C, A> IntoIterator for BranchMut<'a, C, A>
 where
-    C: Compound<A> + Clone,
+    C: Archive + Compound<A> + Clone,
     C::Leaf: 'a,
     C::Archived: ArchivedCompound<C, A>,
-    A: Primitive + Annotation<C::Leaf>,
+    A: Annotation<C::Leaf>,
 {
     type Item = &'a mut C::Leaf;
 
@@ -344,10 +344,10 @@ where
 
 impl<'a, C, A, W> Iterator for BranchMutIterator<'a, C, A, W>
 where
-    C: Compound<A> + Clone,
+    C: Archive + Compound<A> + Clone,
     C::Leaf: 'a,
     C::Archived: ArchivedCompound<C, A>,
-    A: Primitive + Annotation<C::Leaf>,
+    A: Annotation<C::Leaf>,
     W: Walker<C, A>,
 {
     type Item = &'a mut C::Leaf;
@@ -389,9 +389,9 @@ where
 
 pub enum MappedBranchMutIterator<'a, C, A, W, M>
 where
-    C: Compound<A>,
+    C: Archive + Compound<A>,
     C::Archived: ArchivedCompound<C, A>,
-    A: Primitive + Annotation<C::Leaf>,
+    A: Annotation<C::Leaf>,
 {
     Initial(MappedBranchMut<'a, C, A, M>, W),
     Intermediate(MappedBranchMut<'a, C, A, M>, W),
@@ -400,9 +400,9 @@ where
 
 impl<'a, C, A, M> IntoIterator for MappedBranchMut<'a, C, A, M>
 where
-    C: Compound<A> + Clone,
+    C: Archive + Compound<A> + Clone,
     C::Archived: ArchivedCompound<C, A>,
-    A: Primitive + Annotation<C::Leaf>,
+    A: Annotation<C::Leaf>,
     M: 'a,
 {
     type Item = &'a mut M;
@@ -416,9 +416,9 @@ where
 
 impl<'a, C, A, W, M> Iterator for MappedBranchMutIterator<'a, C, A, W, M>
 where
-    C: Compound<A> + Clone,
+    C: Archive + Compound<A> + Clone,
     C::Archived: ArchivedCompound<C, A>,
-    A: Primitive + Annotation<C::Leaf>,
+    A: Annotation<C::Leaf>,
     W: Walker<C, A>,
     M: 'a,
 {

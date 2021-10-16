@@ -334,7 +334,7 @@ fn deref_mapped_mutable_branch() {
 fn push_nth_persist() {
     let portal = Portal::default();
 
-    let n = 1024;
+    let n = 10;
 
     let mut list = LinkedList::<_, Cardinality>::new();
 
@@ -347,7 +347,7 @@ fn push_nth_persist() {
         assert_eq!(*list.nth(i).expect("Some(branch)"), n - i - 1)
     }
 
-    let ofs = portal.put(&list);
+    let stored = portal.put(&list);
 
-    let _restored = portal.get(ofs);
+    let stored = stored.restore();
 }

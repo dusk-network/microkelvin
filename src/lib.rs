@@ -36,7 +36,7 @@ pub use compound::{
 };
 pub use link::Link;
 pub use primitive::Primitive;
-pub use walk::{First, Step, Walker};
+pub use walk::{AllLeaves, First, Step, Walker};
 
 mod storage;
 pub use storage::{Portal, Storage, StorageSerializer};

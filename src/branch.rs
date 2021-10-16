@@ -12,7 +12,6 @@ use rkyv::Archive;
 
 use crate::annotations::Annotation;
 use crate::compound::{ArchivedCompound, Child, Compound};
-use crate::primitive::Primitive;
 use crate::walk::{AllLeaves, Slot, Slots, Step, Walker};
 
 pub enum LevelNode<'a, C>
@@ -25,9 +24,9 @@ where
 
 pub struct Level<'a, C, A>
 where
-    C: Compound<A>,
+    C: Archive + Compound<A>,
     C::Archived: ArchivedCompound<C, A>,
-    A: Primitive + Annotation<C::Leaf>,
+    A: Annotation<C::Leaf>,
 {
     offset: usize,
     // pub to be accesible from `walk.rs`
@@ -37,9 +36,9 @@ where
 
 impl<'a, C, A> Level<'a, C, A>
 where
-    C: Compound<A>,
+    C: Archive + Compound<A>,
     C::Archived: ArchivedCompound<C, A>,
-    A: Primitive + Annotation<C::Leaf>,
+    A: Annotation<C::Leaf>,
 {
     pub fn new(root: LevelNode<'a, C>) -> Level<'a, C, A> {
         Level {
@@ -61,9 +60,9 @@ where
 
 impl<'a, C, A> Slots<C, A> for &Level<'a, C, A>
 where
-    C: Compound<A>,
+    C: Archive + Compound<A>,
     C::Archived: ArchivedCompound<C, A>,
-    A: Primitive + Annotation<C::Leaf>,
+    A: Annotation<C::Leaf>,
 {
     fn slot(&self, ofs: usize) -> Slot<C, A> {
         let child = match &self.node {
@@ -82,15 +81,15 @@ where
 
 pub struct PartialBranch<'a, C, A>(Vec<Level<'a, C, A>>)
 where
-    C: Compound<A>,
+    C: Archive + Compound<A>,
     C::Archived: ArchivedCompound<C, A>,
-    A: Primitive + Annotation<C::Leaf>;
+    A: Annotation<C::Leaf>;
 
 impl<'a, C, A> PartialBranch<'a, C, A>
 where
-    C: Compound<A>,
+    C: Archive + Compound<A>,
     C::Archived: ArchivedCompound<C, A>,
-    A: Primitive + Annotation<C::Leaf>,
+    A: Annotation<C::Leaf>,
 {
     fn new(root: LevelNode<'a, C>) -> Self {
         PartialBranch(vec![Level::new(root)])
@@ -148,9 +147,9 @@ where
     {
         enum State<'a, C, A>
         where
-            C: Compound<A>,
+            C: Archive + Compound<A>,
             C::Archived: ArchivedCompound<C, A>,
-            A: Primitive + Annotation<C::Leaf>,
+            A: Annotation<C::Leaf>,
         {
             Init,
             Push(Level<'a, C, A>),
@@ -207,9 +206,9 @@ where
 
 impl<'a, C, A> Branch<'a, C, A>
 where
-    C: Compound<A>,
+    C: Archive + Compound<A>,
     C::Archived: ArchivedCompound<C, A>,
-    A: Primitive + Annotation<C::Leaf>,
+    A: Annotation<C::Leaf>,
 {
     /// Returns the depth of the branch
     pub fn depth(&self) -> usize {
@@ -248,6 +247,21 @@ where
         let mut partial = PartialBranch::new(LevelNode::Memory(root));
         partial.walk(&mut walker).map(|()| Branch(partial))
     }
+
+    /// Performs a tree walk, returning either a valid branch or None if the
+    /// walk failed.
+    pub fn walk_archived<W>(
+        root: &'a C::Archived,
+        mut walker: W,
+    ) -> Option<Self>
+    where
+        C: Compound<A>,
+        A: Annotation<C::Leaf>,
+        W: Walker<C, A>,
+    {
+        let mut partial = PartialBranch::new(LevelNode::Archived(root));
+        partial.walk(&mut walker).map(|()| Branch(partial))
+    }
 }
 
 /// Reprents an immutable branch view into a collection.
@@ -256,15 +270,15 @@ where
 /// to the pointed-at leaf.
 pub struct Branch<'a, C, A>(PartialBranch<'a, C, A>)
 where
-    C: Compound<A>,
+    C: Archive + Compound<A>,
     C::Archived: ArchivedCompound<C, A>,
-    A: Primitive + Annotation<C::Leaf>;
+    A: Annotation<C::Leaf>;
 
 impl<'a, C, A> Deref for Branch<'a, C, A>
 where
-    C: Compound<A>,
+    C: Archive + Compound<A>,
     C::Archived: ArchivedCompound<C, A>,
-    A: Primitive + Annotation<C::Leaf>,
+    A: Annotation<C::Leaf>,
 {
     type Target = C::Leaf;
 
@@ -275,9 +289,9 @@ where
 
 pub struct MappedBranch<'a, C, A, M>
 where
-    C: Compound<A>,
+    C: Archive + Compound<A>,
     C::Archived: ArchivedCompound<C, A>,
-    A: Primitive + Annotation<C::Leaf>,
+    A: Annotation<C::Leaf>,
 {
     inner: Branch<'a, C, A>,
     closure: for<'b> fn(&'b C::Leaf) -> &'b M,
@@ -285,10 +299,9 @@ where
 
 impl<'a, C, A, M> Deref for MappedBranch<'a, C, A, M>
 where
-    C: Compound<A>,
-    C::Leaf: 'a,
+    C: Archive + Compound<A>,
     C::Archived: ArchivedCompound<C, A>,
-    A: Primitive + Annotation<C::Leaf>,
+    A: Annotation<C::Leaf>,
 {
     type Target = M;
 
@@ -299,9 +312,9 @@ where
 
 pub enum BranchIterator<'a, C, A, W>
 where
-    C: Compound<A>,
+    C: Archive + Compound<A>,
     C::Archived: ArchivedCompound<C, A>,
-    A: Primitive + Annotation<C::Leaf>,
+    A: Annotation<C::Leaf>,
 {
     Initial(Branch<'a, C, A>, W),
     Intermediate(Branch<'a, C, A>, W),
@@ -311,10 +324,10 @@ where
 // iterators
 impl<'a, C, A> IntoIterator for Branch<'a, C, A>
 where
-    C: Compound<A>,
+    C: Archive + Compound<A>,
     C::Leaf: 'a,
     C::Archived: ArchivedCompound<C, A>,
-    A: Primitive + Annotation<C::Leaf>,
+    A: Annotation<C::Leaf>,
 {
     type Item = &'a C::Leaf;
 
@@ -327,10 +340,10 @@ where
 
 impl<'a, C, A, W> Iterator for BranchIterator<'a, C, A, W>
 where
-    C: Compound<A>,
+    C: Archive + Compound<A>,
     C::Leaf: 'a,
     C::Archived: ArchivedCompound<C, A>,
-    A: Primitive + Annotation<C::Leaf>,
+    A: Annotation<C::Leaf>,
     W: Walker<C, A>,
 {
     type Item = &'a C::Leaf;
@@ -372,9 +385,9 @@ where
 
 pub enum MappedBranchIterator<'a, C, A, W, M>
 where
-    C: Compound<A>,
+    C: Archive + Compound<A>,
     C::Archived: ArchivedCompound<C, A>,
-    A: Primitive + Annotation<C::Leaf>,
+    A: Annotation<C::Leaf>,
 {
     Initial(MappedBranch<'a, C, A, M>, W),
     Intermediate(MappedBranch<'a, C, A, M>, W),
@@ -383,10 +396,9 @@ where
 
 impl<'a, C, A, M> IntoIterator for MappedBranch<'a, C, A, M>
 where
-    C: Compound<A>,
-    C::Leaf: 'a,
+    C: Archive + Compound<A>,
     C::Archived: ArchivedCompound<C, A>,
-    A: Primitive + Annotation<C::Leaf>,
+    A: Annotation<C::Leaf>,
     M: 'a,
 {
     type Item = &'a M;
@@ -400,10 +412,9 @@ where
 
 impl<'a, C, A, W, M> Iterator for MappedBranchIterator<'a, C, A, W, M>
 where
-    C: Compound<A>,
-    C::Leaf: 'a,
+    C: Archive + Compound<A>,
     C::Archived: ArchivedCompound<C, A>,
-    A: Primitive + Annotation<C::Leaf>,
+    A: Annotation<C::Leaf>,
     W: Walker<C, A>,
     M: 'a,
 {
