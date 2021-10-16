@@ -1,5 +1,5 @@
 use std::{
-    cell::{RefCell, UnsafeCell},
+    borrow::BorrowMut,
     fs::{File, OpenOptions},
     io::{self, Write},
     marker::PhantomData,
@@ -9,24 +9,21 @@ use std::{
 };
 
 use rkyv::{
-    archived_root,
-    ser::{serializers::WriteSerializer, Serializer},
-    AlignedVec, Archive, Serialize,
+    archived_root, ser::Serializer, AlignedVec, Archive, Fallible, Infallible,
+    Serialize,
 };
 
-use parking_lot::ReentrantMutex;
+use parking_lot::RwLock;
 
 use memmap::Mmap;
-
-pub type DefaultSer<'a> = WriteSerializer<&'a mut [u8]>;
-
-pub trait Chonkable: for<'a> Serialize<DefaultSer<'a>> {}
-
-impl<T> Chonkable for T where T: for<'a> Serialize<DefaultSer<'a>> {}
 
 pub struct Offset<T>(u64, PhantomData<T>);
 
 pub struct RawOffset(u64);
+
+/// Helper trait to constrain serializers used with Storage;
+pub trait StorageSerializer: Serializer + Sized + BorrowMut<Storage> {}
+impl<T> StorageSerializer for T where T: Serializer + Sized + BorrowMut<Storage> {}
 
 impl<T> std::fmt::Debug for Offset<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -61,12 +58,6 @@ impl<T> Offset<T> {
     }
 }
 
-/// Support trait for serializers/deserializers.
-pub trait Chonky {
-    /// Return a reference to the associated chonker
-    fn chonker(&self) -> &Chonker;
-}
-
 const FIRST_CHONK_SIZE: usize = 64 * 1024;
 const N_LANES: usize = 32;
 
@@ -88,101 +79,73 @@ impl std::fmt::Debug for Lane {
     }
 }
 
-/// Chonker
+/// Portal
 ///
 /// A hybrid memory/disk storage for an append only sequence of bytes.
 #[derive(Clone, Debug, Default)]
-pub struct Chonker(Arc<ChonkerInner>);
+pub struct Portal(Arc<RwLock<Storage>>);
 
-impl Chonker {
-    /// Creates a new empty chonker
+impl Portal {
+    /// Creates a new empty portal
     pub fn new() -> Self {
         Default::default()
     }
 
-    /// Commits a value to the chonker
+    /// Commits a value to the portal
     pub fn put<T>(&self, t: &T) -> Offset<T>
     where
-        T: Archive + Chonkable,
+        T: Archive + Serialize<Storage>,
     {
-        self.0.put(t)
+        self.0.write().put(t)
     }
 
-    /// Gets a value previously commited to the chonker at offset `ofs`
-    pub fn get<T>(&self, ofs: Offset<T>) -> &T::Archived
+    /// Gets a value previously commited to the portal at offset `ofs`
+    pub fn get<'a, T>(&'a self, ofs: Offset<T>) -> &'a T::Archived
     where
         T: Archive,
     {
-        self.0.get(ofs)
+        let read = self.0.read();
+        let archived: &T::Archived = read.get(ofs);
+        // extend the lifetime to equal the lifetime of the `Portal`.
+        // This is safe, since the reference is guaranteed to not move until the
+        // process is shut down.
+        let extended: &'a T::Archived =
+            unsafe { std::mem::transmute(archived) };
+        extended
     }
 
-    /// Persist the chonker to disk
+    /// Persist the portal to disk
     pub fn persist<P: AsRef<Path>>(&self, path: P) -> io::Result<()> {
-        self.0.persist(path)
+        self.0.write().persist(path)
     }
-    /// Restore a chonker from disk
+    /// Restore a portal from disk
     pub fn restore<P: AsRef<Path>>(path: P) -> io::Result<Self> {
-        Ok(Chonker(Arc::new(ChonkerInner::restore(path)?)))
+        Ok(Portal(Arc::new(RwLock::new(Storage::restore(path)?))))
     }
 }
 
 /// Memory backend that never re-allocates
-struct ChonkerInner {
-    lanes: UnsafeCell<[Lane; N_LANES]>,
-    written: ReentrantMutex<RefCell<u64>>,
+pub struct Storage {
+    lanes: [Lane; N_LANES],
+    written: usize,
 }
 
-impl std::fmt::Debug for ChonkerInner {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("ChonkerInner").finish()
+impl Fallible for Storage {
+    type Error = Infallible;
+}
+
+impl Serializer for Storage {
+    fn pos(&self) -> usize {
+        self.written
     }
-}
 
-impl Default for ChonkerInner {
-    fn default() -> Self {
-        ChonkerInner {
-            lanes: UnsafeCell::new(Default::default()),
-            written: ReentrantMutex::new(RefCell::new(0)),
-        }
-    }
-}
-
-unsafe impl Sync for ChonkerInner {}
-
-const fn lane_from_offset(offset: u64) -> (usize, usize) {
-    const USIZE_BITS: usize = std::mem::size_of::<usize>() * 8;
-    let i = offset / FIRST_CHONK_SIZE as u64 + 1;
-    let lane = USIZE_BITS - i.leading_zeros() as usize - 1;
-    let lane_offset =
-        offset - (2u64.pow(lane as u32) - 1) * FIRST_CHONK_SIZE as u64;
-    (lane, lane_offset as usize)
-}
-
-const fn lane_size_from_lane(lane: usize) -> usize {
-    FIRST_CHONK_SIZE * 2usize.pow(lane as u32)
-}
-
-impl ChonkerInner {
-    /// Stores a value into the chonker
-    fn put<T>(&self, t: &T) -> Offset<T>
-    where
-        T: Archive + Chonkable,
-    {
-        let lock = self.written.lock();
-        let mut written = lock.borrow_mut();
-
-        let archived_size = std::mem::size_of::<T::Archived>();
-        let alignment = std::mem::align_of::<T::Archived>();
-
-        let alignment_pad = (*written % alignment as u64) as usize;
-
-        let lanes = unsafe { &mut *self.lanes.get() };
-
-        let (mut lane, mut lane_written) = lane_from_offset(*written);
+    fn write(&mut self, bytes: &[u8]) -> Result<(), Self::Error> {
+        let (mut lane, mut lane_written) = lane_from_offset(self.written);
+        let bytes_len = bytes.len();
 
         loop {
             let cap = lane_size_from_lane(lane);
-            match &mut lanes[lane] {
+            match &mut self.lanes[lane] {
                 Lane {
                     ram: ram @ None, ..
                 } => {
@@ -194,53 +157,85 @@ impl ChonkerInner {
                     map,
                     ..
                 } => {
-                    let space_left = cap - lane_written - alignment_pad;
+                    let space_left = cap - lane_written;
                     // No space
-                    if space_left < archived_size {
+                    if space_left < bytes_len {
                         // Take into account the padding at the end of the lane
-                        *written += space_left as u64;
+                        self.written += space_left;
 
                         // Try writing in the next lane
                         lane += 1;
                         lane_written = 0;
                     } else {
-                        // Enough room to write here
-                        *written += alignment_pad as u64;
+                        self.written += bytes_len;
 
-                        let offset = Offset::new(*written);
-
-                        *written += archived_size as u64;
-
-                        let slice = if let Some(map) = map {
+                        let buffer = if let Some(map) = map {
                             let ofs = lane_written - map.len();
-                            unsafe { ram.set_len(ofs + archived_size) };
-                            &mut ram[ofs..][..archived_size]
+                            unsafe { ram.set_len(ofs + bytes_len) };
+                            &mut ram[ofs..][..bytes_len]
                         } else {
-                            unsafe {
-                                ram.set_len(lane_written + archived_size)
-                            };
-                            &mut ram[lane_written..][..archived_size]
+                            unsafe { ram.set_len(lane_written + bytes_len) };
+                            &mut ram[lane_written..][..bytes_len]
                         };
-                        let mut serializer = WriteSerializer::new(slice);
-                        serializer.serialize_value(t).expect("infallible");
-                        return offset;
+
+                        buffer.copy_from_slice(bytes);
+                        return Ok(());
                     }
                 }
             }
         }
     }
+}
 
-    /// Gets a value from the chonker at offset `ofs`
+impl std::fmt::Debug for Storage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Storage").finish()
+    }
+}
+
+impl Default for Storage {
+    fn default() -> Self {
+        Storage {
+            lanes: Default::default(),
+            written: 0,
+        }
+    }
+}
+
+unsafe impl Sync for Storage {}
+
+const fn lane_from_offset(offset: usize) -> (usize, usize) {
+    const USIZE_BITS: usize = std::mem::size_of::<usize>() * 8;
+    let i = offset / FIRST_CHONK_SIZE + 1;
+    let lane = USIZE_BITS - i.leading_zeros() as usize - 1;
+    let lane_offset = offset - (2usize.pow(lane as u32) - 1) * FIRST_CHONK_SIZE;
+    (lane, lane_offset)
+}
+
+const fn lane_size_from_lane(lane: usize) -> usize {
+    FIRST_CHONK_SIZE * 2usize.pow(lane as u32)
+}
+
+impl Storage {
+    /// Commits a value to the portal
+    pub fn put<T>(&mut self, t: &T) -> Offset<T>
+    where
+        T: Archive + Serialize<Storage>,
+    {
+        let _ = self.serialize_value(t);
+        let ofs = self.written - std::mem::size_of::<T::Archived>();
+        Offset::new(ofs as u64)
+    }
+
+    /// Gets a value from the portal at offset `ofs`
     fn get<T>(&self, ofs: Offset<T>) -> &T::Archived
     where
         T: Archive,
     {
-        let (lane, lane_ofs) = lane_from_offset(*ofs);
+        let (lane, lane_ofs) = lane_from_offset(*ofs as usize);
         let archived_len = std::mem::size_of::<T::Archived>();
 
-        let lanes = unsafe { &*self.lanes.get() };
-
-        match &lanes[lane] {
+        match &self.lanes[lane] {
             Lane {
                 ram: Some(ram),
                 map,
@@ -270,15 +265,9 @@ impl ChonkerInner {
         }
     }
 
-    /// Persist the chonker to disk
-    fn persist<P: AsRef<Path>>(&self, path: P) -> io::Result<()> {
-        // We take the write guard to make sure writes block until persistance
-        // is complete.
-        let _write = self.written.lock();
-
-        for (i, lane) in
-            unsafe { &mut *self.lanes.get() }.iter_mut().enumerate()
-        {
+    /// Persist the portal to disk
+    fn persist<P: AsRef<Path>>(&mut self, path: P) -> io::Result<()> {
+        for (i, lane) in self.lanes.iter_mut().enumerate() {
             match lane {
                 Lane { ram: None, .. } => {
                     // no-op
@@ -311,7 +300,7 @@ impl ChonkerInner {
         Ok(())
     }
 
-    /// Open a chonker from disk
+    /// Open a portal from disk
     fn restore<P: AsRef<Path>>(path: P) -> io::Result<Self> {
         // We take the write guard to make sure writes block until persistance
         // is complete.
@@ -332,7 +321,7 @@ impl ChonkerInner {
 
                 let map = unsafe { Mmap::map(&file)? };
 
-                written += map.len() as u64;
+                written += map.len();
 
                 *lane = Lane {
                     map: Some(map),
@@ -344,9 +333,9 @@ impl ChonkerInner {
             }
         }
 
-        Ok(ChonkerInner {
-            lanes: UnsafeCell::new(lanes),
-            written: ReentrantMutex::new(RefCell::new(written)),
+        Ok(Storage {
+            lanes: lanes,
+            written,
         })
     }
 }
@@ -356,11 +345,9 @@ mod test {
     use super::*;
     use rend::LittleEndian;
 
-    const FCS: u64 = FIRST_CHONK_SIZE as u64;
-
     #[test]
     fn many_raw() {
-        let chonker = Chonker::default();
+        let portal = Portal::default();
 
         const N: usize = 1024 * 64;
 
@@ -369,18 +356,20 @@ mod test {
         for i in 0..N {
             let le: LittleEndian<u32> = (i as u32).into();
 
-            references.push(chonker.put(&le));
+            references.push(portal.put(&le));
         }
 
         for i in 0..N {
             let le: LittleEndian<u32> = (i as u32).into();
 
-            assert_eq!(chonker.get(references[i]), &le);
+            assert_eq!(portal.get(references[i]), &le);
         }
     }
 
     #[test]
     fn lane_math() {
+        const FCS: usize = FIRST_CHONK_SIZE;
+
         assert_eq!(lane_from_offset(0), (0, 0));
         assert_eq!(lane_from_offset(1), (0, 1));
         assert_eq!(lane_from_offset(FCS), (1, 0));
@@ -391,7 +380,7 @@ mod test {
 
     #[test]
     fn many_raw_persist() -> io::Result<()> {
-        let chonker = Chonker::default();
+        let portal = Portal::default();
 
         const N: usize = 1024 * 64;
 
@@ -400,31 +389,31 @@ mod test {
         for i in 0..N {
             let le: LittleEndian<u32> = (i as u32).into();
 
-            references.push(chonker.put(&le));
+            references.push(portal.put(&le));
         }
 
         for i in 0..N {
             let le: LittleEndian<u32> = (i as u32).into();
 
-            assert_eq!(chonker.get(references[i]), &le);
+            assert_eq!(portal.get(references[i]), &le);
         }
 
         use tempfile::tempdir;
 
         let dir = tempdir()?;
 
-        chonker.persist(dir.path())?;
+        portal.persist(dir.path())?;
 
-        drop(chonker);
+        drop(portal);
 
-        let new_chonker = Chonker::restore(&dir)?;
+        let new_portal = Portal::restore(&dir)?;
 
         // read the same values from disk
 
         for i in 0..N {
             let le: LittleEndian<u32> = (i as u32).into();
 
-            assert_eq!(new_chonker.get(references[i]), &le);
+            assert_eq!(new_portal.get(references[i]), &le);
         }
 
         // now write some more!
@@ -432,7 +421,7 @@ mod test {
         for i in N..N * 2 {
             let le: LittleEndian<u32> = (i as u32).into();
 
-            references.push(new_chonker.put(&le));
+            references.push(new_portal.put(&le));
         }
 
         // and read all back
@@ -442,16 +431,16 @@ mod test {
 
             let ofs = references[i];
 
-            assert_eq!(new_chonker.get(ofs), &le);
+            assert_eq!(new_portal.get(ofs), &le);
         }
 
         // persist again
 
-        new_chonker.persist(dir.path())?;
+        new_portal.persist(dir.path())?;
 
-        drop(new_chonker);
+        drop(new_portal);
 
-        let even_newer_chonker = Chonker::restore(dir)?;
+        let even_newer_portal = Portal::restore(dir)?;
 
         // read all back again
 
@@ -460,7 +449,7 @@ mod test {
 
             let ofs = references[i];
 
-            assert_eq!(even_newer_chonker.get(ofs), &le);
+            assert_eq!(even_newer_portal.get(ofs), &le);
         }
 
         Ok(())

@@ -5,16 +5,17 @@
 // Copyright (c) DUSK NETWORK. All rights reserializeved.
 
 use microkelvin::{
-    Annotation, ArchivedCompound, Cardinality, Child, ChildMut, Chonker,
-    Chonky, Compound, First, Link, MutableLeaves, Nth,
+    Annotation, ArchivedCompound, Cardinality, Child, ChildMut, Compound,
+    First, Link, MutableLeaves, Nth, Portal, Storage, StorageSerializer,
 };
 use rend::LittleEndian;
-use rkyv::{ser::Serializer, Archive, Deserialize, Infallible, Serialize};
+use rkyv::{Archive, Deserialize, Infallible, Serialize};
 
 #[derive(Clone, Archive, Serialize, Deserialize)]
 #[archive(bound(serialize = "
-  A: Annotation<T> + Serialize<__S>,
-  __S: Serializer + Sized + Chonky"))]
+  T: Serialize<Storage>,
+  A: Annotation<T>,
+  __S: StorageSerializer"))]
 #[archive(bound(deserialize = "
   A: Archive + Clone,
   A::Archived: Deserialize<A, __D>,
@@ -331,7 +332,7 @@ fn deref_mapped_mutable_branch() {
 
 #[test]
 fn push_nth_persist() {
-    let chonker = Chonker::default();
+    let portal = Portal::default();
 
     let n = 1024;
 
@@ -346,7 +347,7 @@ fn push_nth_persist() {
         assert_eq!(*list.nth(i).expect("Some(branch)"), n - i - 1)
     }
 
-    let ofs = chonker.put(&list);
+    let ofs = portal.put(&list);
 
-    let _restored = chonker.get(ofs);
+    let _restored = portal.get(ofs);
 }

@@ -38,5 +38,5 @@ pub use link::Link;
 pub use primitive::Primitive;
 pub use walk::{First, Step, Walker};
 
-mod chonker;
-pub use chonker::{Chonker, Chonky};
+mod storage;
+pub use storage::{Portal, Storage, StorageSerializer};

@@ -7,13 +7,14 @@
 use alloc::rc::Rc;
 use core::cell::RefCell;
 use rkyv::ser::Serializer;
+use std::borrow::BorrowMut;
 
 use owning_ref::OwningRef;
 use rkyv::{Archive, Deserialize, Serialize};
 use rkyv::{Fallible, Infallible};
 
-use crate::chonker::{Chonkable, Chonky, Offset, RawOffset};
-use crate::{ARef, Annotation, ArchivedCompound, Chonker, Compound};
+use crate::storage::{Offset, RawOffset, Storage};
+use crate::{ARef, Annotation, ArchivedCompound, Compound, Portal};
 
 pub enum NodeRef<'a, C, CA> {
     Memory(&'a C),
@@ -40,7 +41,7 @@ pub enum Link<C, A> {
         /// the final annotation
         a: A,
         /// link to the chonky boi
-        chonker: Chonker,
+        portal: Portal,
     },
 }
 
@@ -76,9 +77,9 @@ where
 
 impl<C, A, S> Serialize<S> for Link<C, A>
 where
-    C: Compound<A> + Serialize<S> + Chonkable,
-    A: Annotation<C::Leaf> + Serialize<S>,
-    S: Serializer + Fallible + Chonky,
+    C: Compound<A> + Serialize<S> + Serialize<Storage>,
+    A: Annotation<C::Leaf>,
+    S: Serializer + BorrowMut<Storage>,
 {
     fn serialize(
         &self,
@@ -92,7 +93,7 @@ where
                     todo!()
                 };
                 let to_insert = &(**rc);
-                let ofs = serializer.chonker().put(to_insert).into_raw();
+                let ofs = serializer.borrow_mut().put(to_insert).into_raw();
                 Ok((ofs, a))
             }
             Link::Archived { .. } => todo!(),
@@ -173,8 +174,8 @@ impl<C, A> Link<C, A> {
     {
         match self {
             Link::Memory { rc, .. } => NodeRef::Memory(&(*rc)),
-            Link::Archived { ofs, chonker, .. } => {
-                NodeRef::Archived(chonker.get(*ofs))
+            Link::Archived { ofs, portal, .. } => {
+                NodeRef::Archived(portal.get(*ofs))
             }
         }
     }
@@ -189,11 +190,12 @@ impl<C, A> Link<C, A> {
     {
         match self {
             Link::Memory { rc, annotation } => {
-                *annotation.borrow_mut() = None;
+                // clear annotation
+                annotation.borrow_mut().take();
                 return Rc::make_mut(rc);
             }
-            Link::Archived { ofs, chonker, .. } => {
-                let archived = chonker.get(*ofs);
+            Link::Archived { ofs, portal, .. } => {
+                let archived = portal.get(*ofs);
                 let c = archived.deserialize(&mut rkyv::Infallible).unwrap();
                 *self = Link::Memory {
                     rc: Rc::new(c),
