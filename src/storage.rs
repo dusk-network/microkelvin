@@ -147,7 +147,7 @@ impl Portal {
         T: Archive,
     {
         let read = self.0.read();
-        let archived: &T::Archived = read.get(ofs);
+        let archived: &T::Archived = read.get::<T>(ofs);
         // extend the lifetime to equal the lifetime of the `Portal`.
         // This is safe, since the reference is guaranteed to not move until the
         // process is shut down.
@@ -266,7 +266,7 @@ impl Storage {
     {
         let _ = self.serialize_value(t);
         let ofs = self.written - std::mem::size_of::<T::Archived>();
-        Stored::new(ofs as u64, portal)
+        Stored::new(RawOffset::new(ofs as u64), portal)
     }
 
     /// Commits a value to the portal
@@ -414,7 +414,7 @@ mod test {
         for i in 0..N {
             let le: LittleEndian<u32> = (i as u32).into();
 
-            assert_eq!(portal.get(references[i]), &le);
+            assert_eq!(references[i].archived(), &le);
         }
     }
 
@@ -447,7 +447,7 @@ mod test {
         for i in 0..N {
             let le: LittleEndian<u32> = (i as u32).into();
 
-            assert_eq!(portal.get(references[i]), &le);
+            assert_eq!(references[i].archived(), &le);
         }
 
         use tempfile::tempdir;
@@ -465,7 +465,7 @@ mod test {
         for i in 0..N {
             let le: LittleEndian<u32> = (i as u32).into();
 
-            assert_eq!(new_portal.get(references[i]), &le);
+            assert_eq!(references[i].archived(), &le);
         }
 
         // now write some more!
@@ -481,9 +481,7 @@ mod test {
         for i in 0..N * 2 {
             let le: LittleEndian<u32> = (i as u32).into();
 
-            let ofs = references[i];
-
-            assert_eq!(new_portal.get(ofs), &le);
+            assert_eq!(references[i].archived(), &le);
         }
 
         // persist again
@@ -499,9 +497,7 @@ mod test {
         for i in 0..N * 2 {
             let le: LittleEndian<u32> = (i as u32).into();
 
-            let ofs = references[i];
-
-            assert_eq!(even_newer_portal.get(ofs), &le);
+            assert_eq!(references[i].archived(), &le);
         }
 
         Ok(())
