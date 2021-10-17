@@ -1,5 +1,5 @@
 use std::{
-    borrow::BorrowMut,
+    borrow::{Borrow, BorrowMut},
     fs::{File, OpenOptions},
     io::{self, Write},
     marker::PhantomData,
@@ -37,11 +37,26 @@ impl<T> Stored<T>
 where
     T: Archive,
 {
+    pub(crate) fn new(offset: RawOffset, portal: Portal) -> Self {
+        debug_assert!(*offset % std::mem::align_of::<T>() as u64 == 0);
+        Stored {
+            offset,
+            portal,
+            _marker: PhantomData,
+        }
+    }
+
+    pub fn into_raw(self) -> RawOffset {
+        self.offset
+    }
+
     pub fn restore(&self) -> T
     where
-        T::Archived: Deserialize<T, Infallible>,
+        T::Archived: Deserialize<T, Portal>,
     {
-        self.archived().deserialize(&mut rkyv::Infallible).unwrap()
+        self.archived()
+            .deserialize(&mut self.portal.clone())
+            .unwrap()
     }
 
     pub fn archived(&self) -> &T::Archived {
@@ -70,24 +85,13 @@ impl RawOffset {
 pub trait StorageSerializer: Serializer + Sized + BorrowMut<Storage> {}
 impl<T> StorageSerializer for T where T: Serializer + Sized + BorrowMut<Storage> {}
 
+/// Helper trait to constrain deserializers used with Storage;
+pub trait PortalDeserializer: Fallible + Sized + Borrow<Portal> {}
+impl<T> PortalDeserializer for T where T: Fallible + Sized + Borrow<Portal> {}
+
 impl<T> std::fmt::Debug for Stored<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_tuple("Offset").field(&self.offset).finish()
-    }
-}
-
-impl<T> Stored<T> {
-    fn new(offset: RawOffset, portal: Portal) -> Self {
-        debug_assert!(*offset % std::mem::align_of::<T>() as u64 == 0);
-        Stored {
-            offset,
-            portal,
-            _marker: PhantomData,
-        }
-    }
-
-    pub fn into_raw(self) -> RawOffset {
-        self.offset
     }
 }
 
@@ -173,6 +177,10 @@ pub struct Storage {
 }
 
 impl Fallible for Storage {
+    type Error = Infallible;
+}
+
+impl Fallible for Portal {
     type Error = Infallible;
 }
 
@@ -487,10 +495,6 @@ mod test {
         // persist again
 
         new_portal.persist(dir.path())?;
-
-        drop(new_portal);
-
-        let even_newer_portal = Portal::restore(dir)?;
 
         // read all back again
 

@@ -6,10 +6,11 @@
 
 use microkelvin::{
     Annotation, ArchivedCompound, Cardinality, Child, ChildMut, Compound,
-    First, Link, MutableLeaves, Nth, Portal, Storage, StorageSerializer,
+    First, Link, MutableLeaves, Nth, Portal, PortalDeserializer, Storage,
+    StorageSerializer,
 };
 use rend::LittleEndian;
-use rkyv::{Archive, Deserialize, Infallible, Serialize};
+use rkyv::{Archive, Deserialize, Serialize};
 
 #[derive(Clone, Archive, Serialize, Deserialize)]
 #[archive(bound(serialize = "
@@ -18,9 +19,9 @@ use rkyv::{Archive, Deserialize, Infallible, Serialize};
   __S: StorageSerializer"))]
 #[archive(bound(deserialize = "
   A: Archive + Clone,
-  A::Archived: Deserialize<A, __D>,
   T::Archived: Deserialize<T, __D>,
-  __D: Sized"))]
+  A::Archived: Deserialize<A, __D>,
+  __D: PortalDeserializer"))]
 pub enum LinkedList<T, A> {
     Empty,
     Node {
@@ -39,7 +40,8 @@ impl<T, A> Default for LinkedList<T, A> {
 impl<T, A> ArchivedCompound<LinkedList<T, A>, A> for ArchivedLinkedList<T, A>
 where
     T: Archive,
-    T::Archived: Deserialize<T, Infallible>,
+    T::Archived: Deserialize<T, Portal>,
+    A::Archived: Deserialize<A, Portal>,
     A: Annotation<T>,
 {
     fn child(&self, _ofs: usize) -> Child<LinkedList<T, A>, A> {
@@ -349,5 +351,9 @@ fn push_nth_persist() {
 
     let stored = portal.put(&list);
 
-    let stored = stored.restore();
+    let restored = stored.restore();
+
+    for i in 0..n {
+        assert_eq!(*restored.nth(i).expect("Some(branch)"), n - i - 1)
+    }
 }

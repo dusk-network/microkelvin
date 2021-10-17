@@ -7,11 +7,11 @@
 use alloc::rc::Rc;
 use core::cell::RefCell;
 use rkyv::ser::Serializer;
-use std::borrow::BorrowMut;
+use std::borrow::{Borrow, BorrowMut};
 
 use owning_ref::OwningRef;
+use rkyv::Fallible;
 use rkyv::{Archive, Deserialize, Serialize};
-use rkyv::{Fallible, Infallible};
 
 use crate::storage::{RawOffset, Storage, Stored};
 use crate::{ARef, Annotation, ArchivedCompound, Compound, Portal};
@@ -40,8 +40,6 @@ pub enum Link<C, A> {
         stored: Stored<C>,
         /// the final annotation
         a: A,
-        /// link to the chonky boi
-        portal: Portal,
     },
 }
 
@@ -61,17 +59,22 @@ impl<C, A> Archive for Link<C, A> {
     }
 }
 
-impl<C, A, S> Deserialize<Link<C, A>, S> for ArchivedLink<A>
+impl<C, A, D> Deserialize<Link<C, A>, D> for ArchivedLink<A>
 where
+    C: Archive,
     A: Archive + Clone,
-    A::Archived: Deserialize<A, S>,
-    S: Fallible,
+    A::Archived: Deserialize<A, D>,
+    D: Fallible + Borrow<Portal>,
 {
     fn deserialize(
         &self,
-        _de: &mut S,
-    ) -> Result<Link<C, A>, <S as Fallible>::Error> {
-        todo!()
+        de: &mut D,
+    ) -> Result<Link<C, A>, <D as Fallible>::Error> {
+        let borrow: &Portal = (*de).borrow();
+        Ok(Link::Archived {
+            stored: Stored::new(self.0, borrow.clone()),
+            a: self.1.clone(),
+        })
     }
 }
 
@@ -174,7 +177,7 @@ impl<C, A> Link<C, A> {
     {
         match self {
             Link::Memory { rc, .. } => NodeRef::Memory(&(*rc)),
-            Link::Archived { stored, portal, .. } => {
+            Link::Archived { stored, .. } => {
                 NodeRef::Archived(stored.archived())
             }
         }
@@ -186,7 +189,7 @@ impl<C, A> Link<C, A> {
     pub fn inner_mut(&mut self) -> &mut C
     where
         C: Archive + Clone,
-        C::Archived: Deserialize<C, Infallible>,
+        C::Archived: Deserialize<C, Portal>,
     {
         match self {
             Link::Memory { rc, annotation } => {
@@ -194,7 +197,7 @@ impl<C, A> Link<C, A> {
                 annotation.borrow_mut().take();
                 return Rc::make_mut(rc);
             }
-            Link::Archived { stored, portal, .. } => {
+            Link::Archived { stored, .. } => {
                 let c = stored.restore();
 
                 *self = Link::Memory {

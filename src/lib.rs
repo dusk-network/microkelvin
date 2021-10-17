@@ -39,4 +39,4 @@ pub use primitive::Primitive;
 pub use walk::{AllLeaves, First, Step, Walker};
 
 mod storage;
-pub use storage::{Portal, Storage, StorageSerializer};
+pub use storage::{Portal, PortalDeserializer, Storage, StorageSerializer};

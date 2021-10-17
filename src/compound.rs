@@ -6,11 +6,12 @@
 
 use core::marker::PhantomData;
 
-use rkyv::{Archive, Deserialize, Infallible};
+use rkyv::{Archive, Deserialize};
 
 use crate::annotations::{ARef, Annotation};
 use crate::link::Link;
 use crate::storage::Stored;
+use crate::Portal;
 
 /// The response of the `child` method on a `Compound` node.
 #[derive(Debug)]
@@ -47,7 +48,7 @@ where
 }
 
 /// Trait to support branch traversal in archived nodes
-pub trait ArchivedCompound<C, A>: Deserialize<C, Infallible>
+pub trait ArchivedCompound<C, A>: Deserialize<C, Portal>
 where
     C: Compound<A>,
     A: Annotation<C::Leaf>,
