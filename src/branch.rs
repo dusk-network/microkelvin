@@ -33,7 +33,7 @@ where
     C::Archived: ArchivedCompound<C, A>,
     A: Annotation<C::Leaf>,
 {
-    pub fn new(root: LevelNode<'a, C>) -> Level<'a, C, A> {
+    pub fn new(root: AWrap<'a, C>) -> Level<'a, C, A> {
         Level {
             offset: 0,
             node: root,
@@ -59,13 +59,13 @@ where
 {
     fn slot(&self, ofs: usize) -> Slot<C, A> {
         match &self.node {
-            LevelNode::Memory(root) => match root.child(self.offset + ofs) {
+            AWrap::Memory(root) => match root.child(self.offset + ofs) {
                 Child::Leaf(l) => Slot::Leaf(l),
                 Child::Node(n) => Slot::Annotation(n.annotation()),
                 Child::Empty => Slot::Empty,
                 Child::EndOfNode => Slot::End,
             },
-            LevelNode::Archived(arch) => match arch.child(self.offset + ofs) {
+            AWrap::Archived(arch) => match arch.child(self.offset + ofs) {
                 ArchivedChild::Leaf(l) => Slot::ArchivedLeaf(l),
                 ArchivedChild::Node(n) => {
                     Slot::Annotation(ARef::Borrowed(n.annotation()))
@@ -89,7 +89,7 @@ where
     C::Archived: ArchivedCompound<C, A>,
     A: Annotation<C::Leaf>,
 {
-    fn new(root: LevelNode<'a, C>) -> Self {
+    fn new(root: AWrap<'a, C>) -> Self {
         PartialBranch(vec![Level::new(root)])
     }
 
@@ -110,11 +110,11 @@ where
         let ofs = top.offset();
 
         match &top.node {
-            LevelNode::Memory(root) => match root.child(ofs) {
+            AWrap::Memory(root) => match root.child(ofs) {
                 Child::Leaf(l) => Some(AWrap::Memory(l)),
                 _ => None,
             },
-            LevelNode::Archived(arch) => match arch.child(ofs) {
+            AWrap::Archived(arch) => match arch.child(ofs) {
                 ArchivedChild::Leaf(l) => Some(AWrap::Archived(l)),
                 _ => None,
             },
@@ -177,35 +177,34 @@ where
                     *top.offset_mut() += walk_ofs;
                     let ofs = top.offset();
 
-                    match &top.node {
-                        LevelNode::Memory(root) => match root.child(ofs) {
+                    let ca = match &top.node {
+                        AWrap::Memory(root) => match root.child(ofs) {
                             Child::Leaf(_) => return Some(()),
                             Child::Node(node) => match node.inner() {
-                                crate::link::NodeRef::Memory(c) => {
-                                    let level =
-                                        Level::new(LevelNode::Memory(c));
+                                AWrap::Memory(c) => {
+                                    let level = Level::new(AWrap::Memory(c));
                                     let extended: Level<'a, C, A> =
                                         unsafe { core::mem::transmute(level) };
                                     state = State::Push(extended);
+                                    continue;
                                 }
-                                crate::link::NodeRef::Archived(ca) => {
-                                    let level: Level<C, A> =
-                                        Level::new(LevelNode::Archived(ca));
-                                    let extended: Level<'a, C, A> =
-                                        unsafe { core::mem::transmute(level) };
-                                    state = State::Push(extended);
-                                }
+                                AWrap::Archived(ca) => ca,
                             },
                             _ => panic!("Invalid child found"),
                         },
-                        LevelNode::Archived(arch) => match arch.child(ofs) {
+                        AWrap::Archived(arch) => match arch.child(ofs) {
                             ArchivedChild::Leaf(_) => return Some(()),
                             ArchivedChild::Node(node) => {
-                                //
+                                //let a = node.inner();
+                                todo!("savelde")
                             }
                             _ => panic!("Invalid child found"),
                         },
-                    }
+                    };
+                    let level: Level<C, A> = Level::new(AWrap::Archived(ca));
+                    let extended: Level<'a, C, A> =
+                        unsafe { core::mem::transmute(level) };
+                    state = State::Push(extended);
                 }
                 Step::Advance => state = State::Pop,
                 Step::Abort => {
@@ -261,7 +260,7 @@ where
         A: Annotation<C::Leaf>,
         W: Walker<C, A>,
     {
-        let mut partial = PartialBranch::new(LevelNode::Memory(root));
+        let mut partial = PartialBranch::new(AWrap::Memory(root));
         partial.walk(&mut walker).map(|()| Branch(partial))
     }
 
@@ -276,7 +275,7 @@ where
         A: Annotation<C::Leaf>,
         W: Walker<C, A>,
     {
-        let mut partial = PartialBranch::new(LevelNode::Archived(root));
+        let mut partial = PartialBranch::new(AWrap::Archived(root));
         partial.walk(&mut walker).map(|()| Branch(partial))
     }
 }
