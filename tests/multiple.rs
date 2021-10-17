@@ -107,8 +107,8 @@ fn maximum_multiple() {
     let max = list.max_key().expect("Some(branch)");
 
     assert_eq!(
-        core::ops::Deref::deref(&max),
-        &TestLeaf {
+        *max.leaf(),
+        TestLeaf {
             key: 1023.into(),
             other: ()
         }

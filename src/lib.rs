@@ -23,8 +23,8 @@ mod branch;
 mod branch_mut;
 mod compound;
 mod link;
-mod primitive;
 mod walk;
+mod wrappers;
 
 pub use annotations::{
     ARef, Annotation, Cardinality, Combine, GetMaxKey, Keyed, MaxKey, Nth,
@@ -36,7 +36,7 @@ pub use compound::{
     MutableLeaves,
 };
 pub use link::Link;
-pub use primitive::Primitive;
+pub use wrappers::{Primitive, AWrap};
 pub use walk::{AllLeaves, First, Step, Walker};
 
 mod storage;

@@ -162,7 +162,7 @@ fn push_nth() {
     }
 
     for i in 0..n {
-        assert_eq!(*list.nth(i).expect("Some(branch)"), n - i - 1)
+        assert_eq!(*list.nth(i).expect("Some(branch)").leaf(), n - i - 1)
     }
 }
 
@@ -199,7 +199,7 @@ fn push_mut() {
     }
 
     for i in 0..n {
-        assert_eq!(*list.nth(i).expect("Some(branch)"), n - i)
+        assert_eq!(*list.nth(i).expect("Some(branch)").leaf(), n - i)
     }
 }
 
@@ -288,7 +288,7 @@ fn iterate_map() {
     }
 
     // branch from first element
-    let branch_mut = list.first().expect("Some(brach_mut)");
+    let branch_mut = list.first_mut().expect("Some(brach_mut)");
     let mapped = branch_mut.map_leaf(|x| x);
 
     let mut count = n - 1;
@@ -355,7 +355,7 @@ fn push_nth_persist() {
     }
 
     for i in 0..n {
-        assert_eq!(*list.nth(i).expect("Some(branch)"), n - i - 1)
+        assert_eq!(*list.nth(i).expect("Some(branch)").leaf(), n - i - 1)
     }
 
     let stored = portal.put(&list);
@@ -363,6 +363,6 @@ fn push_nth_persist() {
     let restored = stored.restore();
 
     for i in 0..n {
-        assert_eq!(*restored.nth(i).expect("Some(branch)"), n - i - 1)
+        assert_eq!(*restored.nth(i).expect("Some(branch)").leaf(), n - i - 1)
     }
 }

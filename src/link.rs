@@ -14,12 +14,7 @@ use rkyv::Fallible;
 use rkyv::{Archive, Deserialize, Serialize};
 
 use crate::storage::{RawOffset, Storage, Stored};
-use crate::{ARef, Annotation, ArchivedCompound, Compound, Portal};
-
-pub enum NodeRef<'a, C, CA> {
-    Memory(&'a C),
-    Archived(&'a CA),
-}
+use crate::{ARef, AWrap, Annotation, ArchivedCompound, Compound, Portal};
 
 #[derive(Clone, Debug)]
 /// The Link struct is an annotated merkle link to a compound type
@@ -177,15 +172,13 @@ impl<C, A> Link<C, A> {
     }
 
     /// Returns a reference to the inner node, possibly in its archived form
-    pub fn inner(&self) -> NodeRef<C, C::Archived>
+    pub fn inner(&self) -> AWrap<C>
     where
         C: Archive,
     {
         match self {
-            Link::Memory { rc, .. } => NodeRef::Memory(&(*rc)),
-            Link::Archived { stored, .. } => {
-                NodeRef::Archived(stored.archived())
-            }
+            Link::Memory { rc, .. } => AWrap::Memory(&(*rc)),
+            Link::Archived { stored, .. } => AWrap::Archived(stored.archived()),
         }
     }
 

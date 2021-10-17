@@ -15,8 +15,8 @@ use crate::annotations::{Annotation, Combine};
 use crate::branch::Branch;
 use crate::branch_mut::BranchMut;
 use crate::compound::{AnnoIter, Compound, MutableLeaves};
-use crate::primitive::Primitive;
 use crate::walk::{Slot, Slots, Step, Walker};
+use crate::wrappers::Primitive;
 use crate::ArchivedCompound;
 
 /// The maximum value of a collection

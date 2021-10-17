@@ -47,7 +47,7 @@ fn maximum() {
     let max = list.max_key().expect("Some(branch)");
 
     assert_eq!(
-        *core::ops::Deref::deref(&max),
+        *max.leaf(),
         TestLeaf {
             key: 1023.into(),
             other: ()

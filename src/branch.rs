@@ -10,18 +10,10 @@ use std::marker::PhantomData;
 use alloc::vec::Vec;
 use rkyv::Archive;
 
-use crate::annotations::Annotation;
+use crate::annotations::{ARef, Annotation};
 use crate::compound::{ArchivedChild, ArchivedCompound, Child, Compound};
 use crate::walk::{AllLeaves, Slot, Slots, Step, Walker};
-use crate::ARef;
-
-pub enum LevelNode<'a, C>
-where
-    C: Archive,
-{
-    Memory(&'a C),
-    Archived(&'a C::Archived),
-}
+use crate::wrappers::{AWrap, Primitive};
 
 pub struct Level<'a, C, A>
 where
@@ -31,7 +23,7 @@ where
 {
     offset: usize,
     // pub to be accesible from `walk.rs`
-    pub(crate) node: LevelNode<'a, C>,
+    pub(crate) node: AWrap<'a, C>,
     _marker: PhantomData<A>,
 }
 
@@ -109,7 +101,7 @@ where
         &self.0
     }
 
-    fn leaf(&self) -> Option<&C::Leaf>
+    fn leaf(&self) -> Option<AWrap<C::Leaf>>
     where
         C: Compound<A>,
         A: Annotation<C::Leaf>,
@@ -119,10 +111,13 @@ where
 
         match &top.node {
             LevelNode::Memory(root) => match root.child(ofs) {
-                Child::Leaf(l) => Some(l),
+                Child::Leaf(l) => Some(AWrap::Memory(l)),
                 _ => None,
             },
-            LevelNode::Archived(_) => todo!(),
+            LevelNode::Archived(arch) => match arch.child(ofs) {
+                ArchivedChild::Leaf(l) => Some(AWrap::Archived(l)),
+                _ => None,
+            },
         }
     }
 
@@ -205,7 +200,9 @@ where
                         },
                         LevelNode::Archived(arch) => match arch.child(ofs) {
                             ArchivedChild::Leaf(_) => return Some(()),
-                            ArchivedChild::Node(_) => todo!("b"),
+                            ArchivedChild::Node(node) => {
+                                //
+                            }
                             _ => panic!("Invalid child found"),
                         },
                     }
@@ -239,7 +236,7 @@ where
     /// Used in maps for example, to get easy access to the value of the KV-pair
     pub fn map_leaf<M>(
         self,
-        closure: for<'b> fn(&'b C::Leaf) -> &'b M,
+        closure: for<'b> fn(AWrap<'b, C::Leaf>) -> &'b M,
     ) -> MappedBranch<'a, C, A, M>
     where
         C: Compound<A>,
@@ -249,6 +246,11 @@ where
             inner: self,
             closure,
         }
+    }
+
+    /// Returns a reference to the currently pointed-at leaf
+    pub fn leaf(&self) -> AWrap<C::Leaf> {
+        self.0.leaf().expect("Invalid branch")
     }
 
     /// Performs a tree walk, returning either a valid branch or None if the
@@ -289,18 +291,19 @@ where
     C::Archived: ArchivedCompound<C, A>,
     A: Annotation<C::Leaf>;
 
-impl<'a, C, A> Deref for Branch<'a, C, A>
-where
-    C: Archive + Compound<A>,
-    C::Archived: ArchivedCompound<C, A>,
-    A: Annotation<C::Leaf>,
-{
-    type Target = C::Leaf;
+// impl<'a, C, A> Deref for Branch<'a, C, A>
+// where
+//     C: Archive + Compound<A>,
+//     C::Leaf: 'a,
+//     C::Archived: ArchivedCompound<C, A>,
+//     A: Annotation<C::Leaf>,
+// {
+//     type Target = AWrap<'a, C::Leaf>;
 
-    fn deref(&self) -> &Self::Target {
-        self.0.leaf().expect("Invalid branch")
-    }
-}
+//     fn deref(&self) -> &Self::Target {
+//         self.0.leaf().expect("Invalid branch")
+//     }
+// }
 
 pub struct MappedBranch<'a, C, A, M>
 where
@@ -309,21 +312,21 @@ where
     A: Annotation<C::Leaf>,
 {
     inner: Branch<'a, C, A>,
-    closure: for<'b> fn(&'b C::Leaf) -> &'b M,
+    closure: for<'b> fn(AWrap<'b, C::Leaf>) -> &'b M,
 }
 
-impl<'a, C, A, M> Deref for MappedBranch<'a, C, A, M>
-where
-    C: Archive + Compound<A>,
-    C::Archived: ArchivedCompound<C, A>,
-    A: Annotation<C::Leaf>,
-{
-    type Target = M;
+// impl<'a, C, A, M> Deref for MappedBranch<'a, C, A, M>
+// where
+//     C: Archive + Compound<A>,
+//     C::Archived: ArchivedCompound<C, A>,
+//     A: Annotation<C::Leaf>,
+// {
+//     type Target = M;
 
-    fn deref(&self) -> &M {
-        (self.closure)(&*self.inner)
-    }
-}
+//     fn deref(&self) -> &M {
+//         (self.closure)(&*self.inner)
+//     }
+// }
 
 pub enum BranchIterator<'a, C, A, W>
 where
@@ -344,7 +347,7 @@ where
     C::Archived: ArchivedCompound<C, A>,
     A: Annotation<C::Leaf>,
 {
-    type Item = &'a C::Leaf;
+    type Item = AWrap<'a, C::Leaf>;
 
     type IntoIter = BranchIterator<'a, C, A, AllLeaves>;
 
@@ -361,7 +364,7 @@ where
     A: Annotation<C::Leaf>,
     W: Walker<C, A>,
 {
-    type Item = &'a C::Leaf;
+    type Item = AWrap<'a, C::Leaf>;
 
     fn next(&mut self) -> Option<Self::Item> {
         match core::mem::replace(self, BranchIterator::Exhausted) {
@@ -388,8 +391,8 @@ where
 
         match self {
             BranchIterator::Intermediate(branch, _) => {
-                let leaf: &C::Leaf = &*branch;
-                let leaf_extended: &'a C::Leaf =
+                let leaf = branch.leaf();
+                let leaf_extended: AWrap<'a, C::Leaf> =
                     unsafe { core::mem::transmute(leaf) };
                 Some(leaf_extended)
             }
@@ -467,5 +470,18 @@ where
             }
             _ => unreachable!(),
         }
+    }
+}
+
+impl<'a, C, A, M> Deref for MappedBranch<'a, C, A, M>
+where
+    C: Archive + Compound<A>,
+    C::Archived: ArchivedCompound<C, A>,
+    A: Annotation<C::Leaf>,
+{
+    type Target = M;
+
+    fn deref(&self) -> &M {
+        (self.closure)(self.inner.leaf())
     }
 }
