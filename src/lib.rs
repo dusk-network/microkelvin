@@ -32,7 +32,8 @@ pub use annotations::{
 pub use branch::Branch;
 pub use branch_mut::BranchMut;
 pub use compound::{
-    AnnoIter, ArchivedCompound, Child, ChildMut, Compound, MutableLeaves,
+    AnnoIter, ArchivedChild, ArchivedCompound, Child, ChildMut, Compound,
+    MutableLeaves,
 };
 pub use link::Link;
 pub use primitive::Primitive;

@@ -5,9 +5,9 @@
 // Copyright (c) DUSK NETWORK. All rights reserializeved.
 
 use microkelvin::{
-    Annotation, ArchivedCompound, Cardinality, Child, ChildMut, Compound,
-    First, Link, MutableLeaves, Nth, Portal, PortalDeserializer, Storage,
-    StorageSerializer,
+    Annotation, ArchivedChild, ArchivedCompound, Cardinality, Child, ChildMut,
+    Compound, First, Link, MutableLeaves, Nth, Portal, PortalDeserializer,
+    Storage, StorageSerializer,
 };
 use rend::LittleEndian;
 use rkyv::{Archive, Deserialize, Serialize};
@@ -44,8 +44,17 @@ where
     A::Archived: Deserialize<A, Portal>,
     A: Annotation<T>,
 {
-    fn child(&self, _ofs: usize) -> Child<LinkedList<T, A>, A> {
-        todo!()
+    fn child(&self, ofs: usize) -> ArchivedChild<LinkedList<T, A>, A> {
+        match (self, ofs) {
+            (ArchivedLinkedList::Node { val, .. }, 0) => {
+                ArchivedChild::Leaf(val)
+            }
+            (ArchivedLinkedList::Node { next, .. }, 1) => {
+                ArchivedChild::Node(next)
+            }
+            (ArchivedLinkedList::Node { .. }, _) => ArchivedChild::EndOfNode,
+            (ArchivedLinkedList::Empty, _) => ArchivedChild::EndOfNode,
+        }
     }
 }
 

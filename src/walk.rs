@@ -35,13 +35,13 @@ where
     fn walk(&mut self, walk: impl Slots<C, A>) -> Step;
 }
 
-#[derive(Debug)]
 pub enum Slot<'a, C, A>
 where
     C: Compound<A>,
     A: Annotation<C::Leaf>,
 {
     Leaf(&'a C::Leaf),
+    ArchivedLeaf(&'a <C::Leaf as Archive>::Archived),
     Annotation(ARef<'a, A>),
     Empty,
     End,

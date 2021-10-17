@@ -45,6 +45,12 @@ pub enum Link<C, A> {
 
 pub struct ArchivedLink<A>(RawOffset, A);
 
+impl<A> ArchivedLink<A> {
+    pub fn annotation(&self) -> &A {
+        &self.1
+    }
+}
+
 impl<C, A> Archive for Link<C, A> {
     type Archived = ArchivedLink<A>;
     type Resolver = (RawOffset, A);

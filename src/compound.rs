@@ -9,12 +9,11 @@ use core::marker::PhantomData;
 use rkyv::{Archive, Deserialize};
 
 use crate::annotations::{ARef, Annotation};
-use crate::link::Link;
+use crate::link::{ArchivedLink, Link};
 use crate::storage::Stored;
 use crate::Portal;
 
 /// The response of the `child` method on a `Compound` node.
-#[derive(Debug)]
 pub enum Child<'a, C, A>
 where
     C: Compound<A>,
@@ -24,6 +23,22 @@ where
     Leaf(&'a C::Leaf),
     /// Child is an annotated subtree node
     Node(&'a Link<C, A>),
+    /// Empty slot
+    Empty,
+    /// No more children
+    EndOfNode,
+}
+
+/// The response of the `child` method on a `Compound` node.
+pub enum ArchivedChild<'a, C, A>
+where
+    C: Compound<A>,
+    A: Annotation<C::Leaf>,
+{
+    /// Child is a leaf
+    Leaf(&'a <C::Leaf as Archive>::Archived),
+    /// Child is an annotated subtree node
+    Node(&'a ArchivedLink<A>),
     /// Empty slot
     Empty,
     /// No more children
@@ -54,7 +69,7 @@ where
     A: Annotation<C::Leaf>,
 {
     /// Returns an archived child
-    fn child(&self, ofs: usize) -> Child<C, A>;
+    fn child(&self, ofs: usize) -> ArchivedChild<C, A>;
 }
 
 /// A type that can recursively contain itself and leaves.
@@ -63,7 +78,7 @@ where
     A: Annotation<Self::Leaf>,
 {
     /// The leaf type of the Compound collection
-    type Leaf;
+    type Leaf: Archive;
 
     /// Get a reference to a child    
     fn child(&self, ofs: usize) -> Child<Self, A>;

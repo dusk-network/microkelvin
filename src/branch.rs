@@ -11,8 +11,9 @@ use alloc::vec::Vec;
 use rkyv::Archive;
 
 use crate::annotations::Annotation;
-use crate::compound::{ArchivedCompound, Child, Compound};
+use crate::compound::{ArchivedChild, ArchivedCompound, Child, Compound};
 use crate::walk::{AllLeaves, Slot, Slots, Step, Walker};
+use crate::ARef;
 
 pub enum LevelNode<'a, C>
 where
@@ -65,16 +66,21 @@ where
     A: Annotation<C::Leaf>,
 {
     fn slot(&self, ofs: usize) -> Slot<C, A> {
-        let child = match &self.node {
-            LevelNode::Memory(root) => root.child(self.offset + ofs),
-            LevelNode::Archived(_refr) => todo!(),
-        };
-
-        match child {
-            Child::Leaf(l) => Slot::Leaf(l),
-            Child::Node(n) => Slot::Annotation(n.annotation()),
-            Child::Empty => return Slot::Empty,
-            Child::EndOfNode => return Slot::End,
+        match &self.node {
+            LevelNode::Memory(root) => match root.child(self.offset + ofs) {
+                Child::Leaf(l) => Slot::Leaf(l),
+                Child::Node(n) => Slot::Annotation(n.annotation()),
+                Child::Empty => Slot::Empty,
+                Child::EndOfNode => Slot::End,
+            },
+            LevelNode::Archived(arch) => match arch.child(self.offset + ofs) {
+                ArchivedChild::Leaf(l) => Slot::ArchivedLeaf(l),
+                ArchivedChild::Node(n) => {
+                    Slot::Annotation(ARef::Borrowed(n.annotation()))
+                }
+                ArchivedChild::Empty => Slot::Empty,
+                ArchivedChild::EndOfNode => Slot::End,
+            },
         }
     }
 }
@@ -176,23 +182,32 @@ where
                     *top.offset_mut() += walk_ofs;
                     let ofs = top.offset();
 
-                    let child = match &top.node {
-                        LevelNode::Memory(root) => root.child(ofs),
-                        LevelNode::Archived(refr) => refr.child(ofs),
-                    };
-
-                    match child {
-                        Child::Leaf(_) => return Some(()),
-                        Child::Node(node) => match node.inner() {
-                            crate::link::NodeRef::Memory(c) => {
-                                let level = Level::new(LevelNode::Memory(c));
-                                let extended: Level<'a, C, A> =
-                                    unsafe { core::mem::transmute(level) };
-                                state = State::Push(extended);
-                            }
-                            crate::link::NodeRef::Archived(_) => todo!(),
+                    match &top.node {
+                        LevelNode::Memory(root) => match root.child(ofs) {
+                            Child::Leaf(_) => return Some(()),
+                            Child::Node(node) => match node.inner() {
+                                crate::link::NodeRef::Memory(c) => {
+                                    let level =
+                                        Level::new(LevelNode::Memory(c));
+                                    let extended: Level<'a, C, A> =
+                                        unsafe { core::mem::transmute(level) };
+                                    state = State::Push(extended);
+                                }
+                                crate::link::NodeRef::Archived(ca) => {
+                                    let level: Level<C, A> =
+                                        Level::new(LevelNode::Archived(ca));
+                                    let extended: Level<'a, C, A> =
+                                        unsafe { core::mem::transmute(level) };
+                                    state = State::Push(extended);
+                                }
+                            },
+                            _ => panic!("Invalid child found"),
                         },
-                        _ => panic!("Invalid child found"),
+                        LevelNode::Archived(arch) => match arch.child(ofs) {
+                            ArchivedChild::Leaf(_) => return Some(()),
+                            ArchivedChild::Node(_) => todo!("b"),
+                            _ => panic!("Invalid child found"),
+                        },
                     }
                 }
                 Step::Advance => state = State::Pop,

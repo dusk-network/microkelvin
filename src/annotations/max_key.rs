@@ -128,6 +128,7 @@ where
     C: Archive + Compound<A>,
     C::Archived: ArchivedCompound<C, A>,
     C::Leaf: Keyed<K>,
+    <C::Leaf as Archive>::Archived: Keyed<K>,
     A: Annotation<C::Leaf> + Borrow<MaxKey<K>>,
     K: Ord + Clone,
 {
@@ -138,6 +139,14 @@ where
         for i in 0.. {
             match walk.slot(i) {
                 Slot::Leaf(l) => {
+                    let leaf_max: MaxKey<K> = MaxKey::Maximum(l.key().clone());
+
+                    if leaf_max > current_max {
+                        current_max = leaf_max;
+                        current_step = Step::Found(i);
+                    }
+                }
+                Slot::ArchivedLeaf(l) => {
                     let leaf_max: MaxKey<K> = MaxKey::Maximum(l.key().clone());
 
                     if leaf_max > current_max {
@@ -184,6 +193,7 @@ where
     C: Archive + Compound<A>,
     C::Archived: ArchivedCompound<C, A>,
     C::Leaf: Keyed<K>,
+    <C::Leaf as Archive>::Archived: Keyed<K>,
     A: Annotation<C::Leaf> + Borrow<MaxKey<K>>,
     K: Ord + Clone,
 {

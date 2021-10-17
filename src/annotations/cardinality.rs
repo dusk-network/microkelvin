@@ -79,6 +79,13 @@ where
                         self.0 -= 1;
                     }
                 }
+                Slot::ArchivedLeaf(_) => {
+                    if self.0 == 0 {
+                        return Step::Found(i);
+                    } else {
+                        self.0 -= 1;
+                    }
+                }
                 Slot::Annotation(a) => {
                     let card: &Cardinality = (*a).borrow();
                     if card.0 <= self.0 {
