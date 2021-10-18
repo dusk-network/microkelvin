@@ -12,7 +12,7 @@ use alloc::vec::Vec;
 use rkyv::Archive;
 
 use crate::compound::{ArchivedCompound, Child, ChildMut, Compound};
-use crate::walk::{AllLeaves, Slot, Slots, Step, Walker};
+use crate::walk::{First, Slot, Slots, Step, Walker};
 use crate::Annotation;
 
 #[derive(Debug)]
@@ -335,10 +335,10 @@ where
 {
     type Item = &'a mut C::Leaf;
 
-    type IntoIter = BranchMutIterator<'a, C, A, AllLeaves>;
+    type IntoIter = BranchMutIterator<'a, C, A, First>;
 
     fn into_iter(self) -> Self::IntoIter {
-        BranchMutIterator::Initial(self, AllLeaves)
+        BranchMutIterator::Initial(self, First)
     }
 }
 
@@ -407,10 +407,10 @@ where
 {
     type Item = &'a mut M;
 
-    type IntoIter = MappedBranchMutIterator<'a, C, A, AllLeaves, M>;
+    type IntoIter = MappedBranchMutIterator<'a, C, A, First, M>;
 
     fn into_iter(self) -> Self::IntoIter {
-        MappedBranchMutIterator::Initial(self, AllLeaves)
+        MappedBranchMutIterator::Initial(self, First)
     }
 }
 

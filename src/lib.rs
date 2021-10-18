@@ -27,7 +27,7 @@ mod walk;
 mod wrappers;
 
 pub use annotations::{
-    ARef, Annotation, Cardinality, Combine, GetMaxKey, Keyed, MaxKey, Nth,
+    ARef, Annotation, Cardinality, Combine, FindMaxKey, Keyed, MaxKey, Nth,
 };
 pub use branch::Branch;
 pub use branch_mut::BranchMut;
@@ -36,8 +36,8 @@ pub use compound::{
     MutableLeaves,
 };
 pub use link::Link;
-pub use wrappers::{Primitive, AWrap};
-pub use walk::{AllLeaves, First, Step, Walker};
+pub use walk::{First, Step, Walker};
+pub use wrappers::{AWrap, Primitive};
 
 mod storage;
 pub use storage::{Portal, PortalDeserializer, Storage, StorageSerializer};

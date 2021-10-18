@@ -12,9 +12,7 @@ use rend::LittleEndian;
 use rkyv::{Archive, Deserialize, Serialize};
 
 use crate::annotations::{Annotation, Combine};
-use crate::branch::Branch;
-use crate::branch_mut::BranchMut;
-use crate::compound::{AnnoIter, ArchivedCompound, Compound, MutableLeaves};
+use crate::compound::{AnnoIter, ArchivedCompound, Compound};
 use crate::walk::{Slot, Slots, Step, Walker};
 
 /// The cardinality of a compound collection
@@ -61,9 +59,16 @@ where
 
 /// Walker method to find the nth element of a compound collection
 #[derive(Debug)]
-pub struct Offset(LittleEndian<u64>);
+pub struct Nth(LittleEndian<u64>);
 
-impl<C, A> Walker<C, A> for Offset
+impl Nth {
+    /// Create a new `Nth` walker
+    pub fn new<N: Into<LittleEndian<u64>>>(n: N) -> Self {
+        Nth(n.into())
+    }
+}
+
+impl<C, A> Walker<C, A> for Nth
 where
     C: Archive + Compound<A>,
     C::Archived: ArchivedCompound<C, A>,
@@ -99,54 +104,5 @@ where
             };
         }
         unreachable!()
-    }
-}
-
-/// Trait that provides `nth()` and `nth_mut()` methods to any Compound with a
-/// Cardinality annotation
-pub trait Nth<'a, A>
-where
-    Self: Archive + Compound<A>,
-    Self::Archived: ArchivedCompound<Self, A>,
-    A: Annotation<Self::Leaf>,
-{
-    /// Construct a `Branch` pointing to the `nth` element, if any
-    fn nth<N: Into<LittleEndian<u64>>>(
-        &'a self,
-        n: N,
-    ) -> Option<Branch<'a, Self, A>>;
-
-    /// Construct a `BranchMut` pointing to the `nth` element, if any
-    fn nth_mut<N: Into<LittleEndian<u64>>>(
-        &'a mut self,
-        n: N,
-    ) -> Option<BranchMut<'a, Self, A>>
-    where
-        Self: MutableLeaves + Clone;
-}
-
-impl<'a, C, A> Nth<'a, A> for C
-where
-    C: Archive + Compound<A>,
-    C::Archived: ArchivedCompound<C, A>,
-    A: Annotation<C::Leaf> + Borrow<Cardinality>,
-{
-    fn nth<N: Into<LittleEndian<u64>>>(
-        &'a self,
-        ofs: N,
-    ) -> Option<Branch<'a, C, A>> {
-        // Return the first that satisfies the walk
-        Branch::<_, A>::walk(self, Offset(ofs.into()))
-    }
-
-    fn nth_mut<N: Into<LittleEndian<u64>>>(
-        &'a mut self,
-        ofs: N,
-    ) -> Option<BranchMut<'a, C, A>>
-    where
-        C: MutableLeaves + Clone,
-    {
-        // Return the first mutable branch that satisfies the walk
-        BranchMut::<_, A>::walk(self, Offset(ofs.into()))
     }
 }

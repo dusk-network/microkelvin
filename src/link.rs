@@ -8,6 +8,7 @@ use alloc::rc::Rc;
 use core::cell::RefCell;
 use rkyv::ser::Serializer;
 use std::borrow::{Borrow, BorrowMut};
+use std::marker::PhantomData;
 
 use owning_ref::OwningRef;
 use rkyv::Fallible;
@@ -38,16 +39,23 @@ pub enum Link<C, A> {
     },
 }
 
-pub struct ArchivedLink<A>(RawOffset, A);
+pub struct ArchivedLink<C, A>(RawOffset, A, PhantomData<C>);
 
-impl<A> ArchivedLink<A> {
+impl<C, A> ArchivedLink<C, A> {
     pub fn annotation(&self) -> &A {
         &self.1
+    }
+
+    pub fn inner<'a>(&self, portal: &'a Portal) -> &'a C::Archived
+    where
+        C: Archive,
+    {
+        portal.get::<C>(self.0)
     }
 }
 
 impl<C, A> Archive for Link<C, A> {
-    type Archived = ArchivedLink<A>;
+    type Archived = ArchivedLink<C, A>;
     type Resolver = (RawOffset, A);
 
     unsafe fn resolve(
@@ -56,11 +64,11 @@ impl<C, A> Archive for Link<C, A> {
         resolver: Self::Resolver,
         out: *mut <Self as Archive>::Archived,
     ) {
-        *out = ArchivedLink(resolver.0, resolver.1)
+        *out = ArchivedLink(resolver.0, resolver.1, PhantomData)
     }
 }
 
-impl<C, A, D> Deserialize<Link<C, A>, D> for ArchivedLink<A>
+impl<C, A, D> Deserialize<Link<C, A>, D> for ArchivedLink<C, A>
 where
     C: Archive,
     A: Archive + Clone,

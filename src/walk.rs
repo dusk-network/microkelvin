@@ -7,9 +7,7 @@
 use rkyv::Archive;
 
 use crate::annotations::{ARef, Annotation};
-use crate::branch::Branch;
-use crate::branch_mut::BranchMut;
-use crate::compound::{ArchivedCompound, Compound, MutableLeaves};
+use crate::compound::{ArchivedCompound, Compound};
 
 /// The return value from a closure to `walk` the tree.
 ///
@@ -57,9 +55,9 @@ where
 
 /// Walker that visits all leaves
 #[derive(Debug)]
-pub struct AllLeaves;
+pub struct First;
 
-impl<C, A> Walker<C, A> for AllLeaves
+impl<C, A> Walker<C, A> for First
 where
     C: Archive + Compound<A>,
     C::Archived: ArchivedCompound<C, A>,
@@ -74,40 +72,5 @@ where
             }
         }
         unreachable!()
-    }
-}
-
-/// Trait that provides a `first` and `first_mut` method to any Compound with a
-/// Cardinality annotation
-pub trait First<'a, A>
-where
-    Self: Archive + Compound<A>,
-    Self::Archived: ArchivedCompound<Self, A>,
-    A: Annotation<Self::Leaf>,
-{
-    /// Construct a `Branch` pointing to the first element, if not empty
-    fn first(&'a self) -> Option<Branch<'a, Self, A>>;
-
-    /// Construct a `BranchMut` pointing to the first element, if not empty
-    fn first_mut(&'a mut self) -> Option<BranchMut<'a, Self, A>>
-    where
-        Self: MutableLeaves + Clone;
-}
-
-impl<'a, C, A> First<'a, A> for C
-where
-    C: Archive + Compound<A>,
-    C::Archived: ArchivedCompound<C, A>,
-    A: Annotation<C::Leaf>,
-{
-    fn first(&'a self) -> Option<Branch<'a, Self, A>> {
-        Branch::<_, A>::walk(self, AllLeaves)
-    }
-
-    fn first_mut(&'a mut self) -> Option<BranchMut<'a, Self, A>>
-    where
-        C: MutableLeaves + Clone,
-    {
-        BranchMut::<_, A>::walk(self, AllLeaves)
     }
 }

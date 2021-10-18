@@ -12,8 +12,9 @@ use rkyv::Archive;
 
 use crate::annotations::{ARef, Annotation};
 use crate::compound::{ArchivedChild, ArchivedCompound, Child, Compound};
-use crate::walk::{AllLeaves, Slot, Slots, Step, Walker};
-use crate::wrappers::{AWrap, Primitive};
+use crate::walk::{First, Slot, Slots, Step, Walker};
+use crate::wrappers::AWrap;
+use crate::Portal;
 
 pub struct Level<'a, C, A>
 where
@@ -77,7 +78,7 @@ where
     }
 }
 
-pub struct PartialBranch<'a, C, A>(Vec<Level<'a, C, A>>)
+pub struct PartialBranch<'a, C, A>(Vec<Level<'a, C, A>>, &'a Portal)
 where
     C: Archive + Compound<A>,
     C::Archived: ArchivedCompound<C, A>,
@@ -89,8 +90,8 @@ where
     C::Archived: ArchivedCompound<C, A>,
     A: Annotation<C::Leaf>,
 {
-    fn new(root: AWrap<'a, C>) -> Self {
-        PartialBranch(vec![Level::new(root)])
+    fn new(root: AWrap<'a, C>, portal: &'a Portal) -> Self {
+        PartialBranch(vec![Level::new(root)], portal)
     }
 
     pub fn depth(&self) -> usize {
@@ -194,10 +195,7 @@ where
                         },
                         AWrap::Archived(arch) => match arch.child(ofs) {
                             ArchivedChild::Leaf(_) => return Some(()),
-                            ArchivedChild::Node(node) => {
-                                //let a = node.inner();
-                                todo!("savelde")
-                            }
+                            ArchivedChild::Node(node) => node.inner(self.1),
                             _ => panic!("Invalid child found"),
                         },
                     };
@@ -254,20 +252,9 @@ where
 
     /// Performs a tree walk, returning either a valid branch or None if the
     /// walk failed.
-    pub fn walk<W>(root: &'a C, mut walker: W) -> Option<Self>
-    where
-        C: Compound<A>,
-        A: Annotation<C::Leaf>,
-        W: Walker<C, A>,
-    {
-        let mut partial = PartialBranch::new(AWrap::Memory(root));
-        partial.walk(&mut walker).map(|()| Branch(partial))
-    }
-
-    /// Performs a tree walk, returning either a valid branch or None if the
-    /// walk failed.
-    pub fn walk_archived<W>(
-        root: &'a C::Archived,
+    pub fn walk<W>(
+        root: &'a C,
+        portal: &'a Portal,
         mut walker: W,
     ) -> Option<Self>
     where
@@ -275,7 +262,23 @@ where
         A: Annotation<C::Leaf>,
         W: Walker<C, A>,
     {
-        let mut partial = PartialBranch::new(AWrap::Archived(root));
+        let mut partial = PartialBranch::new(AWrap::Memory(root), portal);
+        partial.walk(&mut walker).map(|()| Branch(partial))
+    }
+
+    /// Performs a tree walk, returning either a valid branch or None if the
+    /// walk failed.
+    pub fn walk_archived<W>(
+        root: &'a C::Archived,
+        portal: &'a Portal,
+        mut walker: W,
+    ) -> Option<Self>
+    where
+        C: Compound<A>,
+        A: Annotation<C::Leaf>,
+        W: Walker<C, A>,
+    {
+        let mut partial = PartialBranch::new(AWrap::Archived(root), portal);
         partial.walk(&mut walker).map(|()| Branch(partial))
     }
 }
@@ -348,10 +351,10 @@ where
 {
     type Item = AWrap<'a, C::Leaf>;
 
-    type IntoIter = BranchIterator<'a, C, A, AllLeaves>;
+    type IntoIter = BranchIterator<'a, C, A, First>;
 
     fn into_iter(self) -> Self::IntoIter {
-        BranchIterator::Initial(self, AllLeaves)
+        BranchIterator::Initial(self, First)
     }
 }
 
@@ -420,10 +423,10 @@ where
 {
     type Item = &'a M;
 
-    type IntoIter = MappedBranchIterator<'a, C, A, AllLeaves, M>;
+    type IntoIter = MappedBranchIterator<'a, C, A, First, M>;
 
     fn into_iter(self) -> Self::IntoIter {
-        MappedBranchIterator::Initial(self, AllLeaves)
+        MappedBranchIterator::Initial(self, First)
     }
 }
 

@@ -12,9 +12,7 @@ use core::marker::PhantomData;
 use rkyv::{Archive, Deserialize, Serialize};
 
 use crate::annotations::{Annotation, Combine};
-use crate::branch::Branch;
-use crate::branch_mut::BranchMut;
-use crate::compound::{AnnoIter, Compound, MutableLeaves};
+use crate::compound::{AnnoIter, Compound};
 use crate::walk::{Slot, Slots, Step, Walker};
 use crate::wrappers::Primitive;
 use crate::ArchivedCompound;
@@ -166,47 +164,5 @@ where
             }
         }
         unreachable!()
-    }
-}
-
-/// Trait that provides a max_leaf() method to any Compound with a MaxKey
-/// annotation
-pub trait GetMaxKey<'a, A, K>
-where
-    Self: Archive + Compound<A>,
-    Self::Archived: ArchivedCompound<Self, A>,
-    Self::Leaf: Keyed<K>,
-    A: Annotation<Self::Leaf> + Borrow<MaxKey<K>>,
-    K: Ord + Clone,
-{
-    /// Construct a `Branch` pointing to the element with the largest key
-    fn max_key(&'a self) -> Option<Branch<'a, Self, A>>;
-
-    /// Construct a `BranchMut` pointing to the element with the largest key
-    fn max_key_mut(&'a mut self) -> Option<BranchMut<'a, Self, A>>
-    where
-        Self: MutableLeaves + Clone;
-}
-
-impl<'a, C, A, K> GetMaxKey<'a, A, K> for C
-where
-    C: Archive + Compound<A>,
-    C::Archived: ArchivedCompound<C, A>,
-    C::Leaf: Keyed<K>,
-    <C::Leaf as Archive>::Archived: Keyed<K>,
-    A: Annotation<C::Leaf> + Borrow<MaxKey<K>>,
-    K: Ord + Clone,
-{
-    fn max_key(&'a self) -> Option<Branch<'a, Self, A>> {
-        // Return the first that satisfies the walk
-        Branch::<_, A>::walk(self, FindMaxKey::default())
-    }
-
-    fn max_key_mut(&'a mut self) -> Option<BranchMut<'a, Self, A>>
-    where
-        C: MutableLeaves + Clone,
-    {
-        // Return the first mutable branch that satisfies the walk
-        BranchMut::<_, A>::walk(self, FindMaxKey::default())
     }
 }

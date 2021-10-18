@@ -10,7 +10,7 @@ use rkyv::{Archive, Deserialize, Serialize};
 
 mod linked_list;
 use linked_list::LinkedList;
-use microkelvin::{GetMaxKey, Keyed, MaxKey};
+use microkelvin::{Branch, FindMaxKey, Keyed, MaxKey, Portal};
 
 #[derive(PartialEq, Clone, Debug, Archive, Serialize, Deserialize)]
 #[archive(as = "Self")]
@@ -27,6 +27,8 @@ impl Keyed<LittleEndian<u64>> for TestLeaf {
 
 #[test]
 fn maximum() {
+    let portal = Portal::new();
+
     let n: u64 = 1024;
 
     let mut keys = vec![];
@@ -44,7 +46,8 @@ fn maximum() {
         list.push(TestLeaf { key, other: () });
     }
 
-    let max = list.max_key().expect("Some(branch)");
+    let max = Branch::walk(&list, &portal, FindMaxKey::default())
+        .expect("Some(Branch)");
 
     assert_eq!(
         *max.leaf(),

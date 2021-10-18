@@ -38,7 +38,7 @@ where
     /// Child is a leaf
     Leaf(&'a <C::Leaf as Archive>::Archived),
     /// Child is an annotated subtree node
-    Node(&'a ArchivedLink<A>),
+    Node(&'a ArchivedLink<C, A>),
     /// Empty slot
     Empty,
     /// No more children

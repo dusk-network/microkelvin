@@ -14,8 +14,8 @@ use rend::LittleEndian;
 use rkyv::{Archive, Deserialize, Serialize};
 
 use microkelvin::{
-    AnnoIter, Annotation, ArchivedCompound, Cardinality, Combine, Compound,
-    GetMaxKey, Keyed, MaxKey, Primitive,
+    AnnoIter, Annotation, ArchivedCompound, Branch, Cardinality, Combine,
+    Compound, FindMaxKey, Keyed, MaxKey, Portal, Primitive,
 };
 
 #[derive(Default, Clone, Archive, Serialize, Debug, Deserialize)]
@@ -87,6 +87,8 @@ impl Keyed<LittleEndian<u64>> for TestLeaf {
 
 #[test]
 fn maximum_multiple() {
+    let portal = Portal::new();
+
     let n: u64 = 1024;
 
     let mut keys = vec![];
@@ -104,7 +106,8 @@ fn maximum_multiple() {
         list.push(TestLeaf { key, other: () });
     }
 
-    let max = list.max_key().expect("Some(branch)");
+    let max = Branch::walk(&list, &portal, FindMaxKey::default())
+        .expect("Some(Branch)");
 
     assert_eq!(
         *max.leaf(),
