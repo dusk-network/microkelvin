@@ -10,7 +10,7 @@ use rkyv::{Archive, Deserialize, Infallible};
 
 use crate::annotations::{ARef, Annotation};
 use crate::link::{ArchivedLink, Link};
-use crate::storage::Stored;
+use crate::{AWrap, Branch, BranchMut, Walker};
 
 /// The response of the `child` method on a `Compound` node.
 pub enum Child<'a, C, A>
@@ -69,6 +69,15 @@ where
 {
     /// Returns an archived child
     fn child(&self, ofs: usize) -> ArchivedChild<C, A>;
+
+    /// Constructs a branch from this root compound
+    fn walk<'a, W>(&'a self, walker: W) -> Option<Branch<'a, C, A>>
+    where
+        W: Walker<C, A>,
+        C: Archive<Archived = Self>,
+    {
+        Branch::walk(AWrap::Archived(self), walker)
+    }
 }
 
 /// A type that can recursively contain itself and leaves.
@@ -95,6 +104,29 @@ where
             ofs: 0,
             _marker: PhantomData,
         }
+    }
+
+    /// Constructs a branch from this root compound
+    fn walk<'a, W>(&'a self, walker: W) -> Option<Branch<'a, Self, A>>
+    where
+        Self: Archive,
+        Self::Archived: ArchivedCompound<Self, A>,
+        W: Walker<Self, A>,
+    {
+        Branch::walk(AWrap::Memory(self), walker)
+    }
+
+    /// Constructs a mutable branch from this root compound    
+    fn walk_mut<'a, W>(
+        &'a mut self,
+        walker: W,
+    ) -> Option<BranchMut<'a, Self, A>>
+    where
+        Self: Archive + Clone,
+        Self::Archived: ArchivedCompound<Self, A>,
+        W: Walker<Self, A>,
+    {
+        BranchMut::walk(self, walker)
     }
 }
 
@@ -140,23 +172,6 @@ where
                 }
             }
         }
-    }
-}
-
-impl<C, A> Compound<A> for Stored<C>
-where
-    C: Compound<A> + Archive,
-    C::Archived: ArchivedCompound<C, A>,
-    A: Annotation<C::Leaf>,
-{
-    type Leaf = C::Leaf;
-
-    fn child(&self, _ofs: usize) -> Child<Self, A> {
-        todo!()
-    }
-
-    fn child_mut(&mut self, _ofs: usize) -> ChildMut<Self, A> {
-        todo!()
     }
 }
 

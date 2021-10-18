@@ -11,9 +11,9 @@ use core::ops::{Deref, DerefMut};
 use alloc::vec::Vec;
 use rkyv::Archive;
 
+use crate::annotations::Annotation;
 use crate::compound::{ArchivedCompound, Child, ChildMut, Compound};
 use crate::walk::{First, Slot, Slots, Step, Walker};
-use crate::{Annotation, Portal};
 
 #[derive(Debug)]
 pub struct LevelMut<'a, C, A> {
@@ -77,14 +77,12 @@ where
 #[derive(Debug)]
 pub struct PartialBranchMut<'a, C, A> {
     levels: Vec<LevelMut<'a, C, A>>,
-    portal: &'a Portal,
 }
 
 impl<'a, C, A> PartialBranchMut<'a, C, A> {
-    fn new(root: &'a mut C, portal: &'a Portal) -> Self {
+    fn new(root: &'a mut C) -> Self {
         PartialBranchMut {
             levels: vec![LevelMut::new(root)],
-            portal,
         }
     }
 
@@ -154,8 +152,6 @@ impl<'a, C, A> PartialBranchMut<'a, C, A> {
             Pop,
         }
 
-        let mut portal = self.portal.clone();
-
         let mut state = State::Init;
         loop {
             match mem::replace(&mut state, State::Init) {
@@ -180,7 +176,7 @@ impl<'a, C, A> PartialBranchMut<'a, C, A> {
                     match top.node.child_mut(ofs) {
                         ChildMut::Leaf(_) => return Some(()),
                         ChildMut::Node(n) => {
-                            let node = n.inner_mut(&mut portal);
+                            let node = n.inner_mut();
                             let extended: &'a mut C =
                                 unsafe { core::mem::transmute(node) };
                             state = State::Push(LevelMut::new(extended));
@@ -220,18 +216,14 @@ impl<'a, C, A> BranchMut<'a, C, A> {
 
     /// Performs a tree walk, returning either a valid branch or None if the
     /// walk failed.
-    pub fn walk<W>(
-        root: &'a mut C,
-        portal: &'a Portal,
-        mut walker: W,
-    ) -> Option<Self>
+    pub fn walk<W>(root: &'a mut C, mut walker: W) -> Option<Self>
     where
         C: Archive + Compound<A> + Clone,
         C::Archived: ArchivedCompound<C, A>,
         A: Annotation<C::Leaf>,
         W: Walker<C, A>,
     {
-        let mut partial = PartialBranchMut::new(root, portal);
+        let mut partial = PartialBranchMut::new(root);
         partial.walk(&mut walker).map(|()| BranchMut(partial))
     }
 }

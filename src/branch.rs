@@ -14,7 +14,6 @@ use crate::annotations::{ARef, Annotation};
 use crate::compound::{ArchivedChild, ArchivedCompound, Child, Compound};
 use crate::walk::{First, Slot, Slots, Step, Walker};
 use crate::wrappers::AWrap;
-use crate::Portal;
 
 pub struct Level<'a, C, A>
 where
@@ -85,7 +84,6 @@ where
     A: Annotation<C::Leaf>,
 {
     levels: Vec<Level<'a, C, A>>,
-    portal: &'a Portal,
 }
 
 impl<'a, C, A> PartialBranch<'a, C, A>
@@ -94,10 +92,9 @@ where
     C::Archived: ArchivedCompound<C, A>,
     A: Annotation<C::Leaf>,
 {
-    fn new(root: AWrap<'a, C>, portal: &'a Portal) -> Self {
+    fn new(root: AWrap<'a, C>) -> Self {
         PartialBranch {
             levels: vec![Level::new(root)],
-            portal,
         }
     }
 
@@ -188,27 +185,21 @@ where
                     let ca = match &top.node {
                         AWrap::Memory(root) => match root.child(ofs) {
                             Child::Leaf(_) => return Some(()),
-                            Child::Node(node) => {
-                                match node.inner(self.portal) {
-                                    AWrap::Memory(c) => {
-                                        let level =
-                                            Level::new(AWrap::Memory(c));
-                                        let extended: Level<'a, C, A> = unsafe {
-                                            core::mem::transmute(level)
-                                        };
-                                        state = State::Push(extended);
-                                        continue;
-                                    }
-                                    AWrap::Archived(ca) => ca,
+                            Child::Node(node) => match node.inner() {
+                                AWrap::Memory(c) => {
+                                    let level = Level::new(AWrap::Memory(c));
+                                    let extended: Level<'a, C, A> =
+                                        unsafe { core::mem::transmute(level) };
+                                    state = State::Push(extended);
+                                    continue;
                                 }
-                            }
+                                AWrap::Archived(ca) => ca,
+                            },
                             _ => panic!("Invalid child found"),
                         },
                         AWrap::Archived(arch) => match arch.child(ofs) {
                             ArchivedChild::Leaf(_) => return Some(()),
-                            ArchivedChild::Node(node) => {
-                                node.inner(self.portal)
-                            }
+                            ArchivedChild::Node(node) => node.inner(),
                             _ => panic!("Invalid child found"),
                         },
                     };
@@ -265,33 +256,13 @@ where
 
     /// Performs a tree walk, returning either a valid branch or None if the
     /// walk failed.
-    pub fn walk<W>(
-        root: &'a C,
-        portal: &'a Portal,
-        mut walker: W,
-    ) -> Option<Self>
+    pub fn walk<W>(root: AWrap<'a, C>, mut walker: W) -> Option<Self>
     where
         C: Compound<A>,
         A: Annotation<C::Leaf>,
         W: Walker<C, A>,
     {
-        let mut partial = PartialBranch::new(AWrap::Memory(root), portal);
-        partial.walk(&mut walker).map(|()| Branch(partial))
-    }
-
-    /// Performs a tree walk, returning either a valid branch or None if the
-    /// walk failed.
-    pub fn walk_archived<W>(
-        root: &'a C::Archived,
-        portal: &'a Portal,
-        mut walker: W,
-    ) -> Option<Self>
-    where
-        C: Compound<A>,
-        A: Annotation<C::Leaf>,
-        W: Walker<C, A>,
-    {
-        let mut partial = PartialBranch::new(AWrap::Archived(root), portal);
+        let mut partial = PartialBranch::new(root);
         partial.walk(&mut walker).map(|()| Branch(partial))
     }
 }

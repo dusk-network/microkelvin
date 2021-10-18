@@ -10,7 +10,7 @@ use rkyv::{Archive, Deserialize, Serialize};
 
 mod linked_list;
 use linked_list::LinkedList;
-use microkelvin::{Branch, FindMaxKey, Keyed, MaxKey, Portal};
+use microkelvin::{Compound, FindMaxKey, Keyed, MaxKey, Portal};
 
 #[derive(PartialEq, Clone, Debug, Archive, Serialize, Deserialize)]
 #[archive(as = "Self")]
@@ -46,7 +46,8 @@ fn maximum() {
         list.push(TestLeaf { key, other: () });
     }
 
-    let max = Branch::walk(&list, &portal, FindMaxKey::default())
+    let max = list
+        .walk(&portal, FindMaxKey::default())
         .expect("Some(Branch)");
 
     assert_eq!(

@@ -59,14 +59,7 @@ where
 
 /// Walker method to find the nth element of a compound collection
 #[derive(Debug)]
-pub struct Nth(LittleEndian<u64>);
-
-impl Nth {
-    /// Create a new `Nth` walker
-    pub fn new<N: Into<LittleEndian<u64>>>(n: N) -> Self {
-        Nth(n.into())
-    }
-}
+pub struct Nth(pub LittleEndian<u64>);
 
 impl<C, A> Walker<C, A> for Nth
 where
@@ -94,7 +87,7 @@ where
                 Slot::Annotation(a) => {
                     let card: &Cardinality = (*a).borrow();
                     if card.0 <= self.0 {
-                        self.0 -= card.0;
+                        self.0 -= u64::from(card.0);
                     } else {
                         return Step::Found(i);
                     }

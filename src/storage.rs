@@ -8,6 +8,11 @@ use std::{
     sync::Arc,
 };
 
+lazy_static! {
+    static ref SINGLETON: Arc<RwLock<Storage>> =
+        Arc::new(RwLock::new(Storage::default()));
+}
+
 use rkyv::{
     archived_root, ser::Serializer, AlignedVec, Archive, Fallible, Infallible,
     Serialize,
@@ -106,28 +111,23 @@ impl std::fmt::Debug for Lane {
 ///
 /// A hybrid memory/disk storage for an append only sequence of bytes.
 #[derive(Clone, Debug, Default)]
-pub struct Portal(Arc<RwLock<Storage>>);
+pub struct Portal;
 
 impl Portal {
-    /// Creates a new empty portal
-    pub fn new() -> Self {
-        Default::default()
-    }
-
     /// Commits a value to the portal
-    pub fn put<T>(&self, t: &T) -> Stored<T>
+    pub fn put<T>(t: &T) -> Stored<T>
     where
         T: Archive + Serialize<Storage>,
     {
-        self.0.write().put(t)
+        SINGLETON.write().put(t)
     }
 
     /// Gets a value previously commited to the portal at offset `ofs`
-    pub fn get<'a, T>(&'a self, ofs: Stored<T>) -> &'a T::Archived
+    pub fn get<'a, T>(ofs: Stored<T>) -> &'a T::Archived
     where
         T: Archive,
     {
-        let read = self.0.read();
+        let read = SINGLETON.read();
         let archived: &T::Archived = read.get::<T>(ofs);
         // extend the lifetime to equal the lifetime of the `Portal`.
         // This is safe, since the reference is guaranteed to not move until the
@@ -138,12 +138,15 @@ impl Portal {
     }
 
     /// Persist the portal to disk
-    pub fn persist<P: AsRef<Path>>(&self, path: P) -> io::Result<()> {
-        self.0.write().persist(path)
+    pub fn persist<P: AsRef<Path>>(path: P) -> io::Result<()> {
+        SINGLETON.write().persist(path)
     }
+
     /// Restore a portal from disk
-    pub fn restore<P: AsRef<Path>>(path: P) -> io::Result<Self> {
-        Ok(Portal(Arc::new(RwLock::new(Storage::restore(path)?))))
+    pub fn restore<P: AsRef<Path>>(path: P) -> io::Result<()> {
+        let mut write = SINGLETON.write();
+        *write = Storage::restore(path)?;
+        Ok(())
     }
 }
 
@@ -375,8 +378,6 @@ mod test {
 
     #[test]
     fn many_raw() {
-        let portal = Portal::default();
-
         const N: usize = 1024 * 64;
 
         let mut references = vec![];
@@ -384,13 +385,13 @@ mod test {
         for i in 0..N {
             let le: LittleEndian<u32> = (i as u32).into();
 
-            references.push(portal.put(&le));
+            references.push(Portal::put(&le));
         }
 
         for i in 0..N {
             let le: LittleEndian<u32> = (i as u32).into();
 
-            assert_eq!(portal.get(references[i]), &le);
+            assert_eq!(Portal::get(references[i]), &le);
         }
     }
 
@@ -408,8 +409,6 @@ mod test {
 
     #[test]
     fn many_raw_persist() -> io::Result<()> {
-        let portal = Portal::default();
-
         const N: usize = 1024 * 64;
 
         let mut references = vec![];
@@ -417,31 +416,25 @@ mod test {
         for i in 0..N {
             let le: LittleEndian<u32> = (i as u32).into();
 
-            references.push(portal.put(&le));
+            references.push(Portal::put(&le));
         }
 
         for i in 0..N {
             let le: LittleEndian<u32> = (i as u32).into();
 
-            assert_eq!(portal.get(references[i]), &le);
+            assert_eq!(Portal::get(references[i]), &le);
         }
 
         use tempfile::tempdir;
 
         let dir = tempdir()?;
 
-        portal.persist(dir.path())?;
-
-        drop(portal);
-
-        let new_portal = Portal::restore(&dir)?;
-
-        // read the same values from disk
+        Portal::persist(dir.path())?;
 
         for i in 0..N {
             let le: LittleEndian<u32> = (i as u32).into();
 
-            assert_eq!(new_portal.get(references[i]), &le);
+            assert_eq!(Portal::get(references[i]), &le);
         }
 
         // now write some more!
@@ -449,7 +442,7 @@ mod test {
         for i in N..N * 2 {
             let le: LittleEndian<u32> = (i as u32).into();
 
-            references.push(new_portal.put(&le));
+            references.push(Portal::put(&le));
         }
 
         // and read all back
@@ -457,23 +450,15 @@ mod test {
         for i in 0..N * 2 {
             let le: LittleEndian<u32> = (i as u32).into();
 
-            assert_eq!(new_portal.get(references[i]), &le);
+            assert_eq!(Portal::get(references[i]), &le);
         }
-
-        // persist again
-
-        new_portal.persist(dir.path())?;
-
-        drop(new_portal);
-
-        let even_newer_portal = Portal::restore(&dir)?;
 
         // read all back again
 
         for i in 0..N * 2 {
             let le: LittleEndian<u32> = (i as u32).into();
 
-            assert_eq!(even_newer_portal.get(references[i]), &le);
+            assert_eq!(Portal::get(references[i]), &le);
         }
 
         Ok(())

@@ -45,11 +45,11 @@ impl<C, A> ArchivedLink<C, A> {
         &self.1
     }
 
-    pub fn inner<'a>(&self, portal: &'a Portal) -> &'a C::Archived
+    pub fn inner<'a>(&self) -> &'a C::Archived
     where
         C: Archive,
     {
-        portal.get::<C>(self.0)
+        Portal::get::<C>(self.0)
     }
 }
 
@@ -178,14 +178,14 @@ impl<C, A> Link<C, A> {
     }
 
     /// Returns a reference to the inner node, possibly in its archived form
-    pub fn inner<'a>(&'a self, portal: &'a Portal) -> AWrap<'a, C>
+    pub fn inner<'a>(&'a self) -> AWrap<'a, C>
     where
         C: Archive,
     {
         match self {
             Link::Memory { rc, .. } => AWrap::Memory(&(*rc)),
             Link::Archived { stored, .. } => {
-                AWrap::Archived(portal.get(*stored))
+                AWrap::Archived(Portal::get(*stored))
             }
         }
     }
@@ -193,7 +193,7 @@ impl<C, A> Link<C, A> {
     /// Returns a Mutable reference to the underlying compound node
     ///
     /// Drops cached annotations and ids
-    pub fn inner_mut(&mut self, portal: &Portal) -> &mut C
+    pub fn inner_mut(&mut self) -> &mut C
     where
         C: Archive + Clone,
         C::Archived: Deserialize<C, Infallible>,
@@ -205,13 +205,13 @@ impl<C, A> Link<C, A> {
                 return Rc::make_mut(rc);
             }
             Link::Archived { stored, .. } => {
-                let ca = portal.get(*stored);
+                let ca = Portal::get(*stored);
                 let c = ca.deserialize(&mut Infallible).expect("Infallible");
                 *self = Link::Memory {
                     rc: Rc::new(c),
                     annotation: RefCell::new(None),
                 };
-                self.inner_mut(portal)
+                self.inner_mut()
             }
         }
     }
