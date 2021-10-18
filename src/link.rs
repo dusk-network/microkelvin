@@ -7,14 +7,13 @@
 use alloc::rc::Rc;
 use core::cell::RefCell;
 use rkyv::ser::Serializer;
-use std::borrow::{Borrow, BorrowMut};
-use std::marker::PhantomData;
+use std::borrow::BorrowMut;
 
 use owning_ref::OwningRef;
-use rkyv::Fallible;
 use rkyv::{Archive, Deserialize, Serialize};
+use rkyv::{Fallible, Infallible};
 
-use crate::storage::{RawOffset, Storage, Stored};
+use crate::storage::{Storage, Stored};
 use crate::{ARef, AWrap, Annotation, ArchivedCompound, Compound, Portal};
 
 #[derive(Clone, Debug)]
@@ -39,7 +38,7 @@ pub enum Link<C, A> {
     },
 }
 
-pub struct ArchivedLink<C, A>(RawOffset, A, PhantomData<C>);
+pub struct ArchivedLink<C, A>(Stored<C>, A);
 
 impl<C, A> ArchivedLink<C, A> {
     pub fn annotation(&self) -> &A {
@@ -56,7 +55,7 @@ impl<C, A> ArchivedLink<C, A> {
 
 impl<C, A> Archive for Link<C, A> {
     type Archived = ArchivedLink<C, A>;
-    type Resolver = (RawOffset, A);
+    type Resolver = (Stored<C>, A);
 
     unsafe fn resolve(
         &self,
@@ -64,7 +63,7 @@ impl<C, A> Archive for Link<C, A> {
         resolver: Self::Resolver,
         out: *mut <Self as Archive>::Archived,
     ) {
-        *out = ArchivedLink(resolver.0, resolver.1, PhantomData)
+        *out = ArchivedLink(resolver.0, resolver.1)
     }
 }
 
@@ -73,15 +72,14 @@ where
     C: Archive,
     A: Archive + Clone,
     A::Archived: Deserialize<A, D>,
-    D: Fallible + Borrow<Portal>,
+    D: Fallible,
 {
     fn deserialize(
         &self,
-        de: &mut D,
+        _: &mut D,
     ) -> Result<Link<C, A>, <D as Fallible>::Error> {
-        let borrow: &Portal = (*de).borrow();
         Ok(Link::Archived {
-            stored: Stored::new(self.0, borrow.clone()),
+            stored: self.0,
             a: self.1.clone(),
         })
     }
@@ -105,7 +103,7 @@ where
                     todo!()
                 };
                 let to_insert = &(**rc);
-                let ofs = serializer.borrow_mut().put_raw(to_insert);
+                let ofs = serializer.borrow_mut().put(to_insert);
                 Ok((ofs, a))
             }
             Link::Archived { .. } => todo!(),
@@ -180,23 +178,25 @@ impl<C, A> Link<C, A> {
     }
 
     /// Returns a reference to the inner node, possibly in its archived form
-    pub fn inner(&self) -> AWrap<C>
+    pub fn inner<'a>(&'a self, portal: &'a Portal) -> AWrap<'a, C>
     where
         C: Archive,
     {
         match self {
             Link::Memory { rc, .. } => AWrap::Memory(&(*rc)),
-            Link::Archived { stored, .. } => AWrap::Archived(stored.archived()),
+            Link::Archived { stored, .. } => {
+                AWrap::Archived(portal.get(*stored))
+            }
         }
     }
 
     /// Returns a Mutable reference to the underlying compound node
     ///
     /// Drops cached annotations and ids
-    pub fn inner_mut(&mut self) -> &mut C
+    pub fn inner_mut(&mut self, portal: &Portal) -> &mut C
     where
         C: Archive + Clone,
-        C::Archived: Deserialize<C, Portal>,
+        C::Archived: Deserialize<C, Infallible>,
     {
         match self {
             Link::Memory { rc, annotation } => {
@@ -205,13 +205,13 @@ impl<C, A> Link<C, A> {
                 return Rc::make_mut(rc);
             }
             Link::Archived { stored, .. } => {
-                let c = stored.restore();
-
+                let ca = portal.get(*stored);
+                let c = ca.deserialize(&mut Infallible).expect("Infallible");
                 *self = Link::Memory {
                     rc: Rc::new(c),
                     annotation: RefCell::new(None),
                 };
-                self.inner_mut()
+                self.inner_mut(portal)
             }
         }
     }

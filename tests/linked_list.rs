@@ -7,10 +7,10 @@
 use microkelvin::{
     Annotation, ArchivedChild, ArchivedCompound, Branch, BranchMut,
     Cardinality, Child, ChildMut, Compound, First, Link, MutableLeaves, Nth,
-    Portal, PortalDeserializer, Storage, StorageSerializer,
+    Portal, Storage, StorageSerializer,
 };
 use rend::LittleEndian;
-use rkyv::{Archive, Deserialize, Serialize};
+use rkyv::{Archive, Deserialize, Infallible, Serialize};
 
 #[derive(Clone, Archive, Serialize, Deserialize)]
 #[archive(bound(serialize = "
@@ -21,7 +21,7 @@ use rkyv::{Archive, Deserialize, Serialize};
   A: Archive + Clone,
   T::Archived: Deserialize<T, __D>,
   A::Archived: Deserialize<A, __D>,
-  __D: PortalDeserializer"))]
+  __D: Sized"))]
 pub enum LinkedList<T, A> {
     Empty,
     Node {
@@ -40,8 +40,8 @@ impl<T, A> Default for LinkedList<T, A> {
 impl<T, A> ArchivedCompound<LinkedList<T, A>, A> for ArchivedLinkedList<T, A>
 where
     T: Archive,
-    T::Archived: Deserialize<T, Portal>,
-    A::Archived: Deserialize<A, Portal>,
+    T::Archived: Deserialize<T, Infallible>,
+    A::Archived: Deserialize<A, Infallible>,
     A: Annotation<T>,
 {
     fn child(&self, ofs: usize) -> ArchivedChild<LinkedList<T, A>, A> {
@@ -202,8 +202,8 @@ fn push_mut() {
 
     for i in 0..n {
         let i: LittleEndian<u64> = i.into();
-        let mut nth =
-            BranchMut::walk(&mut list, Nth::new(i)).expect("Some(Branch)");
+        let mut nth = BranchMut::walk(&mut list, &portal, Nth::new(i))
+            .expect("Some(Branch)");
         *nth += 1;
     }
 
@@ -240,7 +240,8 @@ fn iterate_immutable() {
     }
 
     // branch from 7th element
-    let branch = BranchMut::walk(&mut list, Nth::new(6)).expect("Some(Branch)");
+    let branch =
+        BranchMut::walk(&mut list, &portal, Nth::new(6)).expect("Some(Branch)");
 
     let mut count = n - 6;
 
@@ -264,7 +265,8 @@ fn iterate_mutable() {
     }
 
     // branch from first element
-    let branch_mut = BranchMut::walk(&mut list, First).expect("Some(Branch)");
+    let branch_mut =
+        BranchMut::walk(&mut list, &portal, First).expect("Some(Branch)");
 
     let mut count = n;
 
@@ -295,6 +297,7 @@ fn iterate_mutable() {
 
 #[test]
 fn iterate_map() {
+    let portal = Portal::new();
     let n: u64 = 32;
 
     let mut list = LinkedList::<_, ()>::new();
@@ -305,7 +308,8 @@ fn iterate_map() {
     }
 
     // branch from first element
-    let branch_mut = BranchMut::walk(&mut list, First).expect("Some(Branch)");
+    let branch_mut =
+        BranchMut::walk(&mut list, &portal, First).expect("Some(Branch)");
 
     let mapped = branch_mut.map_leaf(|x| x);
 
@@ -319,6 +323,7 @@ fn iterate_map() {
 
 #[test]
 fn iterate_map_mutable() {
+    let portal = Portal::new();
     let n: u64 = 32;
 
     let mut list = LinkedList::<_, ()>::new();
@@ -329,7 +334,8 @@ fn iterate_map_mutable() {
     }
 
     // branch from first element
-    let branch_mut = BranchMut::walk(&mut list, First).expect("Some(Branch)");
+    let branch_mut =
+        BranchMut::walk(&mut list, &portal, First).expect("Some(Branch)");
 
     let mapped = branch_mut.map_leaf(|x| x);
 
@@ -344,6 +350,7 @@ fn iterate_map_mutable() {
 
 #[test]
 fn deref_mapped_mutable_branch() {
+    let portal = Portal::new();
     let n: u64 = 32;
 
     let mut list = LinkedList::<_, ()>::new();
@@ -354,7 +361,8 @@ fn deref_mapped_mutable_branch() {
     }
 
     // branch from first element
-    let branch_mut = BranchMut::walk(&mut list, First).expect("Some(Branch)");
+    let branch_mut =
+        BranchMut::walk(&mut list, &portal, First).expect("Some(Branch)");
 
     let mapped = branch_mut.map_leaf(|x| x);
 
@@ -384,12 +392,16 @@ fn push_nth_persist() {
 
     let stored = portal.put(&list);
 
-    let restored = stored.restore();
+    let restored = portal.get(stored);
 
     for i in 0..n {
-        let nth = *Branch::walk(&restored, &portal, Nth::new(i))
-            .expect("Some(Branch)")
-            .leaf();
+        let nth = *Branch::<LinkedList<_, _>, _>::walk_archived(
+            &restored,
+            &portal,
+            Nth::new(i),
+        )
+        .expect("Some(Branch)")
+        .leaf();
 
         assert_eq!(nth, n - i - 1)
     }

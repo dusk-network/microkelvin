@@ -13,7 +13,7 @@ use rkyv::Archive;
 
 use crate::compound::{ArchivedCompound, Child, ChildMut, Compound};
 use crate::walk::{First, Slot, Slots, Step, Walker};
-use crate::Annotation;
+use crate::{Annotation, Portal};
 
 #[derive(Debug)]
 pub struct LevelMut<'a, C, A> {
@@ -75,23 +75,29 @@ where
 }
 
 #[derive(Debug)]
-pub struct PartialBranchMut<'a, C, A>(Vec<LevelMut<'a, C, A>>);
+pub struct PartialBranchMut<'a, C, A> {
+    levels: Vec<LevelMut<'a, C, A>>,
+    portal: &'a Portal,
+}
 
 impl<'a, C, A> PartialBranchMut<'a, C, A> {
-    fn new(root: &'a mut C) -> Self {
-        PartialBranchMut(vec![LevelMut::new(root)])
+    fn new(root: &'a mut C, portal: &'a Portal) -> Self {
+        PartialBranchMut {
+            levels: vec![LevelMut::new(root)],
+            portal,
+        }
     }
 
     pub fn depth(&self) -> usize {
-        self.0.len()
+        self.levels.len()
     }
 
     fn top(&self) -> &LevelMut<C, A> {
-        self.0.last().expect("Never empty")
+        self.levels.last().expect("Never empty")
     }
 
     fn top_mut(&mut self) -> &mut LevelMut<'a, C, A> {
-        self.0.last_mut().expect("Never empty")
+        self.levels.last_mut().expect("Never empty")
     }
 
     fn leaf(&self) -> Option<&C::Leaf>
@@ -128,8 +134,8 @@ impl<'a, C, A> PartialBranchMut<'a, C, A> {
 
     fn pop(&mut self) -> Option<LevelMut<'a, C, A>> {
         // We never pop the root
-        if self.0.len() > 1 {
-            self.0.pop()
+        if self.levels.len() > 1 {
+            self.levels.pop()
         } else {
             None
         }
@@ -148,11 +154,13 @@ impl<'a, C, A> PartialBranchMut<'a, C, A> {
             Pop,
         }
 
+        let mut portal = self.portal.clone();
+
         let mut state = State::Init;
         loop {
             match mem::replace(&mut state, State::Init) {
                 State::Init => (),
-                State::Push(push) => self.0.push(push),
+                State::Push(push) => self.levels.push(push),
                 State::Pop => match self.pop() {
                     Some(_) => {
                         self.advance();
@@ -172,7 +180,7 @@ impl<'a, C, A> PartialBranchMut<'a, C, A> {
                     match top.node.child_mut(ofs) {
                         ChildMut::Leaf(_) => return Some(()),
                         ChildMut::Node(n) => {
-                            let node = n.inner_mut();
+                            let node = n.inner_mut(&mut portal);
                             let extended: &'a mut C =
                                 unsafe { core::mem::transmute(node) };
                             state = State::Push(LevelMut::new(extended));
@@ -212,14 +220,18 @@ impl<'a, C, A> BranchMut<'a, C, A> {
 
     /// Performs a tree walk, returning either a valid branch or None if the
     /// walk failed.
-    pub fn walk<W>(root: &'a mut C, mut walker: W) -> Option<Self>
+    pub fn walk<W>(
+        root: &'a mut C,
+        portal: &'a Portal,
+        mut walker: W,
+    ) -> Option<Self>
     where
         C: Archive + Compound<A> + Clone,
         C::Archived: ArchivedCompound<C, A>,
         A: Annotation<C::Leaf>,
         W: Walker<C, A>,
     {
-        let mut partial = PartialBranchMut::new(root);
+        let mut partial = PartialBranchMut::new(root, portal);
         partial.walk(&mut walker).map(|()| BranchMut(partial))
     }
 }

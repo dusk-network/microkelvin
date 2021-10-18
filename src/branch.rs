@@ -78,11 +78,15 @@ where
     }
 }
 
-pub struct PartialBranch<'a, C, A>(Vec<Level<'a, C, A>>, &'a Portal)
+pub struct PartialBranch<'a, C, A>
 where
     C: Archive + Compound<A>,
     C::Archived: ArchivedCompound<C, A>,
-    A: Annotation<C::Leaf>;
+    A: Annotation<C::Leaf>,
+{
+    levels: Vec<Level<'a, C, A>>,
+    portal: &'a Portal,
+}
 
 impl<'a, C, A> PartialBranch<'a, C, A>
 where
@@ -91,15 +95,18 @@ where
     A: Annotation<C::Leaf>,
 {
     fn new(root: AWrap<'a, C>, portal: &'a Portal) -> Self {
-        PartialBranch(vec![Level::new(root)], portal)
+        PartialBranch {
+            levels: vec![Level::new(root)],
+            portal,
+        }
     }
 
     pub fn depth(&self) -> usize {
-        self.0.len()
+        self.levels.len()
     }
 
     pub fn levels(&self) -> &[Level<C, A>] {
-        &self.0
+        &self.levels
     }
 
     fn leaf(&self) -> Option<AWrap<C::Leaf>>
@@ -123,11 +130,11 @@ where
     }
 
     fn top(&self) -> &Level<C, A> {
-        self.0.last().expect("Never empty")
+        self.levels.last().expect("Never empty")
     }
 
     fn top_mut(&mut self) -> &mut Level<'a, C, A> {
-        self.0.last_mut().expect("Never empty")
+        self.levels.last_mut().expect("Never empty")
     }
 
     fn advance(&mut self) {
@@ -136,8 +143,8 @@ where
 
     fn pop(&mut self) -> Option<Level<'a, C, A>> {
         // We never pop the root
-        if self.0.len() > 1 {
-            self.0.pop()
+        if self.levels.len() > 1 {
+            self.levels.pop()
         } else {
             None
         }
@@ -162,7 +169,7 @@ where
         loop {
             match core::mem::replace(&mut state, State::Init) {
                 State::Init => (),
-                State::Push(push) => self.0.push(push),
+                State::Push(push) => self.levels.push(push),
                 State::Pop => match self.pop() {
                     Some(_) => {
                         self.advance();
@@ -181,21 +188,27 @@ where
                     let ca = match &top.node {
                         AWrap::Memory(root) => match root.child(ofs) {
                             Child::Leaf(_) => return Some(()),
-                            Child::Node(node) => match node.inner() {
-                                AWrap::Memory(c) => {
-                                    let level = Level::new(AWrap::Memory(c));
-                                    let extended: Level<'a, C, A> =
-                                        unsafe { core::mem::transmute(level) };
-                                    state = State::Push(extended);
-                                    continue;
+                            Child::Node(node) => {
+                                match node.inner(self.portal) {
+                                    AWrap::Memory(c) => {
+                                        let level =
+                                            Level::new(AWrap::Memory(c));
+                                        let extended: Level<'a, C, A> = unsafe {
+                                            core::mem::transmute(level)
+                                        };
+                                        state = State::Push(extended);
+                                        continue;
+                                    }
+                                    AWrap::Archived(ca) => ca,
                                 }
-                                AWrap::Archived(ca) => ca,
-                            },
+                            }
                             _ => panic!("Invalid child found"),
                         },
                         AWrap::Archived(arch) => match arch.child(ofs) {
                             ArchivedChild::Leaf(_) => return Some(()),
-                            ArchivedChild::Node(node) => node.inner(self.1),
+                            ArchivedChild::Node(node) => {
+                                node.inner(self.portal)
+                            }
                             _ => panic!("Invalid child found"),
                         },
                     };
@@ -293,20 +306,6 @@ where
     C::Archived: ArchivedCompound<C, A>,
     A: Annotation<C::Leaf>;
 
-// impl<'a, C, A> Deref for Branch<'a, C, A>
-// where
-//     C: Archive + Compound<A>,
-//     C::Leaf: 'a,
-//     C::Archived: ArchivedCompound<C, A>,
-//     A: Annotation<C::Leaf>,
-// {
-//     type Target = AWrap<'a, C::Leaf>;
-
-//     fn deref(&self) -> &Self::Target {
-//         self.0.leaf().expect("Invalid branch")
-//     }
-// }
-
 pub struct MappedBranch<'a, C, A, M>
 where
     C: Archive + Compound<A>,
@@ -316,19 +315,6 @@ where
     inner: Branch<'a, C, A>,
     closure: for<'b> fn(AWrap<'b, C::Leaf>) -> &'b M,
 }
-
-// impl<'a, C, A, M> Deref for MappedBranch<'a, C, A, M>
-// where
-//     C: Archive + Compound<A>,
-//     C::Archived: ArchivedCompound<C, A>,
-//     A: Annotation<C::Leaf>,
-// {
-//     type Target = M;
-
-//     fn deref(&self) -> &M {
-//         (self.closure)(&*self.inner)
-//     }
-// }
 
 pub enum BranchIterator<'a, C, A, W>
 where

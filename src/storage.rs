@@ -9,8 +9,8 @@ use std::{
 };
 
 use rkyv::{
-    archived_root, ser::Serializer, AlignedVec, Archive, Deserialize, Fallible,
-    Infallible, Serialize,
+    archived_root, ser::Serializer, AlignedVec, Archive, Fallible, Infallible,
+    Serialize,
 };
 
 use parking_lot::RwLock;
@@ -19,7 +19,6 @@ use memmap::Mmap;
 
 pub struct Stored<T> {
     offset: RawOffset,
-    portal: Portal,
     _marker: PhantomData<T>,
 }
 
@@ -27,40 +26,27 @@ impl<T> Clone for Stored<T> {
     fn clone(&self) -> Self {
         Stored {
             offset: self.offset.clone(),
-            portal: self.portal.clone(),
             _marker: PhantomData,
         }
     }
 }
 
+impl<T> Copy for Stored<T> {}
+
 impl<T> Stored<T>
 where
     T: Archive,
 {
-    pub(crate) fn new(offset: RawOffset, portal: Portal) -> Self {
+    pub(crate) fn new(offset: RawOffset) -> Self {
         debug_assert!(*offset % std::mem::align_of::<T>() as u64 == 0);
         Stored {
             offset,
-            portal,
             _marker: PhantomData,
         }
     }
 
-    pub fn into_raw(self) -> RawOffset {
-        self.offset
-    }
-
-    pub fn restore(&self) -> T
-    where
-        T::Archived: Deserialize<T, Portal>,
-    {
-        self.archived()
-            .deserialize(&mut self.portal.clone())
-            .unwrap()
-    }
-
-    pub fn archived(&self) -> &T::Archived {
-        self.portal.get::<T>(self.offset)
+    pub fn offset(self) -> u64 {
+        *self.offset
     }
 }
 
@@ -133,20 +119,11 @@ impl Portal {
     where
         T: Archive + Serialize<Storage>,
     {
-        let portal = self.clone();
-        self.0.write().put(t, portal)
-    }
-
-    /// Commits a value to the portal
-    pub fn put_raw<T>(&self, t: &T) -> RawOffset
-    where
-        T: Archive + Serialize<Storage>,
-    {
-        self.0.write().put_raw(t)
+        self.0.write().put(t)
     }
 
     /// Gets a value previously commited to the portal at offset `ofs`
-    pub fn get<'a, T>(&'a self, ofs: RawOffset) -> &'a T::Archived
+    pub fn get<'a, T>(&'a self, ofs: Stored<T>) -> &'a T::Archived
     where
         T: Archive,
     {
@@ -180,7 +157,7 @@ impl Fallible for Storage {
     type Error = Infallible;
 }
 
-impl Fallible for Portal {
+impl Fallible for &Portal {
     type Error = Infallible;
 }
 
@@ -268,31 +245,22 @@ const fn lane_size_from_lane(lane: usize) -> usize {
 
 impl Storage {
     /// Commits a value to the portal
-    pub fn put<T>(&mut self, t: &T, portal: Portal) -> Stored<T>
+    pub fn put<T>(&mut self, t: &T) -> Stored<T>
     where
         T: Archive + Serialize<Storage>,
     {
         let _ = self.serialize_value(t);
         let ofs = self.written - std::mem::size_of::<T::Archived>();
-        Stored::new(RawOffset::new(ofs as u64), portal)
-    }
-
-    /// Commits a value to the portal
-    pub fn put_raw<T>(&mut self, t: &T) -> RawOffset
-    where
-        T: Archive + Serialize<Storage>,
-    {
-        let _ = self.serialize_value(t);
-        let ofs = self.written - std::mem::size_of::<T::Archived>();
-        RawOffset::new(ofs as u64)
+        Stored::new(RawOffset::new(ofs as u64))
     }
 
     /// Gets a value from the portal at offset `ofs`
-    fn get<T>(&self, ofs: RawOffset) -> &T::Archived
+    fn get<T>(&self, stored: Stored<T>) -> &T::Archived
     where
         T: Archive,
     {
-        let (lane, lane_ofs) = lane_from_offset(*ofs as usize);
+        let ofs = stored.offset();
+        let (lane, lane_ofs) = lane_from_offset(ofs as usize);
         let archived_len = std::mem::size_of::<T::Archived>();
 
         match &self.lanes[lane] {
@@ -422,7 +390,7 @@ mod test {
         for i in 0..N {
             let le: LittleEndian<u32> = (i as u32).into();
 
-            assert_eq!(references[i].archived(), &le);
+            assert_eq!(portal.get(references[i]), &le);
         }
     }
 
@@ -455,7 +423,7 @@ mod test {
         for i in 0..N {
             let le: LittleEndian<u32> = (i as u32).into();
 
-            assert_eq!(references[i].archived(), &le);
+            assert_eq!(portal.get(references[i]), &le);
         }
 
         use tempfile::tempdir;
@@ -473,7 +441,7 @@ mod test {
         for i in 0..N {
             let le: LittleEndian<u32> = (i as u32).into();
 
-            assert_eq!(references[i].archived(), &le);
+            assert_eq!(new_portal.get(references[i]), &le);
         }
 
         // now write some more!
@@ -489,19 +457,23 @@ mod test {
         for i in 0..N * 2 {
             let le: LittleEndian<u32> = (i as u32).into();
 
-            assert_eq!(references[i].archived(), &le);
+            assert_eq!(new_portal.get(references[i]), &le);
         }
 
         // persist again
 
         new_portal.persist(dir.path())?;
 
+        drop(new_portal);
+
+        let even_newer_portal = Portal::restore(&dir)?;
+
         // read all back again
 
         for i in 0..N * 2 {
             let le: LittleEndian<u32> = (i as u32).into();
 
-            assert_eq!(references[i].archived(), &le);
+            assert_eq!(even_newer_portal.get(references[i]), &le);
         }
 
         Ok(())
