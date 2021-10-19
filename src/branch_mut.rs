@@ -9,7 +9,7 @@ use core::mem;
 use core::ops::{Deref, DerefMut};
 
 use alloc::vec::Vec;
-use rkyv::Archive;
+use rkyv::{Archive, Deserialize, Infallible};
 
 use crate::annotations::Annotation;
 use crate::compound::{ArchivedCompound, Child, ChildMut, Compound};
@@ -142,7 +142,7 @@ impl<'a, C, A> PartialBranchMut<'a, C, A> {
     fn walk<W>(&mut self, walker: &mut W) -> Option<()>
     where
         C: Archive + Compound<A> + Clone,
-        C::Archived: ArchivedCompound<C, A>,
+        C::Archived: ArchivedCompound<C, A> + Deserialize<C, Infallible>,
         A: Annotation<C::Leaf>,
         W: Walker<C, A>,
     {
@@ -219,7 +219,7 @@ impl<'a, C, A> BranchMut<'a, C, A> {
     pub fn walk<W>(root: &'a mut C, mut walker: W) -> Option<Self>
     where
         C: Archive + Compound<A> + Clone,
-        C::Archived: ArchivedCompound<C, A>,
+        C::Archived: ArchivedCompound<C, A> + Deserialize<C, Infallible>,
         A: Annotation<C::Leaf>,
         W: Walker<C, A>,
     {
@@ -334,7 +334,7 @@ impl<'a, C, A> IntoIterator for BranchMut<'a, C, A>
 where
     C: Archive + Compound<A> + Clone,
     C::Leaf: 'a,
-    C::Archived: ArchivedCompound<C, A>,
+    C::Archived: ArchivedCompound<C, A> + Deserialize<C, Infallible>,
     A: Annotation<C::Leaf>,
 {
     type Item = &'a mut C::Leaf;
@@ -350,7 +350,7 @@ impl<'a, C, A, W> Iterator for BranchMutIterator<'a, C, A, W>
 where
     C: Archive + Compound<A> + Clone,
     C::Leaf: 'a,
-    C::Archived: ArchivedCompound<C, A>,
+    C::Archived: ArchivedCompound<C, A> + Deserialize<C, Infallible>,
     A: Annotation<C::Leaf>,
     W: Walker<C, A>,
 {
@@ -405,7 +405,7 @@ where
 impl<'a, C, A, M> IntoIterator for MappedBranchMut<'a, C, A, M>
 where
     C: Archive + Compound<A> + Clone,
-    C::Archived: ArchivedCompound<C, A>,
+    C::Archived: ArchivedCompound<C, A> + Deserialize<C, Infallible>,
     A: Annotation<C::Leaf>,
     M: 'a,
 {
@@ -421,7 +421,7 @@ where
 impl<'a, C, A, W, M> Iterator for MappedBranchMutIterator<'a, C, A, W, M>
 where
     C: Archive + Compound<A> + Clone,
-    C::Archived: ArchivedCompound<C, A>,
+    C::Archived: ArchivedCompound<C, A> + Deserialize<C, Infallible>,
     A: Annotation<C::Leaf>,
     W: Walker<C, A>,
     M: 'a,

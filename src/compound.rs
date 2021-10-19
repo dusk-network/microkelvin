@@ -62,7 +62,7 @@ where
 }
 
 /// Trait to support branch traversal in archived nodes
-pub trait ArchivedCompound<C, A>: Deserialize<C, Infallible>
+pub trait ArchivedCompound<C, A>
 where
     C: Compound<A>,
     A: Annotation<C::Leaf>,
@@ -123,7 +123,8 @@ where
     ) -> Option<BranchMut<'a, Self, A>>
     where
         Self: Archive + Clone,
-        Self::Archived: ArchivedCompound<Self, A>,
+        Self::Archived:
+            ArchivedCompound<Self, A> + Deserialize<Self, Infallible>,
         W: Walker<Self, A>,
     {
         BranchMut::walk(self, walker)

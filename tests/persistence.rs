@@ -44,9 +44,8 @@ mod persist_tests {
 
         let dir = tempdir()?;
         let db = DiskBackend::new(dir.path())?;
-        let portal = Portal::new(db);
 
-        let id = portal.put::<_, PortalSerializer>(&list);
+        let id = Portal::put::<_, PortalSerializer>(&list);
 
         let mut restored = id.resolve();
 
@@ -90,7 +89,6 @@ mod persist_tests {
     fn persist_across_threads() -> Result<(), io::Error> {
         let dir = tempdir()?;
         let db = DiskBackend::new(dir.path())?;
-        let portal = Portal::new(db);
 
         let n: u64 = 16;
 
@@ -101,7 +99,7 @@ mod persist_tests {
             list.push(i);
         }
 
-        let persisted = portal.put::<_, PortalSerializer>(&list);
+        let persisted = Portal::put::<_, PortalSerializer>(&list);
 
         // it should now be available from other threads
 

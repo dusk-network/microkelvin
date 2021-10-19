@@ -88,22 +88,24 @@ where
 impl<C, A, S> Serialize<S> for Link<C, A>
 where
     C: Compound<A> + Serialize<S> + Serialize<Storage>,
+    C::Archived: ArchivedCompound<C, A>,
     A: Annotation<C::Leaf>,
     S: Serializer + BorrowMut<Storage>,
 {
-    fn serialize(
-        &self,
-        serializer: &mut S,
-    ) -> Result<Self::Resolver, S::Error> {
+    fn serialize(&self, ser: &mut S) -> Result<Self::Resolver, S::Error> {
         match self {
             Link::Memory { rc, annotation } => {
-                let a = if let Some(a) = &*annotation.borrow() {
+                let borrow = annotation.borrow();
+                let a = if let Some(a) = &*borrow {
                     a.clone()
                 } else {
-                    todo!()
+                    let a = A::combine(rc.annotations());
+                    drop(borrow);
+                    *annotation.borrow_mut() = Some(a.clone());
+                    a
                 };
                 let to_insert = &(**rc);
-                let ofs = serializer.borrow_mut().put(to_insert);
+                let ofs = ser.borrow_mut().put(to_insert);
                 Ok((ofs, a))
             }
             Link::Archived { .. } => todo!(),
