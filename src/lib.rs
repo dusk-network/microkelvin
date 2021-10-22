@@ -18,6 +18,7 @@
 #[macro_use]
 extern crate alloc;
 
+#[cfg(feature = "host")]
 #[macro_use]
 extern crate lazy_static;
 
@@ -39,7 +40,7 @@ pub use compound::{
     MutableLeaves,
 };
 pub use link::Link;
-pub use walk::{First, Step, Walker};
+pub use walk::{First, Slots, Step, Walker};
 pub use wrappers::{AWrap, Primitive};
 
 mod storage;

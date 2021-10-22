@@ -16,9 +16,7 @@ mod persist_tests {
 
     use rend::LittleEndian;
 
-    use tempfile::tempdir;
-
-    use microkelvin::{DiskBackend, Keyed, Portal, PortalSerializer};
+    use microkelvin::{ArchivedCompound, Cardinality, Keyed, Nth, Portal};
 
     #[derive(PartialEq, Clone, Debug)]
     struct TestLeaf {
@@ -35,19 +33,16 @@ mod persist_tests {
     fn persist() -> Result<(), io::Error> {
         let n: u64 = 16;
 
-        let mut list = LinkedList::<_, ()>::new();
+        let mut list = LinkedList::<_, Cardinality>::new();
 
         for i in 0..n {
             let i: LittleEndian<u64> = i.into();
             list.push(i);
         }
 
-        let dir = tempdir()?;
-        let db = DiskBackend::new(dir.path())?;
+        let stored = Portal::put(&list);
 
-        let id = Portal::put::<_, PortalSerializer>(&list);
-
-        let mut restored = id.resolve();
+        let restored = Portal::get(stored);
 
         // first empty the original
 
@@ -60,7 +55,10 @@ mod persist_tests {
 
         for i in 0..n {
             let i: LittleEndian<u64> = i.into();
-            assert_eq!(restored.pop(), Some((n - i - 1).into()));
+            assert_eq!(
+                *restored.walk(Nth(i.into())).unwrap().leaf(),
+                n - i - 1
+            );
         }
 
         Ok(())
@@ -87,31 +85,29 @@ mod persist_tests {
     }
 
     fn persist_across_threads() -> Result<(), io::Error> {
-        let dir = tempdir()?;
-        let db = DiskBackend::new(dir.path())?;
-
         let n: u64 = 16;
 
-        let mut list = LinkedList::<_, ()>::new();
+        let mut list = LinkedList::<_, Cardinality>::new();
 
         for i in 0..n {
             let i: LittleEndian<u64> = i.into();
             list.push(i);
         }
 
-        let persisted = Portal::put::<_, PortalSerializer>(&list);
+        let persisted = Portal::put(&list);
 
         // it should now be available from other threads
 
         std::thread::spawn(move || {
-            let mut restored = persisted.resolve();
+            let restored = Portal::get(persisted);
 
             for i in 0..n {
                 let i: LittleEndian<u64> = i.into();
-                assert_eq!(restored.pop(), Some((n - i - 1).into()));
+                assert_eq!(
+                    *restored.walk(Nth(i.into())).unwrap().leaf(),
+                    n - i - 1
+                );
             }
-
-            Ok(()) as Result<(), io::Error>
         })
         .join()
         .expect("thread to join cleanly");

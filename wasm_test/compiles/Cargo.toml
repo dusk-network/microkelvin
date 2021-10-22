@@ -10,4 +10,4 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 dusk-abi = "0.9.0-rc"
-microkelvin = { path = "../.." }
+microkelvin = { path = "../..", default-features = false }

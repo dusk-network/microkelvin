@@ -9,20 +9,19 @@ license = "MPL-2.0"
 readme = "README.md"
 
 [dependencies]
-parking_lot = { version = "0.11.1" }
-lazy_static = { version = "1.4.0" }
-tempfile = { version = "3.2.0" }
-
-arbitrary = { version = "1.0.1", features = ["derive"], optional = true }
-rkyv = { version = "0.7.14", features = ["size_32", "archive_le"] }
-memmap = "0.7.0"
-blake3 = "1.0.0"
-rend = "0.3.2"
 owning_ref = "0.4.1"
+rend = "0.3.2"
+
+parking_lot = { version = "0.11.1", optional = true  }
+lazy_static = { version = "1.4.0", optional = true }
+tempfile = { version = "3.2.0", optional = true  }
+rkyv = { version = "0.7.14", default_features = false, features = ["size_32", "archive_le"] }
+memmap = { version = "0.7.0", optional = true }
 
 [dev-dependencies]
 rand = "0.8.3"
 
 [features]
-host = []
+default = ["host"]
+host = ["parking_lot", "lazy_static", "tempfile", "memmap", "rkyv/alloc"]
 

@@ -5,92 +5,24 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use std::{
-    borrow::{Borrow, BorrowMut},
     fs::{File, OpenOptions},
     io::{self, Write},
-    marker::PhantomData,
-    ops::Deref,
     path::Path,
     sync::Arc,
 };
+
+use super::{Portal, Stored};
 
 lazy_static! {
     static ref SINGLETON: Arc<RwLock<Storage>> =
         Arc::new(RwLock::new(Storage::default()));
 }
 
-use rkyv::{
-    archived_root, ser::Serializer, AlignedVec, Archive, Fallible, Infallible,
-    Serialize,
-};
+use rkyv::{archived_root, ser::Serializer, AlignedVec, Archive, Serialize};
 
 use parking_lot::RwLock;
 
 use memmap::Mmap;
-
-pub struct Stored<T> {
-    offset: RawOffset,
-    _marker: PhantomData<T>,
-}
-
-impl<T> Clone for Stored<T> {
-    fn clone(&self) -> Self {
-        Stored {
-            offset: self.offset.clone(),
-            _marker: PhantomData,
-        }
-    }
-}
-
-impl<T> Copy for Stored<T> {}
-
-impl<T> Stored<T>
-where
-    T: Archive,
-{
-    pub(crate) fn new(offset: RawOffset) -> Self {
-        debug_assert!(*offset % std::mem::align_of::<T>() as u64 == 0);
-        Stored {
-            offset,
-            _marker: PhantomData,
-        }
-    }
-
-    pub fn offset(self) -> u64 {
-        *self.offset
-    }
-}
-
-#[derive(Clone, Copy, Debug)]
-pub struct RawOffset(u64);
-
-impl Deref for RawOffset {
-    type Target = u64;
-
-    fn deref(&self) -> &u64 {
-        &self.0
-    }
-}
-
-impl RawOffset {
-    fn new(u: u64) -> Self {
-        RawOffset(u)
-    }
-}
-
-/// Helper trait to constrain serializers used with Storage;
-pub trait StorageSerializer: Serializer + Sized + BorrowMut<Storage> {}
-impl<T> StorageSerializer for T where T: Serializer + Sized + BorrowMut<Storage> {}
-
-/// Helper trait to constrain deserializers used with Storage;
-pub trait PortalDeserializer: Fallible + Sized + Borrow<Portal> {}
-impl<T> PortalDeserializer for T where T: Fallible + Sized + Borrow<Portal> {}
-
-impl<T> std::fmt::Debug for Stored<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_tuple("Offset").field(&self.offset).finish()
-    }
-}
 
 const FIRST_CHONK_SIZE: usize = 64 * 1024;
 const N_LANES: usize = 32;
@@ -112,12 +44,6 @@ impl std::fmt::Debug for Lane {
             .finish()
     }
 }
-
-/// Portal
-///
-/// A hybrid memory/disk storage for an append only sequence of bytes.
-#[derive(Clone, Debug, Default)]
-pub struct Portal;
 
 impl Portal {
     /// Commits a value to the portal
@@ -160,14 +86,6 @@ impl Portal {
 pub struct Storage {
     lanes: [Lane; N_LANES],
     written: usize,
-}
-
-impl Fallible for Storage {
-    type Error = Infallible;
-}
-
-impl Fallible for &Portal {
-    type Error = Infallible;
 }
 
 impl Serializer for Storage {
@@ -260,7 +178,7 @@ impl Storage {
     {
         let _ = self.serialize_value(t);
         let ofs = self.written - std::mem::size_of::<T::Archived>();
-        Stored::new(RawOffset::new(ofs as u64))
+        Stored::new(ofs as u64)
     }
 
     /// Gets a value from the portal at offset `ofs`

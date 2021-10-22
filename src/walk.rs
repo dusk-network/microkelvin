@@ -33,6 +33,9 @@ where
     fn walk(&mut self, walk: impl Slots<C, A>) -> Step;
 }
 
+/// A slot in a datastructure type `C`
+///
+/// Can contain both in-memory and archived components
 pub enum Slot<'a, C, A>
 where
     C: Compound<A>,
@@ -45,12 +48,14 @@ where
     End,
 }
 
+/// Trait used in walking trees
 pub trait Slots<C, A>
 where
     C: Compound<A>,
     A: Annotation<C::Leaf>,
 {
-    fn slot(&self, ofs: usize) -> Slot<C, A>;
+    /// Query slot `n` in the structure
+    fn slot(&self, n: usize) -> Slot<C, A>;
 }
 
 /// Walker that visits all leaves
