@@ -193,7 +193,6 @@ fn push_mut() {
     }
 
     for i in 0..n {
-        let i: LittleEndian<u64> = i.into();
         let mut nth = list.walk_mut(Nth(i)).expect("Some(Branch)");
         *nth += 1;
     }
@@ -227,7 +226,7 @@ fn iterate_immutable() {
     }
 
     // branch from 7th element
-    let branch = list.walk_mut(Nth(6.into())).expect("Some(Branch)");
+    let branch = list.walk_mut(Nth(6)).expect("Some(Branch)");
 
     let mut count = n - 6;
 
@@ -266,7 +265,7 @@ fn iterate_mutable() {
         count -= 1;
     }
 
-    let branch = list.walk(Nth(7.into())).expect("Some(Branch)");
+    let branch = list.walk(Nth(7)).expect("Some(Branch)");
 
     let mut count = n - 7;
 

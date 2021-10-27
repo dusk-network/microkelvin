@@ -59,7 +59,7 @@ where
 
 /// Walker method to find the nth element of a compound collection
 #[derive(Debug)]
-pub struct Nth(pub LittleEndian<u64>);
+pub struct Nth(pub u64);
 
 impl<C, A> Walker<C, A> for Nth
 where
