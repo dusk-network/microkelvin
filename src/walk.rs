@@ -41,10 +41,15 @@ where
     C: Compound<A>,
     A: Annotation<C::Leaf>,
 {
+    /// Walk encountered a leaf
     Leaf(&'a C::Leaf),
+    /// Walk encountered an archived leaf
     ArchivedLeaf(&'a <C::Leaf as Archive>::Archived),
+    /// Walk encountered an annotated subtree
     Annotation(ARef<'a, A>),
+    /// Walk encountered an empty slot
     Empty,
+    /// Walk encountered the end of a node
     End,
 }
 
@@ -71,7 +76,7 @@ where
     fn walk(&mut self, walk: impl Slots<C, A>) -> Step {
         for i in 0.. {
             match walk.slot(i) {
-                Slot::End => return Step::Abort,
+                Slot::End => return Step::Advance,
                 Slot::Empty => (),
                 _ => return Step::Found(i),
             }

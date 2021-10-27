@@ -4,7 +4,6 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use core::ops::Deref;
 use std::marker::PhantomData;
 
 use alloc::vec::Vec;
@@ -237,11 +236,12 @@ where
     /// Used in maps for example, to get easy access to the value of the KV-pair
     pub fn map_leaf<M>(
         self,
-        closure: for<'b> fn(AWrap<'b, C::Leaf>) -> &'b M,
+        closure: for<'b> fn(AWrap<'b, C::Leaf>) -> AWrap<'b, M>,
     ) -> MappedBranch<'a, C, A, M>
     where
         C: Compound<A>,
         A: Annotation<C::Leaf>,
+        M: Archive,
     {
         MappedBranch {
             inner: self,
@@ -277,14 +277,29 @@ where
     C::Archived: ArchivedCompound<C, A>,
     A: Annotation<C::Leaf>;
 
+/// A branch that applies a map to its leaf
 pub struct MappedBranch<'a, C, A, M>
 where
     C: Archive + Compound<A>,
     C::Archived: ArchivedCompound<C, A>,
     A: Annotation<C::Leaf>,
+    M: Archive,
 {
     inner: Branch<'a, C, A>,
-    closure: for<'b> fn(AWrap<'b, C::Leaf>) -> &'b M,
+    closure: for<'b> fn(AWrap<'b, C::Leaf>) -> AWrap<'b, M>,
+}
+
+impl<'a, C, A, M> MappedBranch<'a, C, A, M>
+where
+    C: Archive + Compound<A>,
+    C::Archived: ArchivedCompound<C, A>,
+    A: Annotation<C::Leaf>,
+    M: Archive,
+{
+    /// Get the mapped leaf of the branch
+    pub fn leaf(&'a self) -> AWrap<'a, M> {
+        (self.closure)(self.inner.leaf())
+    }
 }
 
 pub enum BranchIterator<'a, C, A, W>
@@ -365,6 +380,7 @@ where
     C: Archive + Compound<A>,
     C::Archived: ArchivedCompound<C, A>,
     A: Annotation<C::Leaf>,
+    M: Archive,
 {
     Initial(MappedBranch<'a, C, A, M>, W),
     Intermediate(MappedBranch<'a, C, A, M>, W),
@@ -376,9 +392,9 @@ where
     C: Archive + Compound<A>,
     C::Archived: ArchivedCompound<C, A>,
     A: Annotation<C::Leaf>,
-    M: 'a,
+    M: 'a + Archive,
 {
-    type Item = &'a M;
+    type Item = AWrap<'a, M>;
 
     type IntoIter = MappedBranchIterator<'a, C, A, First, M>;
 
@@ -393,9 +409,9 @@ where
     C::Archived: ArchivedCompound<C, A>,
     A: Annotation<C::Leaf>,
     W: Walker<C, A>,
-    M: 'a,
+    M: 'a + Archive,
 {
-    type Item = &'a M;
+    type Item = AWrap<'a, M>;
 
     fn next(&mut self) -> Option<Self::Item> {
         match core::mem::replace(self, Self::Exhausted) {
@@ -422,25 +438,12 @@ where
 
         match self {
             Self::Intermediate(branch, _) => {
-                let leaf: &M = &*branch;
-                let leaf_extended: &'a M =
+                let leaf = branch.leaf();
+                let leaf_extended: AWrap<'a, M> =
                     unsafe { core::mem::transmute(leaf) };
                 Some(leaf_extended)
             }
             _ => unreachable!(),
         }
-    }
-}
-
-impl<'a, C, A, M> Deref for MappedBranch<'a, C, A, M>
-where
-    C: Archive + Compound<A>,
-    C::Archived: ArchivedCompound<C, A>,
-    A: Annotation<C::Leaf>,
-{
-    type Target = M;
-
-    fn deref(&self) -> &M {
-        (self.closure)(self.inner.leaf())
     }
 }

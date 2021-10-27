@@ -33,14 +33,14 @@ mod wrappers;
 pub use annotations::{
     ARef, Annotation, Cardinality, Combine, FindMaxKey, Keyed, MaxKey, Nth,
 };
-pub use branch::Branch;
-pub use branch_mut::BranchMut;
+pub use branch::{Branch, MappedBranch};
+pub use branch_mut::{BranchMut, MappedBranchMut};
 pub use compound::{
     AnnoIter, ArchivedChild, ArchivedCompound, Child, ChildMut, Compound,
     MutableLeaves,
 };
 pub use link::Link;
-pub use walk::{First, Slots, Step, Walker};
+pub use walk::{First, Slot, Slots, Step, Walker};
 pub use wrappers::{AWrap, Primitive};
 
 mod storage;

@@ -226,13 +226,13 @@ mod test {
         let mut tree = NaiveTree::<LittleEndian<u16>, ()>::new();
 
         for n in &numbers {
-            let n: LittleEndian<_> = (*n).into();
+            let n: LittleEndian<_> = *n;
             tree.insert(n);
         }
 
         for n in &numbers {
-            let n: LittleEndian<_> = (*n).into();
-            assert_eq!(tree.member(&n), true)
+            let n: LittleEndian<_> = *n;
+            assert!(tree.member(&n))
         }
 
         let ofs = Portal::put(&tree);
@@ -240,8 +240,8 @@ mod test {
         let archived_tree = Portal::get(ofs);
 
         for n in &ordered {
-            let n: LittleEndian<_> = (*n).into();
-            assert_eq!(archived_tree.member(&n), true)
+            let n: LittleEndian<_> = *n;
+            assert!(archived_tree.member(&n))
         }
 
         Ok(())

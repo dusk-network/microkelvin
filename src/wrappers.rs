@@ -4,9 +4,11 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use std::ops::Deref;
+use std::{borrow::Borrow, ops::Deref};
 
 use rkyv::{Archive, Deserialize, Infallible};
+
+use crate::Keyed;
 
 /// Marker trait for types that have themselves as archived type
 pub trait Primitive:
@@ -19,6 +21,7 @@ impl<T> Primitive for T where
 {
 }
 
+#[derive(Debug)]
 /// A wrapper around the actual type, or the archived version
 pub enum AWrap<'a, T>
 where
@@ -32,14 +35,41 @@ where
 
 impl<'a, T> Deref for AWrap<'a, T>
 where
-    T: Primitive,
+    T: Archive,
+    T::Archived: Borrow<T>,
 {
     type Target = T;
 
     fn deref(&self) -> &T {
         match self {
             AWrap::Memory(t) => t,
-            AWrap::Archived(at) => at,
+            AWrap::Archived(at) => (*at).borrow(),
+        }
+    }
+}
+
+impl<'a, T> PartialEq<T> for AWrap<'a, T>
+where
+    T: Archive + PartialEq,
+    T::Archived: PartialEq<T>,
+{
+    fn eq(&self, other: &T) -> bool {
+        match (self, other) {
+            (Self::Memory(l), r) => *l == r,
+            (Self::Archived(l), r) => *l == r,
+        }
+    }
+}
+
+impl<'a, KV, K> Keyed<K> for AWrap<'a, KV>
+where
+    KV: Archive + Keyed<K>,
+    KV::Archived: Keyed<K>,
+{
+    fn key(&self) -> &K {
+        match self {
+            AWrap::Memory(t) => t.key(),
+            AWrap::Archived(t) => t.key(),
         }
     }
 }

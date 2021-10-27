@@ -34,13 +34,6 @@ pub trait Keyed<K> {
     fn key(&self) -> &K;
 }
 
-// Elements can be their own keys
-impl<T> Keyed<T> for T {
-    fn key(&self) -> &T {
-        self
-    }
-}
-
 impl<K> Default for MaxKey<K> {
     fn default() -> Self {
         MaxKey::NegativeInfinity
