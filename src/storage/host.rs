@@ -156,8 +156,6 @@ impl Default for Storage {
     }
 }
 
-unsafe impl Sync for Storage {}
-
 const fn lane_from_offset(offset: usize) -> (usize, usize) {
     const USIZE_BITS: usize = std::mem::size_of::<usize>() * 8;
     let i = offset / FIRST_CHONK_SIZE + 1;

@@ -14,6 +14,8 @@ pub struct Stored<T> {
     _marker: PhantomData<T>,
 }
 
+// Since `Stored` is just a wrapped u64, it is both sync and safe.
+// the compiler cannot infer this without a T: Send or Sync
 unsafe impl<T> Send for Stored<T> {}
 unsafe impl<T> Sync for Stored<T> {}
 
