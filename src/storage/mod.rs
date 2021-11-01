@@ -36,7 +36,7 @@ where
 {
     #[allow(unused)]
     pub(crate) fn new(offset: u64) -> Self {
-        debug_assert!(offset % std::mem::align_of::<T>() as u64 == 0);
+        debug_assert!(offset % core::mem::align_of::<T>() as u64 == 0);
         Stored {
             offset,
             _marker: PhantomData,
@@ -48,7 +48,7 @@ where
     }
 }
 
-impl<T> std::fmt::Debug for Stored<T> {
+impl<T> core::fmt::Debug for Stored<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_tuple("Offset").field(&self.offset).finish()
     }

@@ -4,7 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use std::{borrow::Borrow, ops::Deref};
+use core::{borrow::Borrow, ops::Deref};
 
 use rkyv::{Archive, Deserialize, Infallible};
 

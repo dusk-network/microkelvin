@@ -5,9 +5,9 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use alloc::rc::Rc;
+use core::borrow::BorrowMut;
 use core::cell::RefCell;
 use rkyv::ser::Serializer;
-use std::borrow::BorrowMut;
 
 use owning_ref::OwningRef;
 use rkyv::{Archive, Deserialize, Serialize};
