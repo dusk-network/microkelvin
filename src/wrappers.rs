@@ -6,20 +6,14 @@
 
 use core::{borrow::Borrow, ops::Deref};
 
-use rkyv::{Archive, Deserialize, Infallible};
+use rkyv::Archive;
 
 use crate::Keyed;
 
 /// Marker trait for types that have themselves as archived type
-pub trait Primitive:
-    Archive<Archived = Self> + Deserialize<Self, Infallible> + Sized
-{
-}
+pub trait Primitive: Archive<Archived = Self> + Sized {}
 
-impl<T> Primitive for T where
-    T: Archive<Archived = T> + Deserialize<T, Infallible> + Sized
-{
-}
+impl<T> Primitive for T where T: Archive<Archived = T> + Sized {}
 
 #[derive(Debug)]
 /// A wrapper around the actual type, or the archived version

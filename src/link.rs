@@ -89,6 +89,7 @@ impl<C, A, S> Serialize<S> for Link<C, A>
 where
     C: Compound<A> + Serialize<S> + Serialize<Storage>,
     C::Archived: ArchivedCompound<C, A>,
+    C::Leaf: Archive,
     A: Annotation<C::Leaf>,
     S: Serializer + BorrowMut<Storage>,
 {
@@ -139,6 +140,7 @@ impl<C, A> Link<C, A> {
     where
         C: Archive + Compound<A>,
         C::Archived: ArchivedCompound<C, A>,
+        C::Leaf: Archive,
         A: Annotation<C::Leaf>,
     {
         match self {

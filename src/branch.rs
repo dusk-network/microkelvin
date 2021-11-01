@@ -18,6 +18,7 @@ pub struct Level<'a, C, A>
 where
     C: Archive + Compound<A>,
     C::Archived: ArchivedCompound<C, A>,
+    C::Leaf: Archive,
     A: Annotation<C::Leaf>,
 {
     offset: usize,
@@ -30,6 +31,7 @@ impl<'a, C, A> Level<'a, C, A>
 where
     C: Archive + Compound<A>,
     C::Archived: ArchivedCompound<C, A>,
+    C::Leaf: Archive,
     A: Annotation<C::Leaf>,
 {
     pub fn new(root: AWrap<'a, C>) -> Level<'a, C, A> {
@@ -53,6 +55,7 @@ where
 impl<'a, C, A> Slots<C, A> for &Level<'a, C, A>
 where
     C: Archive + Compound<A>,
+    C::Leaf: Archive,
     C::Archived: ArchivedCompound<C, A>,
     A: Annotation<C::Leaf>,
 {
@@ -80,6 +83,7 @@ pub struct PartialBranch<'a, C, A>
 where
     C: Archive + Compound<A>,
     C::Archived: ArchivedCompound<C, A>,
+    C::Leaf: Archive,
     A: Annotation<C::Leaf>,
 {
     levels: Vec<Level<'a, C, A>>,
@@ -89,6 +93,7 @@ impl<'a, C, A> PartialBranch<'a, C, A>
 where
     C: Archive + Compound<A>,
     C::Archived: ArchivedCompound<C, A>,
+    C::Leaf: Archive,
     A: Annotation<C::Leaf>,
 {
     fn new(root: AWrap<'a, C>) -> Self {
@@ -108,6 +113,7 @@ where
     fn leaf(&self) -> Option<AWrap<C::Leaf>>
     where
         C: Compound<A>,
+        C::Leaf: Archive,
         A: Annotation<C::Leaf>,
     {
         let top = self.top();
@@ -154,6 +160,7 @@ where
         where
             C: Archive + Compound<A>,
             C::Archived: ArchivedCompound<C, A>,
+            C::Leaf: Archive,
             A: Annotation<C::Leaf>,
         {
             Init,
@@ -220,6 +227,7 @@ impl<'a, C, A> Branch<'a, C, A>
 where
     C: Archive + Compound<A>,
     C::Archived: ArchivedCompound<C, A>,
+    C::Leaf: Archive,
     A: Annotation<C::Leaf>,
 {
     /// Returns the depth of the branch
@@ -275,6 +283,7 @@ pub struct Branch<'a, C, A>(PartialBranch<'a, C, A>)
 where
     C: Archive + Compound<A>,
     C::Archived: ArchivedCompound<C, A>,
+    C::Leaf: Archive,
     A: Annotation<C::Leaf>;
 
 /// A branch that applies a map to its leaf
@@ -282,6 +291,7 @@ pub struct MappedBranch<'a, C, A, M>
 where
     C: Archive + Compound<A>,
     C::Archived: ArchivedCompound<C, A>,
+    C::Leaf: Archive,
     A: Annotation<C::Leaf>,
     M: Archive,
 {
@@ -293,6 +303,7 @@ impl<'a, C, A, M> MappedBranch<'a, C, A, M>
 where
     C: Archive + Compound<A>,
     C::Archived: ArchivedCompound<C, A>,
+    C::Leaf: Archive,
     A: Annotation<C::Leaf>,
     M: Archive,
 {
@@ -306,6 +317,7 @@ pub enum BranchIterator<'a, C, A, W>
 where
     C: Archive + Compound<A>,
     C::Archived: ArchivedCompound<C, A>,
+    C::Leaf: Archive,
     A: Annotation<C::Leaf>,
 {
     Initial(Branch<'a, C, A>, W),
@@ -317,7 +329,7 @@ where
 impl<'a, C, A> IntoIterator for Branch<'a, C, A>
 where
     C: Archive + Compound<A>,
-    C::Leaf: 'a,
+    C::Leaf: 'a + Archive,
     C::Archived: ArchivedCompound<C, A>,
     A: Annotation<C::Leaf>,
 {
@@ -333,7 +345,7 @@ where
 impl<'a, C, A, W> Iterator for BranchIterator<'a, C, A, W>
 where
     C: Archive + Compound<A>,
-    C::Leaf: 'a,
+    C::Leaf: 'a + Archive,
     C::Archived: ArchivedCompound<C, A>,
     A: Annotation<C::Leaf>,
     W: Walker<C, A>,
@@ -379,6 +391,7 @@ pub enum MappedBranchIterator<'a, C, A, W, M>
 where
     C: Archive + Compound<A>,
     C::Archived: ArchivedCompound<C, A>,
+    C::Leaf: Archive,
     A: Annotation<C::Leaf>,
     M: Archive,
 {
@@ -391,6 +404,7 @@ impl<'a, C, A, M> IntoIterator for MappedBranch<'a, C, A, M>
 where
     C: Archive + Compound<A>,
     C::Archived: ArchivedCompound<C, A>,
+    C::Leaf: Archive,
     A: Annotation<C::Leaf>,
     M: 'a + Archive,
 {
@@ -407,6 +421,7 @@ impl<'a, C, A, W, M> Iterator for MappedBranchIterator<'a, C, A, W, M>
 where
     C: Archive + Compound<A>,
     C::Archived: ArchivedCompound<C, A>,
+    C::Leaf: Archive,
     A: Annotation<C::Leaf>,
     W: Walker<C, A>,
     M: 'a + Archive,

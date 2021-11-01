@@ -62,6 +62,7 @@ impl<'a, C, A> Slots<C, A> for &LevelMut<'a, C, A>
 where
     C: Archive + Compound<A>,
     C::Archived: ArchivedCompound<C, A>,
+    C::Leaf: Archive,
     A: Annotation<C::Leaf>,
 {
     fn slot(&self, ofs: usize) -> Slot<C, A> {
@@ -143,6 +144,7 @@ impl<'a, C, A> PartialBranchMut<'a, C, A> {
     where
         C: Archive + Compound<A> + Clone,
         C::Archived: ArchivedCompound<C, A> + Deserialize<C, Infallible>,
+        C::Leaf: Archive,
         A: Annotation<C::Leaf>,
         W: Walker<C, A>,
     {
@@ -206,6 +208,7 @@ impl<'a, C, A> BranchMut<'a, C, A> {
     where
         C: Archive + Compound<A>,
         C::Archived: ArchivedCompound<C, A>,
+        C::Leaf: Archive,
         A: Annotation<C::Leaf>,
     {
         MappedBranchMut {
@@ -220,6 +223,7 @@ impl<'a, C, A> BranchMut<'a, C, A> {
     where
         C: Archive + Compound<A> + Clone,
         C::Archived: ArchivedCompound<C, A> + Deserialize<C, Infallible>,
+        C::Leaf: Archive,
         A: Annotation<C::Leaf>,
         W: Walker<C, A>,
     {
@@ -243,6 +247,7 @@ impl<'a, C, A> Deref for BranchMut<'a, C, A>
 where
     C: Archive + Compound<A>,
     C::Archived: ArchivedCompound<C, A>,
+    C::Leaf: Archive,
     A: Annotation<C::Leaf>,
 {
     type Target = C::Leaf;
@@ -256,6 +261,7 @@ impl<'a, C, A> DerefMut for BranchMut<'a, C, A>
 where
     C: Archive + Compound<A> + Clone,
     C::Archived: ArchivedCompound<C, A>,
+    C::Leaf: Archive,
     A: Annotation<C::Leaf>,
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
@@ -268,6 +274,7 @@ pub struct MappedBranchMut<'a, C, A, M>
 where
     C: Archive + Compound<A>,
     C::Archived: ArchivedCompound<C, A>,
+    C::Leaf: Archive,
     A: Annotation<C::Leaf>,
 {
     inner: BranchMut<'a, C, A>,
@@ -278,6 +285,7 @@ impl<'a, C, A, M> core::fmt::Debug for MappedBranchMut<'a, C, A, M>
 where
     C: Archive + Compound<A> + core::fmt::Debug,
     C::Archived: ArchivedCompound<C, A> + core::fmt::Debug,
+    C::Leaf: Archive,
     A: Annotation<C::Leaf> + core::fmt::Debug,
 {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
@@ -291,6 +299,7 @@ impl<'a, C, A, M> Deref for MappedBranchMut<'a, C, A, M>
 where
     C: Archive + Compound<A> + Clone,
     C::Archived: ArchivedCompound<C, A>,
+    C::Leaf: Archive,
     A: Annotation<C::Leaf>,
 {
     type Target = M;
@@ -309,6 +318,7 @@ impl<'a, C, A, M> DerefMut for MappedBranchMut<'a, C, A, M>
 where
     C: Archive + Compound<A> + Clone,
     C::Archived: ArchivedCompound<C, A>,
+    C::Leaf: Archive,
     A: Annotation<C::Leaf>,
 {
     fn deref_mut(&mut self) -> &mut M {
@@ -323,6 +333,7 @@ pub enum BranchMutIterator<'a, C, A, W>
 where
     C: Archive + Compound<A> + Clone,
     C::Archived: ArchivedCompound<C, A>,
+    C::Leaf: Archive,
     A: Annotation<C::Leaf>,
 {
     Initial(BranchMut<'a, C, A>, W),
@@ -333,7 +344,7 @@ where
 impl<'a, C, A> IntoIterator for BranchMut<'a, C, A>
 where
     C: Archive + Compound<A> + Clone,
-    C::Leaf: 'a,
+    C::Leaf: 'a + Archive,
     C::Archived: ArchivedCompound<C, A> + Deserialize<C, Infallible>,
     A: Annotation<C::Leaf>,
 {
@@ -349,7 +360,7 @@ where
 impl<'a, C, A, W> Iterator for BranchMutIterator<'a, C, A, W>
 where
     C: Archive + Compound<A> + Clone,
-    C::Leaf: 'a,
+    C::Leaf: 'a + Archive,
     C::Archived: ArchivedCompound<C, A> + Deserialize<C, Infallible>,
     A: Annotation<C::Leaf>,
     W: Walker<C, A>,
@@ -395,6 +406,7 @@ pub enum MappedBranchMutIterator<'a, C, A, W, M>
 where
     C: Archive + Compound<A>,
     C::Archived: ArchivedCompound<C, A>,
+    C::Leaf: Archive,
     A: Annotation<C::Leaf>,
 {
     Initial(MappedBranchMut<'a, C, A, M>, W),
@@ -406,6 +418,7 @@ impl<'a, C, A, M> IntoIterator for MappedBranchMut<'a, C, A, M>
 where
     C: Archive + Compound<A> + Clone,
     C::Archived: ArchivedCompound<C, A> + Deserialize<C, Infallible>,
+    C::Leaf: Archive,
     A: Annotation<C::Leaf>,
     M: 'a,
 {
@@ -422,6 +435,7 @@ impl<'a, C, A, W, M> Iterator for MappedBranchMutIterator<'a, C, A, W, M>
 where
     C: Archive + Compound<A> + Clone,
     C::Archived: ArchivedCompound<C, A> + Deserialize<C, Infallible>,
+    C::Leaf: Archive,
     A: Annotation<C::Leaf>,
     W: Walker<C, A>,
     M: 'a,

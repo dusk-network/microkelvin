@@ -20,7 +20,8 @@ use crate::ArchivedCompound;
 /// The maximum value of a collection
 #[derive(PartialEq, Eq, Clone, Debug, Archive, Serialize, Deserialize)]
 #[archive(as = "Self")]
-#[archive(bound(archive = "K: Primitive"))]
+#[archive(bound(archive = "
+  K: Primitive"))]
 pub enum MaxKey<K> {
     /// Identity of max, everything else is larger
     NegativeInfinity,
@@ -91,6 +92,7 @@ where
     where
         C: Archive + Compound<A>,
         C::Archived: ArchivedCompound<C, A>,
+        C::Leaf: Archive,
         A: Annotation<C::Leaf>,
     {
         iter.fold(MaxKey::NegativeInfinity, |max, ann| {
@@ -118,7 +120,7 @@ impl<C, A, K> Walker<C, A> for FindMaxKey<K>
 where
     C: Archive + Compound<A>,
     C::Archived: ArchivedCompound<C, A>,
-    C::Leaf: Keyed<K>,
+    C::Leaf: Archive + Keyed<K>,
     <C::Leaf as Archive>::Archived: Keyed<K>,
     A: Annotation<C::Leaf> + Borrow<MaxKey<K>>,
     K: Ord + Clone,

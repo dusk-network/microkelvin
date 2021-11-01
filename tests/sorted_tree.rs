@@ -93,6 +93,7 @@ where
     T: Archive + Ord + Clone,
     T::Archived: Deserialize<T, Infallible>,
     A: Annotation<Self> + Clone,
+    A::Archived: Deserialize<A, Infallible>,
 {
     fn new() -> Self {
         Default::default()

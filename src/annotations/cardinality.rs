@@ -48,6 +48,7 @@ where
     where
         C: Archive + Compound<A>,
         C::Archived: ArchivedCompound<C, A>,
+        C::Leaf: Archive,
         A: Annotation<C::Leaf>,
     {
         Cardinality(iter.fold(LittleEndian::from(0), |sum, ann| {
@@ -65,6 +66,7 @@ impl<C, A> Walker<C, A> for Nth
 where
     C: Archive + Compound<A>,
     C::Archived: ArchivedCompound<C, A>,
+    C::Leaf: Archive,
     A: Annotation<C::Leaf> + Borrow<Cardinality>,
 {
     fn walk(&mut self, walk: impl Slots<C, A>) -> Step {

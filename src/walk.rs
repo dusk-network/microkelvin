@@ -27,6 +27,7 @@ pub trait Walker<C, A>
 where
     C: Archive + Compound<A>,
     C::Archived: ArchivedCompound<C, A>,
+    C::Leaf: Archive,
     A: Annotation<C::Leaf>,
 {
     /// Walk the tree node, returning the appropriate `Step`
@@ -39,6 +40,7 @@ where
 pub enum Slot<'a, C, A>
 where
     C: Compound<A>,
+    C::Leaf: Archive,
     A: Annotation<C::Leaf>,
 {
     /// Walk encountered a leaf
@@ -57,6 +59,7 @@ where
 pub trait Slots<C, A>
 where
     C: Compound<A>,
+    C::Leaf: Archive,
     A: Annotation<C::Leaf>,
 {
     /// Query slot `n` in the structure
@@ -71,6 +74,7 @@ impl<C, A> Walker<C, A> for First
 where
     C: Archive + Compound<A>,
     C::Archived: ArchivedCompound<C, A>,
+    C::Leaf: Archive,
     A: Annotation<C::Leaf>,
 {
     fn walk(&mut self, walk: impl Slots<C, A>) -> Step {

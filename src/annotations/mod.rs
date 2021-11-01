@@ -35,6 +35,7 @@ pub trait Combine<A> {
     where
         C: Archive + Compound<A>,
         C::Archived: ArchivedCompound<C, A>,
+        C::Leaf: Archive,
         A: Annotation<C::Leaf>;
 }
 

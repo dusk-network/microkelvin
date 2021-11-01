@@ -32,6 +32,7 @@ where
 pub enum ArchivedChild<'a, C, A>
 where
     C: Compound<A>,
+    C::Leaf: Archive,
     A: Annotation<C::Leaf>,
 {
     /// Child is a leaf
@@ -65,6 +66,7 @@ where
 pub trait ArchivedCompound<C, A>
 where
     C: Compound<A>,
+    C::Leaf: Archive,
     A: Annotation<C::Leaf>,
 {
     /// Returns an archived child
@@ -86,7 +88,7 @@ where
     A: Annotation<Self::Leaf>,
 {
     /// The leaf type of the Compound collection
-    type Leaf: Archive;
+    type Leaf;
 
     /// Get a reference to a child    
     fn child(&self, ofs: usize) -> Child<Self, A>;
@@ -111,6 +113,7 @@ where
     where
         Self: Archive,
         Self::Archived: ArchivedCompound<Self, A>,
+        Self::Leaf: Archive,
         W: Walker<Self, A>,
     {
         Branch::walk(AWrap::Memory(self), walker)
@@ -125,6 +128,7 @@ where
         Self: Archive + Clone,
         Self::Archived:
             ArchivedCompound<Self, A> + Deserialize<Self, Infallible>,
+        Self::Leaf: Archive,
         W: Walker<Self, A>,
     {
         BranchMut::walk(self, walker)
@@ -154,6 +158,7 @@ where
     A: 'a,
     C: Archive + Compound<A>,
     C::Archived: ArchivedCompound<C, A>,
+    C::Leaf: Archive,
     A: Annotation<C::Leaf>,
 {
     type Item = ARef<'a, A>;
