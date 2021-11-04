@@ -9,17 +9,19 @@ use core::borrow::Borrow;
 use core::cmp::Ordering;
 use core::marker::PhantomData;
 
-use canonical::{Canon, CanonError};
-use canonical_derive::Canon;
+use rkyv::{Archive, Deserialize, Serialize};
 
 use crate::annotations::{Annotation, Combine};
-use crate::branch::Branch;
-use crate::branch_mut::BranchMut;
-use crate::compound::{AnnoIter, Child, Compound, MutableLeaves};
-use crate::walk::{Step, Walk, Walker};
+use crate::compound::{AnnoIter, Compound};
+use crate::walk::{Slot, Slots, Step, Walker};
+use crate::wrappers::Primitive;
+use crate::ArchivedCompound;
 
 /// The maximum value of a collection
-#[derive(Canon, PartialEq, Eq, Debug, Clone, Copy)]
+#[derive(PartialEq, Eq, Clone, Debug, Archive, Serialize, Deserialize)]
+#[archive(as = "Self")]
+#[archive(bound(archive = "
+  K: Primitive"))]
 pub enum MaxKey<K> {
     /// Identity of max, everything else is larger
     NegativeInfinity,
@@ -31,13 +33,6 @@ pub enum MaxKey<K> {
 pub trait Keyed<K> {
     /// Return a reference to the key of the leaf type
     fn key(&self) -> &K;
-}
-
-// Elements can be their own keys
-impl<T> Keyed<T> for T {
-    fn key(&self) -> &T {
-        self
-    }
 }
 
 impl<K> Default for MaxKey<K> {
@@ -81,7 +76,7 @@ where
 impl<K, L> Annotation<L> for MaxKey<K>
 where
     L: Keyed<K>,
-    K: Clone + Ord + Canon,
+    K: Primitive + Clone + Ord,
 {
     fn from_leaf(leaf: &L) -> Self {
         MaxKey::Maximum(leaf.key().clone())
@@ -91,11 +86,13 @@ where
 impl<K, A> Combine<A> for MaxKey<K>
 where
     K: Ord + Clone,
-    A: Borrow<Self> + Canon,
+    A: Primitive + Borrow<Self>,
 {
     fn combine<C>(iter: AnnoIter<C, A>) -> Self
     where
-        C: Compound<A>,
+        C: Archive + Compound<A>,
+        C::Archived: ArchivedCompound<C, A>,
+        C::Leaf: Archive,
         A: Annotation<C::Leaf>,
     {
         iter.fold(MaxKey::NegativeInfinity, |max, ann| {
@@ -121,18 +118,20 @@ impl<K> Default for FindMaxKey<K> {
 
 impl<C, A, K> Walker<C, A> for FindMaxKey<K>
 where
-    C: Compound<A>,
-    C::Leaf: Keyed<K>,
+    C: Archive + Compound<A>,
+    C::Archived: ArchivedCompound<C, A>,
+    C::Leaf: Archive + Keyed<K>,
+    <C::Leaf as Archive>::Archived: Keyed<K>,
     A: Annotation<C::Leaf> + Borrow<MaxKey<K>>,
-    K: Ord + Clone + core::fmt::Debug,
+    K: Ord + Clone,
 {
-    fn walk(&mut self, walk: Walk<C, A>) -> Step {
+    fn walk(&mut self, walk: impl Slots<C, A>) -> Step {
         let mut current_max: MaxKey<K> = MaxKey::NegativeInfinity;
         let mut current_step = Step::Abort;
 
         for i in 0.. {
-            match walk.child(i) {
-                Child::Leaf(l) => {
+            match walk.slot(i) {
+                Slot::Leaf(l) => {
                     let leaf_max: MaxKey<K> = MaxKey::Maximum(l.key().clone());
 
                     if leaf_max > current_max {
@@ -140,61 +139,25 @@ where
                         current_step = Step::Found(i);
                     }
                 }
-                Child::Node(n) => {
-                    let ann = n.annotation();
+                Slot::ArchivedLeaf(l) => {
+                    let leaf_max: MaxKey<K> = MaxKey::Maximum(l.key().clone());
+
+                    if leaf_max > current_max {
+                        current_max = leaf_max;
+                        current_step = Step::Found(i);
+                    }
+                }
+                Slot::Annotation(ann) => {
                     let node_max: &MaxKey<K> = (*ann).borrow();
                     if node_max > &current_max {
                         current_max = node_max.clone();
-                        current_step = Step::Into(i);
+                        current_step = Step::Found(i);
                     }
                 }
-                Child::Empty => (),
-                Child::EndOfNode => return current_step,
+                Slot::Empty => (),
+                Slot::End => return current_step,
             }
         }
         unreachable!()
-    }
-}
-
-/// Trait that provides a max_leaf() method to any Compound with a MaxKey
-/// annotation
-pub trait GetMaxKey<'a, A, K>
-where
-    Self: Compound<A>,
-    Self::Leaf: Keyed<K>,
-    A: Annotation<Self::Leaf> + Borrow<MaxKey<K>>,
-    K: Ord,
-{
-    /// Construct a `Branch` pointing to the element with the largest key
-    fn max_key(&'a self) -> Result<Option<Branch<'a, Self, A>>, CanonError>;
-
-    /// Construct a `BranchMut` pointing to the element with the largest key
-    fn max_key_mut(
-        &'a mut self,
-    ) -> Result<Option<BranchMut<'a, Self, A>>, CanonError>
-    where
-        Self: MutableLeaves;
-}
-
-impl<'a, C, A, K> GetMaxKey<'a, A, K> for C
-where
-    C: Compound<A> + Clone,
-    C::Leaf: Keyed<K>,
-    A: Annotation<C::Leaf> + Borrow<MaxKey<K>>,
-    K: Ord + Clone + core::fmt::Debug,
-{
-    fn max_key(&'a self) -> Result<Option<Branch<'a, Self, A>>, CanonError> {
-        // Return the first that satisfies the walk
-        Branch::<_, A>::walk(self, FindMaxKey::default())
-    }
-
-    fn max_key_mut(
-        &'a mut self,
-    ) -> Result<Option<BranchMut<'a, Self, A>>, CanonError>
-    where
-        C: MutableLeaves,
-    {
-        // Return the first mutable branch that satisfies the walk
-        BranchMut::<_, A>::walk(self, FindMaxKey::default())
     }
 }

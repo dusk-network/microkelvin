@@ -4,12 +4,13 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use core::borrow::Borrow;
+use core::cell::Ref;
 use core::ops::Deref;
 
-use canonical::Canon;
+use owning_ref::OwningRef;
+use rkyv::Archive;
 
-use crate::{AnnoIter, Compound, LinkAnnotation};
+use crate::{AnnoIter, ArchivedCompound, Compound, Primitive};
 
 mod cardinality;
 mod max_key;
@@ -17,10 +18,12 @@ mod unit;
 
 // re-exports
 pub use cardinality::{Cardinality, Nth};
-pub use max_key::{GetMaxKey, Keyed, MaxKey};
+pub use max_key::{FindMaxKey, Keyed, MaxKey};
 
 /// The trait defining an annotation type over a leaf
-pub trait Annotation<Leaf>: Default + Canon + Combine<Self> {
+pub trait Annotation<Leaf>:
+    Default + Clone + Combine<Self> + Primitive
+{
     /// Creates an annotation from the leaf type
     fn from_leaf(leaf: &Leaf) -> Self;
 }
@@ -30,27 +33,32 @@ pub trait Combine<A> {
     /// Combines multiple annotations
     fn combine<C>(iter: AnnoIter<C, A>) -> Self
     where
-        C: Compound<A>,
-        A: Annotation<C::Leaf> + Borrow<Self>;
+        C: Archive + Compound<A>,
+        C::Archived: ArchivedCompound<C, A>,
+        C::Leaf: Archive,
+        A: Annotation<C::Leaf>;
 }
 
+/// A wrapped annotation that is either owning it's a or providing an annotated
+/// link
 #[derive(Debug)]
-/// Custom pointer type, like a lightweight `std::borrow::Cow` since it
-/// is not available in `core`
-pub enum WrappedAnnotation<'a, C, A> {
+pub enum ARef<'a, A> {
     /// The annotation is owned
     Owned(A),
     /// The annotation is a reference
-    Link(LinkAnnotation<'a, C, A>),
+    Borrowed(&'a A),
+    /// Referenced
+    Referenced(OwningRef<Ref<'a, Option<A>>, A>),
 }
 
-impl<'a, C, A> Deref for WrappedAnnotation<'a, C, A> {
+impl<'a, A> Deref for ARef<'a, A> {
     type Target = A;
 
     fn deref(&self) -> &Self::Target {
         match self {
-            WrappedAnnotation::Owned(ref a) => a,
-            WrappedAnnotation::Link(a) => a,
+            ARef::Owned(ref a) => a,
+            ARef::Borrowed(a) => *a,
+            ARef::Referenced(a) => a,
         }
     }
 }

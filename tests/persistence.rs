@@ -6,22 +6,19 @@
 
 mod linked_list;
 
-#[cfg(feature = "persistence")]
+#[cfg(feature = "host")]
 mod persist_tests {
     use super::*;
 
     use linked_list::LinkedList;
 
-    use canonical_derive::Canon;
-    use microkelvin::{
-        BackendCtor, Compound, DiskBackend, Keyed, PersistError, Persistence,
-    };
+    use std::io;
 
-    use std::sync::atomic::{AtomicUsize, Ordering};
-    use std::thread;
-    use std::time;
+    use rend::LittleEndian;
 
-    #[derive(PartialEq, Clone, Canon, Debug)]
+    use microkelvin::{ArchivedCompound, Cardinality, Keyed, Nth, Portal};
+
+    #[derive(PartialEq, Clone, Debug)]
     struct TestLeaf {
         key: u64,
         other: (),
@@ -33,133 +30,114 @@ mod persist_tests {
         }
     }
 
-    static INIT_COUNTER: AtomicUsize = AtomicUsize::new(0);
-
-    fn testbackend() -> BackendCtor<DiskBackend> {
-        BackendCtor::new(|| {
-            INIT_COUNTER.fetch_add(1, Ordering::SeqCst);
-            DiskBackend::ephemeral()
-        })
-    }
-
-    fn persist() -> Result<(), PersistError> {
+    fn persist() -> Result<(), io::Error> {
         let n: u64 = 16;
 
-        let mut list = LinkedList::<_, ()>::new();
+        let mut list = LinkedList::<_, Cardinality>::new();
 
         for i in 0..n {
+            let i: LittleEndian<u64> = i.into();
             list.push(i);
         }
 
-        let persisted = Persistence::persist(&testbackend(), &list)?;
+        let stored = Portal::put(&list);
 
-        let restored_generic = persisted.restore()?;
-
-        let mut restored: LinkedList<u64, ()> =
-            LinkedList::from_generic(&restored_generic)?;
+        let restored = Portal::get(stored);
 
         // first empty the original
 
         for i in 0..n {
-            assert_eq!(list.pop()?, Some(n - i - 1));
+            let i: LittleEndian<u64> = i.into();
+            assert_eq!(list.pop(), Some((n - i - 1).into()));
         }
 
         // then the restored copy
 
         for i in 0..n {
-            assert_eq!(restored.pop()?, Some(n - i - 1));
+            let i: LittleEndian<u64> = i.into();
+            assert_eq!(
+                *restored.walk(Nth(i.into())).unwrap().leaf(),
+                n - i - 1
+            );
         }
 
         Ok(())
     }
 
     #[test]
-    fn persist_a() -> Result<(), PersistError> {
+    fn persist_a() -> Result<(), io::Error> {
         persist()
     }
 
     #[test]
-    fn persist_b() -> Result<(), PersistError> {
+    fn persist_b() -> Result<(), io::Error> {
         persist()
     }
 
     #[test]
-    fn persist_c() -> Result<(), PersistError> {
+    fn persist_c() -> Result<(), io::Error> {
         persist()
     }
 
     #[test]
-    fn persist_d() -> Result<(), PersistError> {
+    fn persist_d() -> Result<(), io::Error> {
         persist()
     }
 
-    fn persist_across_threads() -> Result<(), PersistError> {
+    fn persist_across_threads() -> Result<(), io::Error> {
         let n: u64 = 16;
 
-        let mut list = LinkedList::<_, ()>::new();
+        let mut list = LinkedList::<_, Cardinality>::new();
 
         for i in 0..n {
+            let i: LittleEndian<u64> = i.into();
             list.push(i);
         }
 
-        let persisted = Persistence::persist(&testbackend(), &list)?;
+        let persisted = Portal::put(&list);
 
         // it should now be available from other threads
 
         std::thread::spawn(move || {
-            let restored_generic = persisted.restore()?;
-
-            let mut restored: LinkedList<u64, ()> =
-                LinkedList::from_generic(&restored_generic)?;
+            let restored = Portal::get(persisted);
 
             for i in 0..n {
-                assert_eq!(restored.pop()?, Some(n - i - 1));
+                let i: LittleEndian<u64> = i.into();
+                assert_eq!(
+                    *restored.walk(Nth(i.into())).unwrap().leaf(),
+                    n - i - 1
+                );
             }
-
-            Ok(()) as Result<(), PersistError>
         })
         .join()
-        .expect("thread to join cleanly")?;
+        .expect("thread to join cleanly");
 
         // then empty the original
 
         for i in 0..n {
-            assert_eq!(list.pop()?, Some(n - i - 1));
+            assert_eq!(list.pop(), Some((n - i - 1).into()));
         }
 
         Ok(())
     }
 
     #[test]
-    fn persist_across_threads_a() -> Result<(), PersistError> {
+    fn persist_across_threads_a() -> Result<(), io::Error> {
         persist_across_threads()
     }
 
     #[test]
-    fn persist_across_threads_b() -> Result<(), PersistError> {
+    fn persist_across_threads_b() -> Result<(), io::Error> {
         persist_across_threads()
     }
 
     #[test]
-    fn persist_across_threads_c() -> Result<(), PersistError> {
+    fn persist_across_threads_c() -> Result<(), io::Error> {
         persist_across_threads()
     }
 
     #[test]
-    fn persist_across_threads_d() -> Result<(), PersistError> {
+    fn persist_across_threads_d() -> Result<(), io::Error> {
         persist_across_threads()
-    }
-
-    #[test]
-    fn persist_create_once() {
-        while INIT_COUNTER.load(Ordering::SeqCst) == 0 {}
-
-        for _ in 0..128 {
-            assert_eq!(INIT_COUNTER.load(Ordering::SeqCst), 1);
-
-            thread::sleep(time::Duration::from_millis(1));
-
-            assert_eq!(INIT_COUNTER.load(Ordering::SeqCst), 1);
-        }
     }
 }

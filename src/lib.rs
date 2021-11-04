@@ -6,43 +6,42 @@
 
 //! Microkelvin
 //!
-//! A library for dealing with tree-shaped Canonical data. It has three parts:
+//! A library for dealing with tree-shaped data. It has three parts:
 //!
 //! `Compound`, a trait for a generic way to implement tree structures
 //! `Annotation`, a trait for annotated subtrees used for searching
 //! `Branch` and `BranchMut`, types for representing branches in tree-formed
 //! data as well as methods of search.
 
-#![cfg_attr(not(feature = "persistence"), no_std)]
 #![deny(missing_docs)]
 
 #[macro_use]
 extern crate alloc;
 
+#[cfg(feature = "host")]
+#[macro_use]
+extern crate lazy_static;
+
 mod annotations;
 mod branch;
 mod branch_mut;
 mod compound;
-mod generic;
 mod link;
 mod walk;
-
-#[cfg(feature = "persistence")]
-mod persist;
+mod wrappers;
 
 pub use annotations::{
-    Annotation, Cardinality, Combine, GetMaxKey, Keyed, MaxKey, Nth,
+    ARef, Annotation, Cardinality, Combine, FindMaxKey, Keyed, MaxKey, Nth,
 };
-pub use branch::Branch;
-pub use branch_mut::BranchMut;
-
-pub use compound::{AnnoIter, Child, ChildMut, Compound, MutableLeaves};
-pub use generic::{GenericAnnotation, GenericChild, GenericLeaf, GenericTree};
-pub use link::{Link, LinkAnnotation, LinkCompound, LinkCompoundMut};
-pub use walk::{First, Step, Walk, Walker};
-
-#[cfg(feature = "persistence")]
-pub use persist::{
-    Backend, BackendCtor, DiskBackend, PersistError, PersistedId, Persistence,
-    PutResult,
+pub use branch::{Branch, MappedBranch};
+pub use branch_mut::{BranchMut, MappedBranchMut};
+pub use compound::{
+    AnnoIter, ArchivedChild, ArchivedCompound, Child, ChildMut, Compound,
+    MutableLeaves,
 };
+pub use link::Link;
+pub use walk::{First, Slot, Slots, Step, Walker};
+pub use wrappers::{AWrap, Primitive};
+
+mod storage;
+pub use storage::{Portal, PortalDeserializer, Storage, StorageSerializer};

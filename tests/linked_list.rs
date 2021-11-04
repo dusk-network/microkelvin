@@ -4,96 +4,89 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use canonical::{Canon, CanonError};
-use canonical_derive::Canon;
-
 use microkelvin::{
-    Annotation, Child, ChildMut, Compound, First, GenericChild, GenericTree,
-    Link, MutableLeaves,
+    Annotation, ArchivedChild, ArchivedCompound, Cardinality, Child, ChildMut,
+    Compound, First, Link, MutableLeaves, Nth, Portal, Storage,
+    StorageSerializer,
 };
+use rend::LittleEndian;
+use rkyv::{Archive, Deserialize, Serialize};
 
-#[derive(Clone, Debug, Canon)]
-pub enum LinkedList<T, A>
-where
-    A: Annotation<T>,
-{
+#[derive(Clone, Archive, Serialize, Deserialize)]
+#[archive(bound(serialize = "
+  T: Serialize<Storage>,
+  A: Annotation<T>,
+  __S: StorageSerializer"))]
+#[archive(bound(deserialize = "
+  A: Archive + Clone,
+  T::Archived: Deserialize<T, __D>,
+  A::Archived: Deserialize<A, __D>,
+  __D: Sized"))]
+pub enum LinkedList<T, A> {
     Empty,
-    Node { val: T, next: Link<Self, A> },
+    Node {
+        val: T,
+        #[omit_bounds]
+        next: Link<Self, A>,
+    },
 }
 
-impl<T, A> Default for LinkedList<T, A>
-where
-    A: Annotation<T>,
-{
+impl<T, A> Default for LinkedList<T, A> {
     fn default() -> Self {
         LinkedList::Empty
     }
 }
 
-impl<T, A> Compound<A> for LinkedList<T, A>
+impl<T, A> ArchivedCompound<LinkedList<T, A>, A> for ArchivedLinkedList<T, A>
 where
+    T: Archive,
     A: Annotation<T>,
-    T: Canon,
 {
-    type Leaf = T;
-
-    fn child(&self, ofs: usize) -> Child<Self, A>
-    where
-        A: Annotation<Self::Leaf>,
-    {
+    fn child(&self, ofs: usize) -> ArchivedChild<LinkedList<T, A>, A> {
         match (self, ofs) {
-            (LinkedList::Node { val, .. }, 0) => Child::Leaf(val),
-            (LinkedList::Node { next, .. }, 1) => Child::Node(next),
-            (LinkedList::Node { .. }, _) => Child::EndOfNode,
-            (LinkedList::Empty, _) => Child::EndOfNode,
-        }
-    }
-
-    fn child_mut(&mut self, ofs: usize) -> ChildMut<Self, A>
-    where
-        A: Annotation<Self::Leaf>,
-    {
-        match (self, ofs) {
-            (LinkedList::Node { val, .. }, 0) => ChildMut::Leaf(val),
-            (LinkedList::Node { next, .. }, 1) => ChildMut::Node(next),
-            (LinkedList::Node { .. }, _) => ChildMut::EndOfNode,
-            (LinkedList::Empty, _) => ChildMut::EndOfNode,
-        }
-    }
-
-    fn from_generic(tree: &GenericTree) -> Result<Self, CanonError>
-    where
-        Self::Leaf: Canon,
-        A: Canon,
-    {
-        let mut children = tree.children().iter();
-
-        let val: Self::Leaf = match children.next() {
-            Some(GenericChild::Leaf(leaf)) => leaf.cast()?,
-            None => return Ok(LinkedList::Empty),
-            _ => return Err(CanonError::InvalidEncoding),
-        };
-
-        match children.next() {
-            Some(GenericChild::Empty) => Ok(LinkedList::Node {
-                val,
-                next: Link::new(LinkedList::Empty),
-            }),
-            Some(GenericChild::Link(id, annotation)) => Ok(LinkedList::Node {
-                val,
-                next: Link::new_persisted(*id, annotation.cast()?),
-            }),
-            _ => Err(CanonError::InvalidEncoding),
+            (ArchivedLinkedList::Node { val, .. }, 0) => {
+                ArchivedChild::Leaf(val)
+            }
+            (ArchivedLinkedList::Node { next, .. }, 1) => {
+                ArchivedChild::Node(next)
+            }
+            (ArchivedLinkedList::Node { .. }, _) => ArchivedChild::EndOfNode,
+            (ArchivedLinkedList::Empty, _) => ArchivedChild::EndOfNode,
         }
     }
 }
 
-impl<T, A> MutableLeaves for LinkedList<T, A> where A: Annotation<T> {}
+impl<T, A> Compound<A> for LinkedList<T, A>
+where
+    T: Archive,
+    A: Annotation<T>,
+{
+    type Leaf = T;
+
+    fn child(&self, ofs: usize) -> Child<Self, A> {
+        match (ofs, self) {
+            (0, LinkedList::Node { val, .. }) => Child::Leaf(val),
+            (1, LinkedList::Node { next, .. }) => Child::Node(next),
+            (_, LinkedList::Node { .. }) => Child::EndOfNode,
+            (_, LinkedList::Empty) => Child::EndOfNode,
+        }
+    }
+
+    fn child_mut(&mut self, ofs: usize) -> ChildMut<Self, A> {
+        match (ofs, self) {
+            (0, LinkedList::Node { val, .. }) => ChildMut::Leaf(val),
+            (1, LinkedList::Node { next, .. }) => ChildMut::Node(next),
+            (_, LinkedList::Node { .. }) => ChildMut::EndOfNode,
+            (_, LinkedList::Empty) => ChildMut::EndOfNode,
+        }
+    }
+}
+
+impl<T, A> MutableLeaves for LinkedList<T, A> where A: Archive + Annotation<T> {}
 
 impl<T, A> LinkedList<T, A>
 where
     A: Annotation<T>,
-    T: Canon,
 {
     pub fn new() -> Self {
         Default::default()
@@ -116,16 +109,16 @@ where
         }
     }
 
-    pub fn pop(&mut self) -> Result<Option<T>, CanonError>
+    pub fn pop(&mut self) -> Option<T>
     where
-        T: Canon,
-        A: Canon,
+        T: Clone,
+        A: Clone,
     {
         match core::mem::take(self) {
-            LinkedList::Empty => Ok(None),
+            LinkedList::Empty => None,
             LinkedList::Node { val: t, next } => {
-                *self = next.into_compound()?;
-                Ok(Some(t))
+                *self = next.unlink();
+                Some(t)
             }
         }
     }
@@ -138,6 +131,7 @@ fn push() {
     let mut list = LinkedList::<_, ()>::new();
 
     for i in 0..n {
+        let i: LittleEndian<u64> = i.into();
         list.push(i)
     }
 }
@@ -146,232 +140,233 @@ fn push() {
 fn push_cardinality() {
     let n: u64 = 1024;
 
-    use microkelvin::Cardinality;
-
     let mut list = LinkedList::<_, Cardinality>::new();
 
     for i in 0..n {
+        let i: LittleEndian<u64> = i.into();
         list.push(i)
     }
 }
 
 #[test]
-fn push_nth() -> Result<(), CanonError> {
-    let n: u64 = 1024;
-
-    use microkelvin::{Cardinality, Nth};
+fn push_nth() {
+    let n = 1024;
 
     let mut list = LinkedList::<_, Cardinality>::new();
 
     for i in 0..n {
+        let i: LittleEndian<u64> = i.into();
         list.push(i)
     }
 
     for i in 0..n {
-        assert_eq!(*list.nth(i)?.expect("Some(branch)"), n - i - 1)
+        let nth = *list.walk(Nth(i.into())).expect("Some(Branch)").leaf();
+        assert_eq!(nth, n - i - 1)
     }
-
-    Ok(())
 }
 
 #[test]
-fn push_pop() -> Result<(), CanonError> {
+fn push_pop() {
     let n: u64 = 1024;
 
     let mut list = LinkedList::<_, ()>::new();
 
     for i in 0..n {
+        let i: LittleEndian<u64> = i.into();
         list.push(i)
     }
 
     for i in 0..n {
-        assert_eq!(list.pop()?, Some(n - i - 1))
+        assert_eq!(list.pop(), Some((n - i - 1).into()))
     }
-
-    Ok(())
 }
 
 #[test]
-fn push_mut() -> Result<(), CanonError> {
+fn push_mut() {
+    let n: u64 = 64;
+
+    let mut list = LinkedList::<_, Cardinality>::new();
+
+    for i in 0..n {
+        let i: LittleEndian<u64> = i.into();
+        list.push(i)
+    }
+
+    for i in 0..n {
+        let mut nth = list.walk_mut(Nth(i)).expect("Some(Branch)");
+        *nth += 1;
+    }
+
+    for i in 0..n {
+        let nth = *list.walk(Nth(i.into())).expect("Some(Branch)").leaf();
+        assert_eq!(nth, n - i)
+    }
+}
+
+#[test]
+fn iterate_immutable() {
     let n: u64 = 1024;
 
-    use microkelvin::{Cardinality, Nth};
-
     let mut list = LinkedList::<_, Cardinality>::new();
 
     for i in 0..n {
-        list.push(i)
-    }
-
-    for i in 0..n {
-        *list.nth_mut(i)?.expect("Some(branch)") += 1
-    }
-
-    for i in 0..n {
-        assert_eq!(*list.nth(i)?.expect("Some(branch)"), n - i)
-    }
-
-    Ok(())
-}
-
-#[test]
-fn iterate_immutable() -> Result<(), CanonError> {
-    let n: u64 = 16;
-
-    use microkelvin::{Cardinality, Nth};
-
-    let mut list = LinkedList::<_, Cardinality>::new();
-
-    for i in 0..n {
+        let i: LittleEndian<u64> = i.into();
         list.push(i)
     }
 
     // branch from first element
-    let branch = list.first()?.expect("Some(branch)");
+
+    let branch = list.walk(First).expect("Some(Branch)");
 
     let mut count = n;
 
-    for res_leaf in branch {
-        let leaf = res_leaf?;
-
+    for leaf in branch {
         count -= 1;
-
         assert_eq!(*leaf, count);
     }
 
     // branch from 7th element
-    let branch = list.nth(6)?.expect("Some(branch)");
+    let branch = list.walk_mut(Nth(6)).expect("Some(Branch)");
 
     let mut count = n - 6;
 
-    for res_leaf in branch {
-        let leaf = res_leaf?;
-
+    for leaf in branch {
         count -= 1;
-
         assert_eq!(*leaf, count);
     }
-
-    Ok(())
 }
 
 #[test]
-fn iterate_mutable() -> Result<(), CanonError> {
+fn iterate_mutable() {
     let n: u64 = 32;
-
-    use microkelvin::{Cardinality, Nth};
 
     let mut list = LinkedList::<_, Cardinality>::new();
 
     for i in 0..n {
+        let i: LittleEndian<u64> = i.into();
         list.push(i)
     }
 
     // branch from first element
-    let branch_mut = list.first_mut()?.expect("Some(branch_mut)");
+    let branch_mut = list.walk_mut(First).expect("Some(Branch)");
 
     let mut count = n;
 
-    for res_leaf in branch_mut {
-        *res_leaf? += 1;
+    for leaf in branch_mut {
+        *leaf += 1;
     }
 
     // branch from first element
-    let branch = list.first()?.expect("Some(brach)");
+    let branch = list.walk(First).expect("Some(Branch)");
 
-    for res_leaf in branch {
-        let leaf = res_leaf?;
-
+    for leaf in branch {
         assert_eq!(*leaf, count);
 
         count -= 1;
     }
 
-    // branch from 8th element
-    let branch = list.nth(7)?.expect("Some(branch)");
+    let branch = list.walk(Nth(7)).expect("Some(Branch)");
 
     let mut count = n - 7;
 
-    for res_leaf in branch {
-        let leaf = res_leaf?;
-
+    for leaf in branch {
         assert_eq!(*leaf, count);
 
         count -= 1;
     }
-
-    Ok(())
 }
 
 #[test]
-fn iterate_map() -> Result<(), CanonError> {
+fn iterate_map() {
     let n: u64 = 32;
 
     let mut list = LinkedList::<_, ()>::new();
 
     for i in 0..n {
+        let i: LittleEndian<u64> = i.into();
         list.push(i)
     }
 
     // branch from first element
-    let branch_mut = list.first()?.expect("Some(brach_mut)");
+    let branch_mut = list.walk_mut(First).expect("Some(Branch)");
+
     let mapped = branch_mut.map_leaf(|x| x);
 
     let mut count = n - 1;
 
     for leaf in mapped {
-        let leaf = leaf?;
-
         assert_eq!(*leaf, count);
-
         count = count.saturating_sub(1);
     }
-
-    Ok(())
 }
 
 #[test]
-fn iterate_map_mutable() -> Result<(), CanonError> {
+fn iterate_map_mutable() {
     let n: u64 = 32;
 
     let mut list = LinkedList::<_, ()>::new();
 
     for i in 0..n {
+        let i: LittleEndian<u64> = i.into();
         list.push(i)
     }
 
     // branch from first element
-    let branch_mut = list.first_mut()?.expect("Some(branch_mut)");
+    let branch_mut = list.walk_mut(First).expect("Some(Branch)");
+
     let mapped = branch_mut.map_leaf(|x| x);
 
     let mut count = n - 1;
 
     for leaf in mapped {
-        let leaf = leaf?;
-
         assert_eq!(*leaf, count);
 
         count = count.saturating_sub(1);
     }
-
-    Ok(())
 }
 
 #[test]
-fn deref_mapped_mutable_branch() -> Result<(), CanonError> {
+fn deref_mapped_mutable_branch() {
     let n: u64 = 32;
 
     let mut list = LinkedList::<_, ()>::new();
 
     for i in 0..n {
+        let i: LittleEndian<u64> = i.into();
         list.push(i)
     }
 
     // branch from first element
-    let branch_mut = list.first_mut()?.expect("Some(brach_mut)");
+    let branch_mut = list.walk_mut(First).expect("Some(Branch)");
+
     let mapped = branch_mut.map_leaf(|x| x);
 
     assert_eq!(core::ops::Deref::deref(&mapped), &31);
+}
 
-    Ok(())
+#[test]
+fn push_nth_persist() {
+    let n = 16;
+
+    let mut list = LinkedList::<_, Cardinality>::new();
+
+    for i in 0..n {
+        let i: LittleEndian<u64> = i.into();
+        list.push(i)
+    }
+
+    for i in 0..n {
+        let nth = *list.walk(Nth(i.into())).expect("Some(Branch)").leaf();
+
+        assert_eq!(nth, n - i - 1)
+    }
+
+    let stored = Portal::put(&list);
+
+    let restored = Portal::get(stored);
+    for i in 0..n {
+        let nth = *restored.walk(Nth(i.into())).expect("Some(Branch)").leaf();
+
+        assert_eq!(nth, n - i - 1)
+    }
 }

@@ -4,19 +4,19 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use canonical::{Canon, CanonError};
-
 use core::marker::PhantomData;
 
-use crate::annotations::{Annotation, WrappedAnnotation};
-use crate::generic::GenericTree;
-use crate::link::Link;
+use rkyv::{Archive, Deserialize, Infallible};
+
+use crate::annotations::{ARef, Annotation};
+use crate::link::{ArchivedLink, Link};
+use crate::{AWrap, Branch, BranchMut, Walker};
 
 /// The response of the `child` method on a `Compound` node.
-#[derive(Debug)]
 pub enum Child<'a, C, A>
 where
     C: Compound<A>,
+    A: Annotation<C::Leaf>,
 {
     /// Child is a leaf
     Leaf(&'a C::Leaf),
@@ -28,11 +28,29 @@ where
     EndOfNode,
 }
 
+/// The response of the `child` method on a `Compound` node.
+pub enum ArchivedChild<'a, C, A>
+where
+    C: Compound<A>,
+    C::Leaf: Archive,
+    A: Annotation<C::Leaf>,
+{
+    /// Child is a leaf
+    Leaf(&'a <C::Leaf as Archive>::Archived),
+    /// Child is an annotated subtree node
+    Node(&'a ArchivedLink<C, A>),
+    /// Empty slot
+    Empty,
+    /// No more children
+    EndOfNode,
+}
+
 /// The response of the `child_mut` method on a `Compound` node.
 #[derive(Debug)]
 pub enum ChildMut<'a, C, A>
 where
     C: Compound<A>,
+    A: Annotation<C::Leaf>,
 {
     /// Child is a leaf
     Leaf(&'a mut C::Leaf),
@@ -44,15 +62,38 @@ where
     EndOfNode,
 }
 
-/// A type that can recursively contain itself and leaves.
-pub trait Compound<A>: Canon {
-    /// The leaf type of the Compound collection
-    type Leaf: Canon;
+/// Trait to support branch traversal in archived nodes
+pub trait ArchivedCompound<C, A>
+where
+    C: Compound<A>,
+    C::Leaf: Archive,
+    A: Annotation<C::Leaf>,
+{
+    /// Returns an archived child
+    fn child(&self, ofs: usize) -> ArchivedChild<C, A>;
 
-    /// Returns a reference to a possible child at specified offset
+    /// Constructs a branch from this root compound
+    fn walk<'a, W>(&'a self, walker: W) -> Option<Branch<'a, C, A>>
+    where
+        W: Walker<C, A>,
+        C: Archive<Archived = Self>,
+    {
+        Branch::walk(AWrap::Archived(self), walker)
+    }
+}
+
+/// A type that can recursively contain itself and leaves.
+pub trait Compound<A>: Sized
+where
+    A: Annotation<Self::Leaf>,
+{
+    /// The leaf type of the Compound collection
+    type Leaf;
+
+    /// Get a reference to a child    
     fn child(&self, ofs: usize) -> Child<Self, A>;
 
-    /// Returns a mutable reference to a possible child at specified offset
+    /// Get a mutable reference to a child
     fn child_mut(&mut self, ofs: usize) -> ChildMut<Self, A>;
 
     /// Provides an iterator over all sub-annotations of the compound node
@@ -67,35 +108,35 @@ pub trait Compound<A>: Canon {
         }
     }
 
-    /// Returns a generic version of this compound tree, erasing the specific
-    /// annotation and leaf types, to provide a universal tree encoding.
-    fn generic(&self) -> GenericTree
+    /// Constructs a branch from this root compound
+    fn walk<'a, W>(&'a self, walker: W) -> Option<Branch<'a, Self, A>>
     where
-        Self::Leaf: Canon,
-        A: Annotation<Self::Leaf>,
+        Self: Archive,
+        Self::Archived: ArchivedCompound<Self, A>,
+        Self::Leaf: Archive,
+        W: Walker<Self, A>,
     {
-        let mut generic = GenericTree::new();
-
-        for i in 0.. {
-            match self.child(i) {
-                Child::Empty => generic.push_empty(),
-                Child::Leaf(leaf) => generic.push_leaf(leaf),
-                Child::Node(link) => generic.push_link(link),
-                Child::EndOfNode => break,
-            }
-        }
-
-        generic
+        Branch::walk(AWrap::Memory(self), walker)
     }
 
-    /// Construct a specific compound tree from a generic tree
-    fn from_generic(tree: &GenericTree) -> Result<Self, CanonError>
+    /// Constructs a mutable branch from this root compound    
+    fn walk_mut<'a, W>(
+        &'a mut self,
+        walker: W,
+    ) -> Option<BranchMut<'a, Self, A>>
     where
-        Self::Leaf: Canon,
-        A: Canon;
+        Self: Archive + Clone,
+        Self::Archived:
+            ArchivedCompound<Self, A> + Deserialize<Self, Infallible>,
+        Self::Leaf: Archive,
+        W: Walker<Self, A>,
+    {
+        BranchMut::walk(self, walker)
+    }
 }
 
 /// An iterator over the sub-annotations of a Compound collection
+#[derive(Debug)]
 pub struct AnnoIter<'a, C, A> {
     node: &'a C,
     ofs: usize,
@@ -114,10 +155,13 @@ impl<'a, C, A> Clone for AnnoIter<'a, C, A> {
 
 impl<'a, C, A> Iterator for AnnoIter<'a, C, A>
 where
-    C: Compound<A>,
-    A: Annotation<C::Leaf> + 'a,
+    A: 'a,
+    C: Archive + Compound<A>,
+    C::Archived: ArchivedCompound<C, A>,
+    C::Leaf: Archive,
+    A: Annotation<C::Leaf>,
 {
-    type Item = WrappedAnnotation<'a, C, A>;
+    type Item = ARef<'a, A>;
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
@@ -126,11 +170,11 @@ where
                 Child::EndOfNode => return None,
                 Child::Leaf(l) => {
                     self.ofs += 1;
-                    return Some(WrappedAnnotation::Owned(A::from_leaf(l)));
+                    return Some(ARef::Owned(A::from_leaf(l)));
                 }
                 Child::Node(a) => {
                     self.ofs += 1;
-                    return Some(WrappedAnnotation::Link(a.annotation()));
+                    return Some(a.annotation());
                 }
             }
         }

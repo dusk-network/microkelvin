@@ -4,114 +4,87 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use core::marker::PhantomData;
+use rkyv::Archive;
 
-use canonical::{Canon, CanonError};
-
-use crate::branch::Branch;
-use crate::branch_mut::BranchMut;
-use crate::compound::{Child, Compound, MutableLeaves};
+use crate::annotations::{ARef, Annotation};
+use crate::compound::{ArchivedCompound, Compound};
 
 /// The return value from a closure to `walk` the tree.
 ///
 /// Determines how the `Branch` is constructed
+#[derive(Debug)]
 pub enum Step {
     /// The correct leaf was found!
     Found(usize),
-    /// Traverse the branch deeper
-    Into(usize),
     /// Advance search
     Advance,
     /// Abort search
     Abort,
 }
 
-/// The argument given to a `Walker` to traverse through nodes.
-pub struct Walk<'a, C, A> {
-    ofs: usize,
-    compound: &'a C,
-    _marker: PhantomData<A>,
-}
-
-impl<'a, C, A> Walk<'a, C, A>
-where
-    C: Compound<A>,
-{
-    pub(crate) fn new(compound: &'a C, ofs: usize) -> Self {
-        Walk {
-            ofs,
-            compound,
-            _marker: PhantomData,
-        }
-    }
-
-    /// Returns the child at specific offset relative to the branch offset
-    pub fn child(&self, ofs: usize) -> Child<'a, C, A> {
-        self.compound.child(ofs + self.ofs)
-    }
-}
-
 /// The trait used to construct a `Branch` or to iterate through a tree.
 pub trait Walker<C, A>
 where
-    C: Compound<A>,
+    C: Archive + Compound<A>,
+    C::Archived: ArchivedCompound<C, A>,
+    C::Leaf: Archive,
+    A: Annotation<C::Leaf>,
 {
     /// Walk the tree node, returning the appropriate `Step`
-    fn walk(&mut self, walk: Walk<C, A>) -> Step;
+    fn walk(&mut self, walk: impl Slots<C, A>) -> Step;
+}
+
+/// A slot in a datastructure type `C`
+///
+/// Can contain both in-memory and archived components
+pub enum Slot<'a, C, A>
+where
+    C: Compound<A>,
+    C::Leaf: Archive,
+    A: Annotation<C::Leaf>,
+{
+    /// Walk encountered a leaf
+    Leaf(&'a C::Leaf),
+    /// Walk encountered an archived leaf
+    ArchivedLeaf(&'a <C::Leaf as Archive>::Archived),
+    /// Walk encountered an annotated subtree
+    Annotation(ARef<'a, A>),
+    /// Walk encountered an empty slot
+    Empty,
+    /// Walk encountered the end of a node
+    End,
+}
+
+/// Trait used in walking trees
+pub trait Slots<C, A>
+where
+    C: Compound<A>,
+    C::Leaf: Archive,
+    A: Annotation<C::Leaf>,
+{
+    /// Query slot `n` in the structure
+    fn slot(&self, n: usize) -> Slot<C, A>;
 }
 
 /// Walker that visits all leaves
-pub struct AllLeaves;
+#[derive(Debug)]
+pub struct First;
 
-impl<C, A> Walker<C, A> for AllLeaves
+impl<C, A> Walker<C, A> for First
 where
-    C: Compound<A>,
+    C: Archive + Compound<A>,
+    C::Archived: ArchivedCompound<C, A>,
+    C::Leaf: Archive,
+    A: Annotation<C::Leaf>,
 {
-    fn walk(&mut self, walk: Walk<C, A>) -> Step {
+    fn walk(&mut self, walk: impl Slots<C, A>) -> Step {
         for i in 0.. {
-            match walk.child(i) {
-                Child::Leaf(_) => return Step::Found(i),
-                Child::Node(_) => return Step::Into(i),
-                Child::Empty => (),
-                Child::EndOfNode => return Step::Advance,
+            match walk.slot(i) {
+                Slot::End => return Step::Advance,
+                Slot::Empty => (),
+                _ => return Step::Found(i),
             }
         }
         unreachable!()
-    }
-}
-
-/// Trait that provides a `first` and `first_mut` method to any Compound with a
-/// Cardinality annotation
-pub trait First<'a, A>
-where
-    Self: Compound<A>,
-{
-    /// Construct a `Branch` pointing to the first element, if not empty
-    fn first(&'a self) -> Result<Option<Branch<'a, Self, A>>, CanonError>;
-
-    /// Construct a `BranchMut` pointing to the first element, if not empty
-    fn first_mut(
-        &'a mut self,
-    ) -> Result<Option<BranchMut<'a, Self, A>>, CanonError>
-    where
-        Self: MutableLeaves + Clone;
-}
-
-impl<'a, C, A> First<'a, A> for C
-where
-    C: Compound<A>,
-    A: Canon,
-{
-    fn first(&'a self) -> Result<Option<Branch<'a, Self, A>>, CanonError> {
-        Branch::<_, A>::walk(self, AllLeaves)
-    }
-
-    fn first_mut(
-        &'a mut self,
-    ) -> Result<Option<BranchMut<'a, Self, A>>, CanonError>
-    where
-        C: MutableLeaves + Clone,
-    {
-        BranchMut::<_, A>::walk(self, AllLeaves)
     }
 }
