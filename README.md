@@ -1,3 +1,6 @@
+![Dusk CI](https://github.com/dusk-network/microkelvin/actions/workflows/dusk_ci.yml/badge.svg)
+[![codecov](https://codecov.io/gh/dusk-network/microkelvin/branch/main/graph/badge.svg?token=AQOU3EH0W3)](https://codecov.io/gh/dusk-network/microkelvin)
+
 # microkelvin
 
 Library for creating and searching through annotated merkle trees.
