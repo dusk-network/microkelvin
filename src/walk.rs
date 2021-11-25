@@ -6,8 +6,7 @@
 
 use rkyv::Archive;
 
-use crate::annotations::{ARef, Annotation};
-use crate::compound::{ArchivedCompound, Compound};
+use crate::{ARef, Compound, MaybeArchived};
 
 /// The return value from a closure to `walk` the tree.
 ///
@@ -22,66 +21,45 @@ pub enum Step {
     Abort,
 }
 
-/// The trait used to construct a `Branch` or to iterate through a tree.
-pub trait Walker<C, A>
+pub enum Discriminant<'a, L, A>
 where
-    C: Archive + Compound<A>,
-    C::Archived: ArchivedCompound<C, A>,
-    C::Leaf: Archive,
-    A: Annotation<C::Leaf>,
+    L: Archive,
 {
-    /// Walk the tree node, returning the appropriate `Step`
-    fn walk(&mut self, walk: impl Slots<C, A>) -> Step;
-}
-
-/// A slot in a datastructure type `C`
-///
-/// Can contain both in-memory and archived components
-pub enum Slot<'a, C, A>
-where
-    C: Compound<A>,
-    C::Leaf: Archive,
-    A: Annotation<C::Leaf>,
-{
-    /// Walk encountered a leaf
-    Leaf(&'a C::Leaf),
-    /// Walk encountered an archived leaf
-    ArchivedLeaf(&'a <C::Leaf as Archive>::Archived),
-    /// Walk encountered an annotated subtree
+    Leaf(MaybeArchived<'a, L>),
     Annotation(ARef<'a, A>),
-    /// Walk encountered an empty slot
     Empty,
-    /// Walk encountered the end of a node
     End,
 }
 
-/// Trait used in walking trees
-pub trait Slots<C, A>
+pub trait Walkable<S, C, A>
 where
-    C: Compound<A>,
-    C::Leaf: Archive,
-    A: Annotation<C::Leaf>,
+    C: Compound<S, A>,
 {
-    /// Query slot `n` in the structure
-    fn slot(&self, n: usize) -> Slot<C, A>;
+    fn probe(&self, ofs: usize) -> Discriminant<C::Leaf, A>;
+}
+
+/// The trait used to construct a `Branch` or to iterate through a tree.
+pub trait Walker<S, C, A>
+where
+    C: Compound<S, A>,
+{
+    /// Walk the tree node, returning the appropriate `Step`
+    fn walk(&mut self, walk: impl Walkable<S, C, A>) -> Step;
 }
 
 /// Walker that visits all leaves
 #[derive(Debug)]
-pub struct First;
+pub struct All;
 
-impl<C, A> Walker<C, A> for First
+impl<S, C, A> Walker<S, C, A> for All
 where
-    C: Archive + Compound<A>,
-    C::Archived: ArchivedCompound<C, A>,
-    C::Leaf: Archive,
-    A: Annotation<C::Leaf>,
+    C: Compound<S, A>,
 {
-    fn walk(&mut self, walk: impl Slots<C, A>) -> Step {
+    fn walk(&mut self, walk: impl Walkable<S, C, A>) -> Step {
         for i in 0.. {
-            match walk.slot(i) {
-                Slot::End => return Step::Advance,
-                Slot::Empty => (),
+            match walk.probe(i) {
+                Discriminant::End => return Step::Advance,
+                Discriminant::Empty => (),
                 _ => return Step::Found(i),
             }
         }

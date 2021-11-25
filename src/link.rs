@@ -4,24 +4,28 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use alloc::rc::Rc;
-use core::borrow::BorrowMut;
 use core::cell::RefCell;
-use rkyv::ser::Serializer;
+use std::borrow::Borrow;
+
+use alloc::rc::Rc;
 
 use owning_ref::OwningRef;
+use rkyv::Fallible;
 use rkyv::{Archive, Deserialize, Serialize};
-use rkyv::{Fallible, Infallible};
 
-use crate::storage::{Storage, Stored};
-use crate::{ARef, AWrap, Annotation, ArchivedCompound, Compound, Portal};
+use crate::storage::{Ident, Storage, Store, Stored, UnwrapInfallible};
+use crate::wrappers::MaybeStored;
+use crate::{ARef, Annotation, Compound};
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 /// The Link struct is an annotated merkle link to a compound type
 ///
 /// The link takes care of lazily evaluating the annotation of the inner type,
 /// and to load it from memory or backend when needed.
-pub enum Link<C, A> {
+pub enum Link<S, C, A>
+where
+    S: Store,
+{
     /// A Link to a node in memory
     Memory {
         /// the underlying rc
@@ -32,30 +36,38 @@ pub enum Link<C, A> {
     /// A Link to an archived node
     Archived {
         /// archived at offset
-        stored: Stored<C>,
+        stored: Stored<S, C>,
         /// the final annotation
         a: A,
     },
 }
 
-pub struct ArchivedLink<C, A>(Stored<C>, A);
+/// The archived version of a link, contains an identifier and an annotation
+pub struct ArchivedLink<S, C, A>(Ident<S::Identifier, C>, A)
+where
+    S: Store;
 
-impl<C, A> ArchivedLink<C, A> {
+impl<S, C, A> ArchivedLink<S, C, A>
+where
+    S: Store,
+{
+    /// Get a reference to the link annotation
     pub fn annotation(&self) -> &A {
         &self.1
     }
 
-    pub fn inner<'a>(&self) -> &'a C::Archived
-    where
-        C: Archive,
-    {
-        Portal::get::<C>(self.0)
+    /// Get a reference to the link id     
+    pub fn ident<'a>(&self) -> &Ident<S::Identifier, C> {
+        &self.0
     }
 }
 
-impl<C, A> Archive for Link<C, A> {
-    type Archived = ArchivedLink<C, A>;
-    type Resolver = (Stored<C>, A);
+impl<S, C, A> Archive for Link<S, C, A>
+where
+    S: Store,
+{
+    type Archived = ArchivedLink<S, C, A>;
+    type Resolver = (Ident<S::Identifier, C>, A);
 
     unsafe fn resolve(
         &self,
@@ -67,56 +79,62 @@ impl<C, A> Archive for Link<C, A> {
     }
 }
 
-impl<C, A, D> Deserialize<Link<C, A>, D> for ArchivedLink<C, A>
+impl<S, C, A, S2> Deserialize<Link<S, C, A>, S2> for ArchivedLink<S, C, A>
 where
-    C: Archive,
-    A: Archive + Clone,
-    A::Archived: Deserialize<A, D>,
-    D: Fallible,
+    S: Store,
+    S2: Store,
+    for<'a> &'a mut S2: Borrow<S>,
+    A: Clone,
 {
     fn deserialize(
         &self,
-        _: &mut D,
-    ) -> Result<Link<C, A>, <D as Fallible>::Error> {
+        store: &mut S2,
+    ) -> Result<Link<S, C, A>, <S as Fallible>::Error> {
+        let local_store: &S = store.borrow();
         Ok(Link::Archived {
-            stored: self.0,
+            stored: Stored::new(local_store.clone(), self.0),
             a: self.1.clone(),
         })
     }
 }
 
-impl<C, A, S> Serialize<S> for Link<C, A>
+impl<S, C, A> Serialize<S::Storage> for Link<S, C, A>
 where
-    C: Compound<A> + Serialize<S> + Serialize<Storage>,
-    C::Archived: ArchivedCompound<C, A>,
-    C::Leaf: Archive,
-    A: Annotation<C::Leaf>,
-    S: Serializer + BorrowMut<Storage>,
+    C: Compound<S, A> + Serialize<S::Storage>,
+    A: Clone,
+    S: Store,
 {
-    fn serialize(&self, ser: &mut S) -> Result<Self::Resolver, S::Error> {
+    fn serialize(
+        &self,
+        ser: &mut S::Storage,
+    ) -> Result<Self::Resolver, S::Error> {
         match self {
             Link::Memory { rc, annotation } => {
                 let borrow = annotation.borrow();
                 let a = if let Some(a) = &*borrow {
                     a.clone()
                 } else {
-                    let a = A::combine(rc.annotations());
-                    drop(borrow);
-                    *annotation.borrow_mut() = Some(a.clone());
-                    a
+                    todo!();
+                    // let a = A::combine(rc.annotations());
+                    // drop(borrow);
+                    // *annotation.borrow_mut() = Some(a.clone());
+                    // a
                 };
                 let to_insert = &(**rc);
-                let ofs = ser.borrow_mut().put(to_insert);
-                Ok((ofs, a))
+                let ident = Ident::new(ser.put(to_insert));
+                Ok((ident, a))
             }
-            Link::Archived { .. } => todo!(),
+            Link::Archived { .. } => {
+                unreachable!("FIXME motivate why this does not happen")
+            }
         }
     }
 }
 
-impl<C, A> Default for Link<C, A>
+impl<S, C, A> Default for Link<S, C, A>
 where
     C: Default,
+    S: Store,
 {
     fn default() -> Self {
         Link::Memory {
@@ -126,7 +144,10 @@ where
     }
 }
 
-impl<C, A> Link<C, A> {
+impl<S, C, A> Link<S, C, A>
+where
+    S: Store,
+{
     /// Create a new link
     pub fn new(compound: C) -> Self {
         Link::Memory {
@@ -138,13 +159,12 @@ impl<C, A> Link<C, A> {
     /// Returns a reference to to the annotation stored
     pub fn annotation(&self) -> ARef<A>
     where
-        C: Archive + Compound<A>,
-        C::Archived: ArchivedCompound<C, A>,
+        C: Compound<S, A>,
         C::Leaf: Archive,
         A: Annotation<C::Leaf>,
     {
         match self {
-            Link::Memory { annotation, rc } => {
+            Link::Memory { rc, annotation, .. } => {
                 let borrow = annotation.borrow();
                 if let Some(_) = *borrow {
                     ARef::Referenced(OwningRef::new(borrow).map(|brw| {
@@ -156,8 +176,7 @@ impl<C, A> Link<C, A> {
                     }))
                 } else {
                     drop(borrow);
-                    *annotation.borrow_mut() =
-                        Some(A::combine(rc.annotations()));
+                    *annotation.borrow_mut() = Some(A::from_node(&**rc));
                     self.annotation()
                 }
             }
@@ -165,32 +184,35 @@ impl<C, A> Link<C, A> {
         }
     }
 
-    /// Consumes the link and returns the inner Compound value
-    ///
-    /// Can fail when trying to fetch data over i/o
+    /// Unwraps the underlying value, clones or deserializes it
     pub fn unlink(self) -> C
     where
-        C: Clone,
+        C: Compound<S, A> + Clone,
+        C::Archived: Deserialize<C, S>,
     {
         match self {
             Link::Memory { rc, .. } => match Rc::try_unwrap(rc) {
                 Ok(c) => c,
                 Err(rc) => (&*rc).clone(),
             },
-            Link::Archived { .. } => todo!(),
+            Link::Archived { stored, .. } => {
+                let inner: &C::Archived = stored.inner();
+                let de: C = inner
+                    .deserialize(&mut stored.store().clone())
+                    .unwrap_infallible();
+                de
+            }
         }
     }
 
-    /// Returns a reference to the inner node, possibly in its archived form
-    pub fn inner<'a>(&'a self) -> AWrap<'a, C>
+    /// Returns a reference to the inner node, possibly in its stored form
+    pub fn inner<'a>(&'a self) -> MaybeStored<'a, S, C>
     where
         C: Archive,
     {
         match self {
-            Link::Memory { rc, .. } => AWrap::Memory(&(*rc)),
-            Link::Archived { stored, .. } => {
-                AWrap::Archived(Portal::get(*stored))
-            }
+            Link::Memory { rc, .. } => MaybeStored::Memory(&(*rc)),
+            Link::Archived { stored, .. } => MaybeStored::Stored(stored),
         }
     }
 
@@ -200,7 +222,7 @@ impl<C, A> Link<C, A> {
     pub fn inner_mut(&mut self) -> &mut C
     where
         C: Archive + Clone,
-        C::Archived: Deserialize<C, Infallible>,
+        C::Archived: Deserialize<C, S>,
     {
         match self {
             Link::Memory { rc, annotation } => {
@@ -209,8 +231,10 @@ impl<C, A> Link<C, A> {
                 return Rc::make_mut(rc);
             }
             Link::Archived { stored, .. } => {
-                let ca = Portal::get(*stored);
-                let c = ca.deserialize(&mut Infallible).expect("Infallible");
+                let mut store = stored.store().clone();
+                let inner = stored.inner();
+                let c: C = inner.deserialize(&mut store).unwrap_infallible();
+
                 *self = Link::Memory {
                     rc: Rc::new(c),
                     annotation: RefCell::new(None),

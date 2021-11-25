@@ -18,10 +18,6 @@
 #[macro_use]
 extern crate alloc;
 
-#[cfg(feature = "host")]
-#[macro_use]
-extern crate lazy_static;
-
 mod annotations;
 mod branch;
 mod branch_mut;
@@ -36,12 +32,11 @@ pub use annotations::{
 pub use branch::{Branch, MappedBranch};
 pub use branch_mut::{BranchMut, MappedBranchMut};
 pub use compound::{
-    AnnoIter, ArchivedChild, ArchivedCompound, Child, ChildMut, Compound,
-    MutableLeaves,
+    ArchivedChild, ArchivedCompound, Child, ChildMut, Compound, MutableLeaves,
 };
-pub use link::Link;
-pub use walk::{First, Slot, Slots, Step, Walker};
-pub use wrappers::{AWrap, Primitive};
+pub use link::{ArchivedLink, Link};
+pub use walk::{All, Step, Walker};
+pub use wrappers::{MaybeArchived, Primitive};
 
 mod storage;
-pub use storage::{Portal, PortalDeserializer, Storage, StorageSerializer};
+pub use storage::{HostStore, PageStorage, Storage, Store};

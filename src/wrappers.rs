@@ -8,6 +8,7 @@ use core::{borrow::Borrow, ops::Deref};
 
 use rkyv::Archive;
 
+use crate::storage::{Store, Stored};
 use crate::Keyed;
 
 /// Marker trait for types that have themselves as archived type
@@ -15,9 +16,17 @@ pub trait Primitive: Archive<Archived = Self> + Sized {}
 
 impl<T> Primitive for T where T: Archive<Archived = T> + Sized {}
 
+pub enum MaybeStored<'a, S, T>
+where
+    S: Store,
+{
+    Memory(&'a T),
+    Stored(&'a Stored<S, T>),
+}
+
 #[derive(Debug)]
 /// A wrapper around the actual type, or the archived version
-pub enum AWrap<'a, T>
+pub enum MaybeArchived<'a, T>
 where
     T: Archive,
 {
@@ -27,7 +36,7 @@ where
     Archived(&'a T::Archived),
 }
 
-impl<'a, T> Deref for AWrap<'a, T>
+impl<'a, T> Deref for MaybeArchived<'a, T>
 where
     T: Archive,
     T::Archived: Borrow<T>,
@@ -36,13 +45,13 @@ where
 
     fn deref(&self) -> &T {
         match self {
-            AWrap::Memory(t) => t,
-            AWrap::Archived(at) => (*at).borrow(),
+            MaybeArchived::Memory(t) => t,
+            MaybeArchived::Archived(at) => (*at).borrow(),
         }
     }
 }
 
-impl<'a, T> PartialEq<T> for AWrap<'a, T>
+impl<'a, T> PartialEq<T> for MaybeArchived<'a, T>
 where
     T: Archive + PartialEq,
     T::Archived: PartialEq<T>,
@@ -55,15 +64,15 @@ where
     }
 }
 
-impl<'a, KV, K> Keyed<K> for AWrap<'a, KV>
+impl<'a, KV, K> Keyed<K> for MaybeArchived<'a, KV>
 where
     KV: Archive + Keyed<K>,
     KV::Archived: Keyed<K>,
 {
     fn key(&self) -> &K {
         match self {
-            AWrap::Memory(t) => t.key(),
-            AWrap::Archived(t) => t.key(),
+            MaybeArchived::Memory(t) => t.key(),
+            MaybeArchived::Archived(t) => t.key(),
         }
     }
 }

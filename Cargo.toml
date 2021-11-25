@@ -17,6 +17,9 @@ lazy_static = { version = "1.4.0", optional = true }
 tempfile = { version = "3.2.0", optional = true  }
 rkyv = { version = "0.7.14", default_features = false, features = ["size_32", "archive_le"] }
 memmap = { version = "0.7.0", optional = true }
+elsa = "1.4.0"
+tinyvec = "1.5.1"
+staticvec = "0.10.8"
 
 [dev-dependencies]
 rand = "0.8.3"

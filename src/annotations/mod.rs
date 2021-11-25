@@ -10,7 +10,7 @@ use core::ops::Deref;
 use owning_ref::OwningRef;
 use rkyv::Archive;
 
-use crate::{AnnoIter, ArchivedCompound, Compound, Primitive};
+use crate::{Compound, Primitive, Store};
 
 mod cardinality;
 mod max_key;
@@ -26,20 +26,34 @@ pub trait Annotation<Leaf>:
 {
     /// Creates an annotation from the leaf type
     fn from_leaf(leaf: &Leaf) -> Self;
+
+    /// Create an annotation from a node
+    fn from_node<S, C>(node: &C) -> Self
+    where
+        S: Store,
+        C: Compound<S, Self, Leaf = Leaf>,
+        C::Leaf: Archive,
+    {
+        let mut a = Self::default();
+        for i in 0.. {
+            match node.child(i) {
+                crate::Child::Leaf(leaf) => a.combine(&Self::from_leaf(leaf)),
+                crate::Child::Link(link) => a.combine(&*link.annotation()),
+                crate::Child::Empty => (),
+                crate::Child::End => return a,
+            }
+        }
+        unreachable!()
+    }
 }
 
 /// Trait for defining how to combine Annotations
 pub trait Combine<A> {
     /// Combines multiple annotations
-    fn combine<C>(iter: AnnoIter<C, A>) -> Self
-    where
-        C: Archive + Compound<A>,
-        C::Archived: ArchivedCompound<C, A>,
-        C::Leaf: Archive,
-        A: Annotation<C::Leaf>;
+    fn combine(&mut self, with: &A);
 }
 
-/// A wrapped annotation that is either owning it's a or providing an annotated
+/// A wrapped annotation that is either owning its A or providing an annotated
 /// link
 #[derive(Debug)]
 pub enum ARef<'a, A> {

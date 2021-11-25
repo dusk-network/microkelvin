@@ -16,7 +16,7 @@ mod persist_tests {
 
     use rend::LittleEndian;
 
-    use microkelvin::{ArchivedCompound, Cardinality, Keyed, Nth, Portal};
+    use microkelvin::{Cardinality, HostStore, Keyed, Nth, Store};
 
     #[derive(PartialEq, Clone, Debug)]
     struct TestLeaf {
@@ -31,18 +31,18 @@ mod persist_tests {
     }
 
     fn persist() -> Result<(), io::Error> {
+        let store = HostStore::new();
+
         let n: u64 = 16;
 
-        let mut list = LinkedList::<_, Cardinality>::new();
+        let mut list = LinkedList::<_, _, Cardinality>::new();
 
         for i in 0..n {
             let i: LittleEndian<u64> = i.into();
             list.push(i);
         }
 
-        let stored = Portal::put(&list);
-
-        let restored = Portal::get(stored);
+        let stored = store.put(&list);
 
         // first empty the original
 
@@ -51,14 +51,11 @@ mod persist_tests {
             assert_eq!(list.pop(), Some((n - i - 1).into()));
         }
 
-        // then the restored copy
+        // then read from the stored copy
 
         for i in 0..n {
-            let i: LittleEndian<u64> = i.into();
-            assert_eq!(
-                *restored.walk(Nth(i.into())).unwrap().leaf(),
-                n - i - 1
-            );
+            let branch = stored.walk(Nth(i)).unwrap();
+            assert_eq!(branch.leaf(), (n - i - 1).into());
         }
 
         Ok(())
@@ -85,26 +82,26 @@ mod persist_tests {
     }
 
     fn persist_across_threads() -> Result<(), io::Error> {
+        let store = HostStore::new();
+
         let n: u64 = 16;
 
-        let mut list = LinkedList::<_, Cardinality>::new();
+        let mut list = LinkedList::<_, _, Cardinality>::new();
 
         for i in 0..n {
             let i: LittleEndian<u64> = i.into();
             list.push(i);
         }
 
-        let persisted = Portal::put(&list);
+        let persisted = store.put(&list);
 
         // it should now be available from other threads
 
         std::thread::spawn(move || {
-            let restored = Portal::get(persisted);
-
             for i in 0..n {
                 let i: LittleEndian<u64> = i.into();
                 assert_eq!(
-                    *restored.walk(Nth(i.into())).unwrap().leaf(),
+                    *persisted.walk(Nth(i.into())).unwrap().leaf(),
                     n - i - 1
                 );
             }
