@@ -21,20 +21,27 @@ pub enum Step {
     Abort,
 }
 
+/// Information to select paths in searches
 pub enum Discriminant<'a, L, A>
 where
     L: Archive,
 {
+    /// Search encountered a leaf
     Leaf(MaybeArchived<'a, L>),
+    /// Search encountered an annotated subtree
     Annotation(ARef<'a, A>),
+    /// Search encountered an empty slot
     Empty,
+    /// Search encountered the end of the node
     End,
 }
 
+/// Wrapper trait provided to Walkers
 pub trait Walkable<S, C, A>
 where
     C: Compound<S, A>,
 {
+    /// Probe the location of the tree being walked
     fn probe(&self, ofs: usize) -> Discriminant<C::Leaf, A>;
 }
 

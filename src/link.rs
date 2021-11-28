@@ -101,7 +101,7 @@ where
 impl<S, C, A> Serialize<S::Storage> for Link<S, C, A>
 where
     C: Compound<S, A> + Serialize<S::Storage>,
-    A: Clone,
+    A: Clone + Annotation<C::Leaf>,
     S: Store,
 {
     fn serialize(
@@ -114,11 +114,10 @@ where
                 let a = if let Some(a) = &*borrow {
                     a.clone()
                 } else {
-                    todo!();
-                    // let a = A::combine(rc.annotations());
-                    // drop(borrow);
-                    // *annotation.borrow_mut() = Some(a.clone());
-                    // a
+                    let a = A::from_node(&**rc);
+                    drop(borrow);
+                    *annotation.borrow_mut() = Some(a.clone());
+                    a
                 };
                 let to_insert = &(**rc);
                 let ident = Ident::new(ser.put(to_insert));

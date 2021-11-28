@@ -18,7 +18,7 @@ mod unit;
 
 // re-exports
 pub use cardinality::{Cardinality, Nth};
-pub use max_key::{FindMaxKey, Keyed, MaxKey};
+pub use max_key::{FindMaxKey, Keyed, MaxKey, Member};
 
 /// The trait defining an annotation type over a leaf
 pub trait Annotation<Leaf>:

@@ -27,7 +27,8 @@ mod walk;
 mod wrappers;
 
 pub use annotations::{
-    ARef, Annotation, Cardinality, Combine, FindMaxKey, Keyed, MaxKey, Nth,
+    ARef, Annotation, Cardinality, Combine, FindMaxKey, Keyed, MaxKey, Member,
+    Nth,
 };
 pub use branch::{Branch, MappedBranch};
 pub use branch_mut::{BranchMut, MappedBranchMut};
@@ -35,8 +36,8 @@ pub use compound::{
     ArchivedChild, ArchivedCompound, Child, ChildMut, Compound, MutableLeaves,
 };
 pub use link::{ArchivedLink, Link};
-pub use walk::{All, Step, Walker};
-pub use wrappers::{MaybeArchived, Primitive};
+pub use walk::{All, Discriminant, Step, Walkable, Walker};
+pub use wrappers::{MaybeArchived, MaybeStored, Primitive};
 
 mod storage;
 pub use storage::{HostStore, PageStorage, Storage, Store};

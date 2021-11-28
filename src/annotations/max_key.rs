@@ -56,6 +56,31 @@ where
     }
 }
 
+impl<K> PartialEq<K> for MaxKey<K>
+where
+    K: PartialEq,
+{
+    fn eq(&self, other: &K) -> bool {
+        match self {
+            MaxKey::NegativeInfinity => false,
+            MaxKey::Maximum(k) => k == other,
+        }
+    }
+}
+
+impl<K> PartialOrd<K> for MaxKey<K>
+where
+    K: PartialEq<K>,
+    K: PartialOrd,
+{
+    fn partial_cmp(&self, other: &K) -> Option<Ordering> {
+        match self {
+            MaxKey::NegativeInfinity => Some(Ordering::Less),
+            MaxKey::Maximum(k) => k.partial_cmp(other),
+        }
+    }
+}
+
 impl<K> Ord for MaxKey<K>
 where
     K: Ord,
@@ -135,6 +160,43 @@ where
                 }
                 Discriminant::Empty => (),
                 Discriminant::End => return current_step,
+            }
+        }
+        unreachable!()
+    }
+}
+
+/// Find a specific value in a sorted tree
+pub struct Member<'a, K>(pub &'a K);
+
+impl<'a, S, C, A, K> Walker<S, C, A> for Member<'a, K>
+where
+    C: Compound<S, A>,
+    C::Leaf: Clone + Archive + Ord + Keyed<K>,
+    <C::Leaf as Archive>::Archived: Keyed<K>,
+    K: PartialEq + PartialOrd,
+    A: Borrow<MaxKey<K>>,
+{
+    fn walk(&mut self, walk: impl Walkable<S, C, A>) -> Step {
+        for i in 0.. {
+            println!("probing {}", i);
+            match walk.probe(i) {
+                Discriminant::Empty => (),
+                Discriminant::Leaf(leaf) => {
+                    let key = leaf.key();
+                    if key == self.0 {
+                        return Step::Found(i);
+                    }
+                }
+                Discriminant::Annotation(a) => {
+                    let max: &MaxKey<K> = (*a).borrow();
+                    if max >= self.0 {
+                        return Step::Found(i);
+                    }
+                }
+                Discriminant::End => {
+                    return Step::Abort;
+                }
             }
         }
         unreachable!()

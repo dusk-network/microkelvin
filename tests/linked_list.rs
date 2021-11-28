@@ -7,21 +7,21 @@
 use core::borrow::Borrow;
 
 use microkelvin::{
-    All, ArchivedChild, ArchivedCompound, Cardinality, Child, ChildMut,
-    Compound, HostStore, Link, MutableLeaves, Nth, Store,
+    All, Annotation, ArchivedChild, ArchivedCompound, Cardinality, Child,
+    ChildMut, Compound, HostStore, Link, MutableLeaves, Nth, Store,
 };
 use rend::LittleEndian;
 use rkyv::{Archive, Deserialize, Serialize};
 
 #[derive(Clone, Archive, Serialize, Deserialize)]
 #[archive(bound(serialize = "
-  A: Archive + Clone,
+  A: Archive + Clone + Annotation<T>,
   T: Clone,
   S: Store<Storage = __S>,"))]
 #[archive(bound(deserialize = "
   T: Archive + Clone,
   T::Archived: Deserialize<T, S>,
-  A: Clone,
+  A: Clone + Annotation<T>,
   for<'a> &'a mut __D: Borrow<S>,
   __D: Store"))]
 pub enum LinkedList<S, T, A>
@@ -124,7 +124,7 @@ where
     where
         T: Archive + Clone,
         T::Archived: Deserialize<T, S>,
-        A: Archive + Clone,
+        A: Archive + Clone + Annotation<T>,
         A::Archived: Deserialize<A, S>,
     {
         match core::mem::take(self) {
