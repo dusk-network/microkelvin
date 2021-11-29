@@ -22,7 +22,7 @@ use crate::{ARef, Annotation, Compound};
 ///
 /// The link takes care of lazily evaluating the annotation of the inner type,
 /// and to load it from memory or backend when needed.
-pub enum Link<S, C, A>
+pub enum Link<C, A, S>
 where
     S: Store,
 {
@@ -36,18 +36,18 @@ where
     /// A Link to an archived node
     Archived {
         /// archived at offset
-        stored: Stored<S, C>,
+        stored: Stored<C, S>,
         /// the final annotation
         a: A,
     },
 }
 
 /// The archived version of a link, contains an identifier and an annotation
-pub struct ArchivedLink<S, C, A>(Ident<S::Identifier, C>, A)
+pub struct ArchivedLink<C, A, S>(Ident<S::Identifier, C>, A)
 where
     S: Store;
 
-impl<S, C, A> ArchivedLink<S, C, A>
+impl<C, A, S> ArchivedLink<C, A, S>
 where
     S: Store,
 {
@@ -62,11 +62,11 @@ where
     }
 }
 
-impl<S, C, A> Archive for Link<S, C, A>
+impl<C, A, S> Archive for Link<C, A, S>
 where
     S: Store,
 {
-    type Archived = ArchivedLink<S, C, A>;
+    type Archived = ArchivedLink<C, A, S>;
     type Resolver = (Ident<S::Identifier, C>, A);
 
     unsafe fn resolve(
@@ -79,7 +79,7 @@ where
     }
 }
 
-impl<S, C, A, S2> Deserialize<Link<S, C, A>, S2> for ArchivedLink<S, C, A>
+impl<S, C, A, S2> Deserialize<Link<C, A, S>, S2> for ArchivedLink<C, A, S>
 where
     S: Store,
     S2: Store,
@@ -89,7 +89,7 @@ where
     fn deserialize(
         &self,
         store: &mut S2,
-    ) -> Result<Link<S, C, A>, <S as Fallible>::Error> {
+    ) -> Result<Link<C, A, S>, <S as Fallible>::Error> {
         let local_store: &S = store.borrow();
         Ok(Link::Archived {
             stored: Stored::new(local_store.clone(), self.0),
@@ -98,9 +98,9 @@ where
     }
 }
 
-impl<S, C, A> Serialize<S::Storage> for Link<S, C, A>
+impl<C, A, S> Serialize<S::Storage> for Link<C, A, S>
 where
-    C: Compound<S, A> + Serialize<S::Storage>,
+    C: Compound<A, S> + Serialize<S::Storage>,
     A: Clone + Annotation<C::Leaf>,
     S: Store,
 {
@@ -130,7 +130,7 @@ where
     }
 }
 
-impl<S, C, A> Default for Link<S, C, A>
+impl<C, A, S> Default for Link<C, A, S>
 where
     C: Default,
     S: Store,
@@ -143,7 +143,7 @@ where
     }
 }
 
-impl<S, C, A> Link<S, C, A>
+impl<C, A, S> Link<C, A, S>
 where
     S: Store,
 {
@@ -158,7 +158,7 @@ where
     /// Returns a reference to to the annotation stored
     pub fn annotation(&self) -> ARef<A>
     where
-        C: Compound<S, A>,
+        C: Compound<A, S>,
         C::Leaf: Archive,
         A: Annotation<C::Leaf>,
     {
@@ -186,7 +186,7 @@ where
     /// Unwraps the underlying value, clones or deserializes it
     pub fn unlink(self) -> C
     where
-        C: Compound<S, A> + Clone,
+        C: Compound<A, S> + Clone,
         C::Archived: Deserialize<C, S>,
     {
         match self {
@@ -205,7 +205,7 @@ where
     }
 
     /// Returns a reference to the inner node, possibly in its stored form
-    pub fn inner<'a>(&'a self) -> MaybeStored<'a, S, C>
+    pub fn inner<'a>(&'a self) -> MaybeStored<'a, C, S>
     where
         C: Archive,
     {

@@ -10,7 +10,7 @@ use rkyv::{Archive, Deserialize, Serialize};
 
 mod linked_list;
 use linked_list::LinkedList;
-use microkelvin::{Compound, FindMaxKey, Keyed, MaxKey};
+use microkelvin::{Compound, FindMaxKey, HostStore, Keyed, MaxKey};
 
 #[derive(PartialEq, Clone, Debug, Archive, Serialize, Deserialize)]
 #[archive(as = "Self")]
@@ -29,8 +29,6 @@ impl Keyed<LittleEndian<u64>> for TestLeaf {
 fn maximum() {
     let n: u64 = 1024;
 
-    use microkelvin::HostStore;
-
     let mut keys = vec![];
 
     for i in 0..n {
@@ -40,7 +38,7 @@ fn maximum() {
 
     keys.shuffle(&mut thread_rng());
 
-    let mut list = LinkedList::<HostStore, _, MaxKey<LittleEndian<u64>>>::new();
+    let mut list = LinkedList::<_, MaxKey<LittleEndian<u64>>, HostStore>::new();
 
     for key in keys {
         list.push(TestLeaf { key, other: () });

@@ -28,10 +28,10 @@ pub trait Annotation<Leaf>:
     fn from_leaf(leaf: &Leaf) -> Self;
 
     /// Create an annotation from a node
-    fn from_node<S, C>(node: &C) -> Self
+    fn from_node<C, S>(node: &C) -> Self
     where
         S: Store,
-        C: Compound<S, Self, Leaf = Leaf>,
+        C: Compound<Self, S, Leaf = Leaf>,
         C::Leaf: Archive,
     {
         let mut a = Self::default();

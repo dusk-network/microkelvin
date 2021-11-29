@@ -17,14 +17,14 @@ pub trait Primitive: Archive<Archived = Self> + Sized {}
 impl<T> Primitive for T where T: Archive<Archived = T> + Sized {}
 
 /// Wrapper around a value either in memory or in a store
-pub enum MaybeStored<'a, S, T>
+pub enum MaybeStored<'a, T, S>
 where
     S: Store,
 {
     /// The value is memory
     Memory(&'a T),
     /// The value is in a store
-    Stored(&'a Stored<S, T>),
+    Stored(&'a Stored<T, S>),
 }
 
 #[derive(Debug)]

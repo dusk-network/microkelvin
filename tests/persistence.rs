@@ -35,7 +35,7 @@ mod persist_tests {
 
         let n: u64 = 16;
 
-        let mut list = LinkedList::<_, _, Cardinality>::new();
+        let mut list = LinkedList::<_, Cardinality, _>::new();
 
         for i in 0..n {
             let i: LittleEndian<u64> = i.into();
@@ -86,7 +86,7 @@ mod persist_tests {
 
         let n: u64 = 16;
 
-        let mut list = LinkedList::<_, _, Cardinality>::new();
+        let mut list = LinkedList::<_, Cardinality, _>::new();
 
         for i in 0..n {
             let i: LittleEndian<u64> = i.into();

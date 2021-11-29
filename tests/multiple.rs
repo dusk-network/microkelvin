@@ -90,7 +90,7 @@ fn maximum_multiple() {
 
     keys.shuffle(&mut thread_rng());
 
-    let mut list = LinkedList::<HostStore, _, Anno<LittleEndian<u64>>>::new();
+    let mut list = LinkedList::<_, Anno<LittleEndian<u64>>, HostStore>::new();
 
     for key in keys {
         let key: LittleEndian<u64> = key.into();

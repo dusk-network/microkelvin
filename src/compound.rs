@@ -10,16 +10,16 @@ use crate::link::{ArchivedLink, Link};
 use crate::{Annotation, Branch, BranchMut, MaybeArchived, Store, Walker};
 
 /// The response of the `child` method on a `Compound` node.
-pub enum Child<'a, S, C, A>
+pub enum Child<'a, C, A, S>
 where
     S: Store,
-    C: Compound<S, A>,
+    C: Compound<A, S>,
     C::Leaf: Archive,
 {
     /// Child is a leaf
     Leaf(&'a C::Leaf),
     /// Child is an annotated subtree node
-    Link(&'a Link<S, C, A>),
+    Link(&'a Link<C, A, S>),
     /// Empty slot
     Empty,
     /// No more children
@@ -27,15 +27,15 @@ where
 }
 
 /// The response of the `child` method on a `Compound` node.
-pub enum ArchivedChild<'a, S, C, A>
+pub enum ArchivedChild<'a, C, A, S>
 where
     S: Store,
-    C: Compound<S, A>,
+    C: Compound<A, S>,
 {
     /// Child is a leaf
     Leaf(&'a <C::Leaf as Archive>::Archived),
     /// Child is an annotated subtree node
-    Link(&'a ArchivedLink<S, C, A>),
+    Link(&'a ArchivedLink<C, A, S>),
     /// Empty slot
     Empty,
     /// No more children
@@ -43,15 +43,15 @@ where
 }
 
 /// The response of the `child_mut` method on a `Compound` node.
-pub enum ChildMut<'a, S, C, A>
+pub enum ChildMut<'a, C, A, S>
 where
     S: Store,
-    C: Compound<S, A>,
+    C: Compound<A, S>,
 {
     /// Child is a leaf
     Leaf(&'a mut C::Leaf),
     /// Child is an annotated node
-    Link(&'a mut Link<S, C, A>),
+    Link(&'a mut Link<C, A, S>),
     /// Empty slot
     Empty,
     /// No more children
@@ -59,39 +59,39 @@ where
 }
 
 /// Trait to support branch traversal in archived nodes
-pub trait ArchivedCompound<S, C, A>
+pub trait ArchivedCompound<C, A, S>
 where
     S: Store,
-    C: Compound<S, A>,
+    C: Compound<A, S>,
     C::Leaf: Archive,
 {
     /// Returns an archived child
-    fn child(&self, ofs: usize) -> ArchivedChild<S, C, A>;
+    fn child(&self, ofs: usize) -> ArchivedChild<C, A, S>;
 }
 
 /// A type that can recursively contain itself and leaves.
-pub trait Compound<S, A>: Sized + Archive {
+pub trait Compound<A, S>: Sized + Archive {
     /// The leaf type of the Compound collection
     type Leaf: Archive;
 
     /// Get a reference to a child    
-    fn child(&self, ofs: usize) -> Child<S, Self, A>
+    fn child(&self, ofs: usize) -> Child<Self, A, S>
     where
         S: Store;
 
     /// Get a mutable reference to a child
-    fn child_mut(&mut self, ofs: usize) -> ChildMut<S, Self, A>
+    fn child_mut(&mut self, ofs: usize) -> ChildMut<Self, A, S>
     where
         S: Store;
 
     /// Constructs a branch from this root compound
-    fn walk<'a, W>(&'a self, walker: W) -> Option<Branch<'a, S, Self, A>>
+    fn walk<'a, W>(&'a self, walker: W) -> Option<Branch<'a, Self, A, S>>
     where
         S: Store,
-        Self::Archived: ArchivedCompound<S, Self, A>,
+        Self::Archived: ArchivedCompound<Self, A, S>,
         Self::Leaf: Archive,
         A: Annotation<Self::Leaf>,
-        W: Walker<S, Self, A>,
+        W: Walker<Self, A, S>,
     {
         Branch::walk(MaybeArchived::Memory(self), walker)
     }
@@ -100,14 +100,14 @@ pub trait Compound<S, A>: Sized + Archive {
     fn walk_mut<'a, W>(
         &'a mut self,
         walker: W,
-    ) -> Option<BranchMut<'a, S, Self, A>>
+    ) -> Option<BranchMut<'a, Self, A, S>>
     where
         S: Store,
         Self: Clone,
-        Self::Archived: ArchivedCompound<S, Self, A> + Deserialize<Self, S>,
+        Self::Archived: ArchivedCompound<Self, A, S> + Deserialize<Self, S>,
         Self::Leaf: Archive,
         A: Annotation<Self::Leaf>,
-        W: Walker<S, Self, A>,
+        W: Walker<Self, A, S>,
     {
         BranchMut::walk(self, walker)
     }

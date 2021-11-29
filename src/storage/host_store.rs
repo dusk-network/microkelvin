@@ -181,7 +181,7 @@ impl Store for HostStore {
     type Storage = PageStorage;
     type Identifier = Offset;
 
-    fn put<T>(&self, t: &T) -> Stored<Self, T>
+    fn put<T>(&self, t: &T) -> Stored<T, Self>
     where
         T: Serialize<Self::Storage>,
     {

@@ -24,7 +24,7 @@ use rkyv::{Archive, Deserialize, Serialize};
   A: Clone + Annotation<T>,
   for<'a> &'a mut __D: Borrow<S>,
   __D: Store"))]
-pub enum LinkedList<S, T, A>
+pub enum LinkedList<T, A, S>
 where
     S: Store,
 {
@@ -32,11 +32,11 @@ where
     Node {
         val: T,
         #[omit_bounds]
-        next: Link<S, Self, A>,
+        next: Link<Self, A, S>,
     },
 }
 
-impl<S, T, A> Default for LinkedList<S, T, A>
+impl<T, A, S> Default for LinkedList<T, A, S>
 where
     S: Store,
 {
@@ -45,13 +45,13 @@ where
     }
 }
 
-impl<S, T, A> ArchivedCompound<S, LinkedList<S, T, A>, A>
-    for ArchivedLinkedList<S, T, A>
+impl<T, A, S> ArchivedCompound<LinkedList<T, A, S>, A, S>
+    for ArchivedLinkedList<T, A, S>
 where
     S: Store,
     T: Archive,
 {
-    fn child(&self, ofs: usize) -> ArchivedChild<S, LinkedList<S, T, A>, A> {
+    fn child(&self, ofs: usize) -> ArchivedChild<LinkedList<T, A, S>, A, S> {
         match (ofs, self) {
             (0, ArchivedLinkedList::Node { val, .. }) => {
                 ArchivedChild::Leaf(val)
@@ -67,14 +67,14 @@ where
     }
 }
 
-impl<S, T, A> Compound<S, A> for LinkedList<S, T, A>
+impl<T, A, S> Compound<A, S> for LinkedList<T, A, S>
 where
     S: Store,
     T: Archive,
 {
     type Leaf = T;
 
-    fn child(&self, ofs: usize) -> Child<S, Self, A> {
+    fn child(&self, ofs: usize) -> Child<Self, A, S> {
         match (ofs, self) {
             (0, LinkedList::Node { val, .. }) => Child::Leaf(val),
             (1, LinkedList::Node { next, .. }) => Child::Link(next),
@@ -83,7 +83,7 @@ where
         }
     }
 
-    fn child_mut(&mut self, ofs: usize) -> ChildMut<S, Self, A> {
+    fn child_mut(&mut self, ofs: usize) -> ChildMut<Self, A, S> {
         match (ofs, self) {
             (0, LinkedList::Node { val, .. }) => ChildMut::Leaf(val),
             (1, LinkedList::Node { next, .. }) => ChildMut::Link(next),
@@ -93,9 +93,9 @@ where
     }
 }
 
-impl<S, T, A> MutableLeaves for LinkedList<S, T, A> where S: Store {}
+impl<T, A, S> MutableLeaves for LinkedList<T, A, S> where S: Store {}
 
-impl<S, T, A> LinkedList<S, T, A>
+impl<T, A, S> LinkedList<T, A, S>
 where
     S: Store,
 {
@@ -141,11 +141,11 @@ where
 fn push() {
     let n: u64 = 1024;
 
-    let mut list = LinkedList::<HostStore, _, ()>::new();
+    let mut list = LinkedList::<_, (), HostStore>::new();
 
     for i in 0..n {
         let i: LittleEndian<u64> = i.into();
-        list.push(i)
+        list.push(i);
     }
 }
 
@@ -153,7 +153,7 @@ fn push() {
 fn push_cardinality() {
     let n: u64 = 1024;
 
-    let mut list = LinkedList::<HostStore, _, Cardinality>::new();
+    let mut list = LinkedList::<_, Cardinality, HostStore>::new();
 
     for i in 0..n {
         let i: LittleEndian<u64> = i.into();
@@ -165,7 +165,7 @@ fn push_cardinality() {
 fn push_nth() {
     let n = 1024;
 
-    let mut list = LinkedList::<HostStore, _, Cardinality>::new();
+    let mut list = LinkedList::<_, Cardinality, HostStore>::new();
 
     for i in 0..n {
         let i: LittleEndian<u64> = i.into();
@@ -182,7 +182,7 @@ fn push_nth() {
 fn push_pop() {
     let n: u64 = 1024;
 
-    let mut list = LinkedList::<HostStore, _, ()>::new();
+    let mut list = LinkedList::<_, (), HostStore>::new();
 
     for i in 0..n {
         let i: LittleEndian<u64> = i.into();
@@ -198,7 +198,7 @@ fn push_pop() {
 fn push_mut() {
     let n: u64 = 64;
 
-    let mut list = LinkedList::<HostStore, _, Cardinality>::new();
+    let mut list = LinkedList::<_, Cardinality, HostStore>::new();
 
     for i in 0..n {
         let i: LittleEndian<u64> = i.into();
@@ -220,7 +220,7 @@ fn push_mut() {
 fn iterate_immutable() {
     let n: u64 = 1024;
 
-    let mut list = LinkedList::<HostStore, _, Cardinality>::new();
+    let mut list = LinkedList::<_, Cardinality, HostStore>::new();
 
     for i in 0..n {
         let i: LittleEndian<u64> = i.into();
@@ -253,7 +253,7 @@ fn iterate_immutable() {
 fn iterate_mutable() {
     let n: u64 = 32;
 
-    let mut list = LinkedList::<HostStore, _, Cardinality>::new();
+    let mut list = LinkedList::<_, Cardinality, HostStore>::new();
 
     for i in 0..n {
         let i: LittleEndian<u64> = i.into();
@@ -293,7 +293,7 @@ fn iterate_mutable() {
 fn iterate_map() {
     let n: u64 = 32;
 
-    let mut list = LinkedList::<HostStore, _, ()>::new();
+    let mut list = LinkedList::<_, (), HostStore>::new();
 
     for i in 0..n {
         let i: LittleEndian<u64> = i.into();
@@ -317,7 +317,7 @@ fn iterate_map() {
 fn iterate_map_mutable() {
     let n: u64 = 32;
 
-    let mut list = LinkedList::<HostStore, _, ()>::new();
+    let mut list = LinkedList::<_, (), HostStore>::new();
 
     for i in 0..n {
         let i: LittleEndian<u64> = i.into();
@@ -342,7 +342,7 @@ fn iterate_map_mutable() {
 fn deref_mapped_mutable_branch() {
     let n: u64 = 32;
 
-    let mut list = LinkedList::<HostStore, _, ()>::new();
+    let mut list = LinkedList::<_, (), HostStore>::new();
 
     for i in 0..n {
         let i: LittleEndian<u64> = i.into();
@@ -363,7 +363,7 @@ fn push_nth_persist() {
 
     let n = 16;
 
-    let mut list = LinkedList::<HostStore, _, Cardinality>::new();
+    let mut list = LinkedList::<_, Cardinality, _>::new();
 
     for i in 0..n {
         let i: LittleEndian<u64> = i.into();

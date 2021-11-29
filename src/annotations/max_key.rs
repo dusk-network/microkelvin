@@ -129,15 +129,15 @@ impl<K> Default for FindMaxKey<K> {
     }
 }
 
-impl<S, C, A, K> Walker<S, C, A> for FindMaxKey<K>
+impl<C, A, S, K> Walker<C, A, S> for FindMaxKey<K>
 where
-    C: Compound<S, A>,
+    C: Compound<A, S>,
     C::Leaf: Archive + Keyed<K>,
     <C::Leaf as Archive>::Archived: Keyed<K>,
     A: Borrow<MaxKey<K>>,
     K: Ord + Clone,
 {
-    fn walk(&mut self, walk: impl Walkable<S, C, A>) -> Step {
+    fn walk(&mut self, walk: impl Walkable<C, A, S>) -> Step {
         let mut current_max: MaxKey<K> = MaxKey::NegativeInfinity;
         let mut current_step = Step::Abort;
 
@@ -169,15 +169,15 @@ where
 /// Find a specific value in a sorted tree
 pub struct Member<'a, K>(pub &'a K);
 
-impl<'a, S, C, A, K> Walker<S, C, A> for Member<'a, K>
+impl<'a, C, A, S, K> Walker<C, A, S> for Member<'a, K>
 where
-    C: Compound<S, A>,
+    C: Compound<A, S>,
     C::Leaf: Clone + Archive + Ord + Keyed<K>,
     <C::Leaf as Archive>::Archived: Keyed<K>,
     K: PartialEq + PartialOrd,
     A: Borrow<MaxKey<K>>,
 {
-    fn walk(&mut self, walk: impl Walkable<S, C, A>) -> Step {
+    fn walk(&mut self, walk: impl Walkable<C, A, S>) -> Step {
         for i in 0.. {
             println!("probing {}", i);
             match walk.probe(i) {

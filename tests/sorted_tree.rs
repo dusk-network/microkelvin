@@ -24,7 +24,7 @@ use microkelvin::{
   A: Clone + Annotation<T>,
   for<'a> &'a mut __D: Borrow<S>,
   __D: Store"))]
-enum NaiveTree<S, T, A>
+enum NaiveTree<T, A, S>
 where
     S: Store,
 {
@@ -32,13 +32,13 @@ where
     Single(T),
     Double(T, T),
     Middle(
-        #[omit_bounds] Link<S, NaiveTree<S, T, A>, A>,
+        #[omit_bounds] Link<NaiveTree<T, A, S>, A, S>,
         T,
-        #[omit_bounds] Link<S, NaiveTree<S, T, A>, A>,
+        #[omit_bounds] Link<NaiveTree<T, A, S>, A, S>,
     ),
 }
 
-impl<S, T, A> Default for NaiveTree<S, T, A>
+impl<T, A, S> Default for NaiveTree<T, A, S>
 where
     S: Store,
 {
@@ -47,14 +47,14 @@ where
     }
 }
 
-impl<S, T, A> Compound<S, A> for NaiveTree<S, T, A>
+impl<T, A, S> Compound<A, S> for NaiveTree<T, A, S>
 where
     S: Store,
     T: Archive,
 {
     type Leaf = T;
 
-    fn child(&self, ofs: usize) -> Child<S, Self, A> {
+    fn child(&self, ofs: usize) -> Child<Self, A, S> {
         match (ofs, self) {
             (0, NaiveTree::Single(a)) => Child::Leaf(a),
 
@@ -69,7 +69,7 @@ where
         }
     }
 
-    fn child_mut(&mut self, ofs: usize) -> ChildMut<S, Self, A> {
+    fn child_mut(&mut self, ofs: usize) -> ChildMut<Self, A, S> {
         match (ofs, self) {
             (0, NaiveTree::Single(a)) => ChildMut::Leaf(a),
 
@@ -85,13 +85,13 @@ where
     }
 }
 
-impl<S, T, A> ArchivedCompound<S, NaiveTree<S, T, A>, A>
-    for ArchivedNaiveTree<S, T, A>
+impl<T, A, S> ArchivedCompound<NaiveTree<T, A, S>, A, S>
+    for ArchivedNaiveTree<T, A, S>
 where
     S: Store,
     T: Archive,
 {
-    fn child(&self, ofs: usize) -> ArchivedChild<S, NaiveTree<S, T, A>, A> {
+    fn child(&self, ofs: usize) -> ArchivedChild<NaiveTree<T, A, S>, A, S> {
         match (ofs, self) {
             (0, ArchivedNaiveTree::Single(t)) => ArchivedChild::Leaf(t),
 
@@ -107,7 +107,7 @@ where
     }
 }
 
-impl<S, T, A> NaiveTree<S, T, A>
+impl<T, A, S> NaiveTree<T, A, S>
 where
     S: Store,
     T: Archive + Ord + Clone,
@@ -223,7 +223,7 @@ mod test {
         let ordered = numbers.clone();
         numbers.shuffle(&mut rng);
 
-        let mut tree = NaiveTree::<_, _, MaxKey<LittleEndian<u16>>>::new();
+        let mut tree = NaiveTree::<_, MaxKey<LittleEndian<u16>>, _>::new();
 
         for n in &numbers {
             let leaf = TestLeaf::new(*n);

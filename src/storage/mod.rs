@@ -52,7 +52,7 @@ impl<I, T> Ident<I, T> {
 
 /// Stored is a reference to a value stored, along with the backing store
 #[derive(Clone)]
-pub struct Stored<S, T>
+pub struct Stored<T, S>
 where
     S: Store,
 {
@@ -60,10 +60,10 @@ where
     ident: Ident<S::Identifier, T>,
 }
 
-unsafe impl<S, T> Send for Stored<S, T> where S: Store + Send {}
-unsafe impl<S, T> Sync for Stored<S, T> where S: Store + Sync {}
+unsafe impl<T, S> Send for Stored<T, S> where S: Store + Send {}
+unsafe impl<T, S> Sync for Stored<T, S> where S: Store + Sync {}
 
-impl<S, T> Stored<S, T>
+impl<T, S> Stored<T, S>
 where
     S: Store,
 {
@@ -86,14 +86,14 @@ where
         self.store.get_raw(&self.ident)
     }
 
-    pub fn walk<W, A>(&self, walker: W) -> Option<Branch<S, T, A>>
+    pub fn walk<W, A>(&self, walker: W) -> Option<Branch<T, A, S>>
     where
         S: Store,
-        T: Compound<S, A>,
-        T::Archived: ArchivedCompound<S, T, A>,
+        T: Compound<A, S>,
+        T::Archived: ArchivedCompound<T, A, S>,
         T::Leaf: Archive,
         A: Annotation<T::Leaf>,
-        W: Walker<S, T, A>,
+        W: Walker<T, A, S>,
     {
         let inner = self.inner();
         Branch::walk_with_store(
@@ -112,7 +112,7 @@ pub trait Store: Clone + Fallible<Error = core::convert::Infallible> {
     type Storage: Storage<Self::Identifier>;
 
     /// Put a value into storage, and get a representative token back
-    fn put<T>(&self, t: &T) -> Stored<Self, T>
+    fn put<T>(&self, t: &T) -> Stored<T, Self>
     where
         T: Serialize<Self::Storage>;
 
