@@ -7,7 +7,13 @@
 use core::convert::Infallible;
 use rkyv::{ser::Serializer, Archive, Fallible, Serialize};
 
-use super::{Storage, UnwrapInfallible};
+use parking_lot::RwLock;
+
+use std::sync::Arc;
+
+use crate::Store;
+
+use super::{Ident, Storage, Stored, UnwrapInfallible};
 
 const PAGE_SIZE: usize = 1024 * 64;
 
@@ -149,5 +155,50 @@ mod tests {
             let got = stored.inner();
             assert_eq!(*got, comp)
         }
+    }
+}
+
+/// Store that utilises a reference-counted PageStorage
+#[derive(Clone)]
+pub struct HostStore {
+    inner: Arc<RwLock<PageStorage>>,
+}
+
+impl HostStore {
+    /// Creates a new LocalStore
+    pub fn new() -> Self {
+        HostStore {
+            inner: Arc::new(RwLock::new(PageStorage::new())),
+        }
+    }
+}
+
+impl Fallible for HostStore {
+    type Error = Infallible;
+}
+
+impl Store for HostStore {
+    type Storage = PageStorage;
+    type Identifier = Offset;
+
+    fn put<T>(&self, t: &T) -> Stored<Self, T>
+    where
+        T: Serialize<Self::Storage>,
+    {
+        Stored::new(self.clone(), Ident::new(self.inner.write().put::<T>(t)))
+    }
+
+    fn get_raw<'a, T>(
+        &'a self,
+        id: &Ident<Self::Identifier, T>,
+    ) -> &'a T::Archived
+    where
+        T: Archive,
+    {
+        let guard = self.inner.read();
+        let reference = guard.get::<T>(&id.erase());
+        let extended: &'a T::Archived =
+            unsafe { core::mem::transmute(reference) };
+        extended
     }
 }

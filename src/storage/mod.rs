@@ -1,14 +1,16 @@
-use core::convert::Infallible;
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+//
+// Copyright (c) DUSK NETWORK. All rights reserved.
+
 use core::hint::unreachable_unchecked;
 use core::marker::PhantomData;
-use std::sync::Arc;
 
 use rkyv::{ser::Serializer, Archive, Fallible, Serialize};
 
-use parking_lot::RwLock;
-
-mod vec_storage;
-pub use vec_storage::PageStorage;
+mod host_store;
+pub use host_store::HostStore;
 
 use crate::{
     Annotation, ArchivedCompound, Branch, Compound, MaybeArchived, Walker,
@@ -121,51 +123,6 @@ pub trait Store: Clone + Fallible<Error = core::convert::Infallible> {
     ) -> &'a T::Archived
     where
         T: Archive;
-}
-
-/// Store that utilises a reference-counted PageStorage
-#[derive(Clone)]
-pub struct HostStore {
-    inner: Arc<RwLock<PageStorage>>,
-}
-
-impl HostStore {
-    /// Creates a new LocalStore
-    pub fn new() -> Self {
-        HostStore {
-            inner: Arc::new(RwLock::new(PageStorage::new())),
-        }
-    }
-}
-
-impl Fallible for HostStore {
-    type Error = Infallible;
-}
-
-impl Store for HostStore {
-    type Storage = PageStorage;
-    type Identifier = vec_storage::Offset;
-
-    fn put<T>(&self, t: &T) -> Stored<Self, T>
-    where
-        T: Serialize<Self::Storage>,
-    {
-        Stored::new(self.clone(), Ident::new(self.inner.write().put::<T>(t)))
-    }
-
-    fn get_raw<'a, T>(
-        &'a self,
-        id: &Ident<Self::Identifier, T>,
-    ) -> &'a T::Archived
-    where
-        T: Archive,
-    {
-        let guard = self.inner.read();
-        let reference = guard.get::<T>(&id.erase());
-        let extended: &'a T::Archived =
-            unsafe { core::mem::transmute(reference) };
-        extended
-    }
 }
 
 /// The main trait for providing storage backends to use with `microkelvin`
