@@ -87,6 +87,7 @@ where
     C: Archive,
 {
     levels: Vec<Level<'a, S, C, A>>,
+    store: Option<S>,
 }
 
 impl<'a, S, C, A> PartialBranch<'a, S, C, A>
@@ -99,6 +100,14 @@ where
     fn new(root: MaybeArchived<'a, C>) -> Self {
         PartialBranch {
             levels: vec![Level::new(root)],
+            store: None,
+        }
+    }
+
+    fn new_with_store(root: MaybeArchived<'a, C>, store: S) -> Self {
+        PartialBranch {
+            levels: vec![Level::new(root)],
+            store: Some(store),
         }
     }
 
@@ -151,7 +160,7 @@ where
         }
     }
 
-    fn walk<W>(&mut self, walker: &mut W, mut store: Option<S>) -> Option<()>
+    fn walk<W>(&mut self, walker: &mut W) -> Option<()>
     where
         W: Walker<S, C, A>,
         C: Compound<S, A>,
@@ -203,8 +212,9 @@ where
                                     continue;
                                 }
                                 MaybeStored::Stored(stored) => {
-                                    if store.is_none() {
-                                        store = Some(stored.store().clone())
+                                    if self.store.is_none() {
+                                        self.store =
+                                            Some(stored.store().clone())
                                     }
                                     stored.inner()
                                 }
@@ -216,7 +226,7 @@ where
                             match archived.child(ofs) {
                                 ArchivedChild::Leaf(_) => return Some(()),
                                 ArchivedChild::Link(link) => {
-                                    if let Some(ref store) = store {
+                                    if let Some(ref store) = self.store {
                                         store.get_raw(link.ident())
                                     } else {
                                         unreachable!()
@@ -291,7 +301,7 @@ where
         A: Annotation<C::Leaf>,
     {
         let mut partial = PartialBranch::new(root);
-        partial.walk(&mut walker, None).map(|()| Branch(partial))
+        partial.walk(&mut walker).map(|()| Branch(partial))
     }
 
     /// Performs a tree walk, returning either a valid branch or None if the
@@ -306,10 +316,8 @@ where
         W: Walker<S, C, A>,
         A: Annotation<C::Leaf>,
     {
-        let mut partial = PartialBranch::new(root);
-        partial
-            .walk(&mut walker, Some(store))
-            .map(|()| Branch(partial))
+        let mut partial = PartialBranch::new_with_store(root, store);
+        partial.walk(&mut walker).map(|()| Branch(partial))
     }
 }
 
@@ -394,7 +402,7 @@ where
             BranchIterator::Intermediate(mut branch, mut walker) => {
                 branch.0.advance();
                 // access partialbranch
-                match branch.0.walk(&mut walker, None) {
+                match branch.0.walk(&mut walker) {
                     None => {
                         *self = BranchIterator::Exhausted;
                         return None;
@@ -469,7 +477,7 @@ where
             Self::Intermediate(mut branch, mut walker) => {
                 branch.inner.0.advance();
                 // access partialbranch
-                match branch.inner.0.walk(&mut walker, None) {
+                match branch.inner.0.walk(&mut walker) {
                     None => {
                         *self = Self::Exhausted;
                         return None;
