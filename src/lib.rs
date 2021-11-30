@@ -30,7 +30,7 @@ pub use annotations::{
     ARef, Annotation, Cardinality, Combine, FindMaxKey, Keyed, MaxKey, Member,
     Nth,
 };
-pub use branch::{Branch, MappedBranch};
+pub use branch::{Branch, BranchRef, MappedBranch};
 pub use branch_mut::{BranchMut, MappedBranchMut};
 pub use compound::{
     ArchivedChild, ArchivedCompound, Child, ChildMut, Compound, MutableLeaves,
@@ -40,7 +40,7 @@ pub use walk::{All, Discriminant, Step, Walkable, Walker};
 pub use wrappers::{MaybeArchived, MaybeStored, Primitive};
 
 mod storage;
-pub use storage::{Storage, Store};
+pub use storage::{Storage, Store, Stored};
 
 #[cfg(feature = "host")]
 pub use storage::HostStore;

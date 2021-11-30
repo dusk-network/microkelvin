@@ -99,7 +99,11 @@ where
         self.levels.last_mut().expect("Never empty")
     }
 
-    pub fn leaf_mut(&mut self) -> Option<&mut C::Leaf>
+    fn top(&self) -> &LevelMut<'a, C, A, S> {
+        self.levels.last().expect("Never empty")
+    }
+
+    fn leaf_mut(&mut self) -> Option<&mut C::Leaf>
     where
         C: Compound<A, S> + Clone,
     {
@@ -108,6 +112,19 @@ where
 
         match top.child_mut(ofs) {
             ChildMut::Leaf(l) => Some(l),
+            _ => None,
+        }
+    }
+
+    fn leaf(&self) -> Option<&C::Leaf>
+    where
+        C: Compound<A, S> + Clone,
+    {
+        let top = self.top();
+        let ofs = top.offset();
+
+        match top.child(ofs) {
+            Child::Leaf(l) => Some(l),
             _ => None,
         }
     }
@@ -210,6 +227,14 @@ where
         C: Compound<A, S> + Clone,
     {
         self.0.leaf_mut().expect("invalid branch")
+    }
+
+    /// Returns a mutable reference to the leaf pointet to by the branch
+    pub fn leaf(&self) -> &C::Leaf
+    where
+        C: Compound<A, S> + Clone,
+    {
+        self.0.leaf().expect("invalid branch")
     }
 
     /// Performs a tree walk, returning either a valid branch or None if the

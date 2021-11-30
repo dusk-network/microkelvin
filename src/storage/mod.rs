@@ -73,14 +73,17 @@ where
         Stored { store, ident }
     }
 
+    /// Get a reference to the underlying store
     pub fn store(&self) -> &S {
         &self.store
     }
 
+    /// Get a reference to the underlying identifier
     pub fn ident(&self) -> &Ident<S::Identifier, T> {
         &self.ident
     }
 
+    /// The archived value
     pub fn inner(&self) -> &T::Archived
     where
         T: Archive,
@@ -88,6 +91,7 @@ where
         self.store.get_raw(&self.ident)
     }
 
+    /// Start a walk at the stored value
     pub fn walk<W, A>(&self, walker: W) -> Option<Branch<T, A, S>>
     where
         S: Store,
