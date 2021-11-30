@@ -276,7 +276,7 @@ where
     pub fn map_leaf<M>(
         self,
         closure: for<'b> fn(MaybeArchived<'b, C::Leaf>) -> &'b M,
-    ) -> MappedBranch<'a, S, C, A, M>
+    ) -> MappedBranch<'a, C, A, S, M>
     where
         C: Compound<A, S>,
         M: Archive,
@@ -331,7 +331,7 @@ where
     C: Archive;
 
 /// A branch that applies a map to its leaf
-pub struct MappedBranch<'a, S, C, A, M>
+pub struct MappedBranch<'a, C, A, S, M>
 where
     S: Store,
     C: Compound<A, S>,
@@ -341,7 +341,7 @@ where
     closure: for<'b> fn(MaybeArchived<'b, C::Leaf>) -> &'b M,
 }
 
-impl<'a, S, C, A, M> MappedBranch<'a, S, C, A, M>
+impl<'a, C, A, S, M> MappedBranch<'a, C, A, S, M>
 where
     S: Store,
     C: Compound<A, S>,
@@ -355,7 +355,7 @@ where
     }
 }
 
-pub enum BranchIterator<'a, S, C, A, W>
+pub enum BranchIterator<'a, C, A, S, W>
 where
     S: Store,
     C: Archive,
@@ -376,14 +376,14 @@ where
 {
     type Item = MaybeArchived<'a, C::Leaf>;
 
-    type IntoIter = BranchIterator<'a, S, C, A, All>;
+    type IntoIter = BranchIterator<'a, C, A, S, All>;
 
     fn into_iter(self) -> Self::IntoIter {
         BranchIterator::Initial(self, All)
     }
 }
 
-impl<'a, S, C, A, W> Iterator for BranchIterator<'a, S, C, A, W>
+impl<'a, C, A, S, W> Iterator for BranchIterator<'a, C, A, S, W>
 where
     S: Store,
     C: Compound<A, S>,
@@ -429,18 +429,18 @@ where
     }
 }
 
-pub enum MappedBranchIterator<'a, S, C, A, M, W>
+pub enum MappedBranchIterator<'a, C, A, S, M, W>
 where
     S: Store,
     C: Archive + Compound<A, S>,
     C::Leaf: Archive,
 {
-    Initial(MappedBranch<'a, S, C, A, M>, W),
-    Intermediate(MappedBranch<'a, S, C, A, M>, W),
+    Initial(MappedBranch<'a, C, A, S, M>, W),
+    Intermediate(MappedBranch<'a, C, A, S, M>, W),
     Exhausted,
 }
 
-impl<'a, S, C, A, M> IntoIterator for MappedBranch<'a, S, C, A, M>
+impl<'a, C, A, S, M> IntoIterator for MappedBranch<'a, C, A, S, M>
 where
     S: Store,
     C: Compound<A, S>,
@@ -451,14 +451,14 @@ where
 {
     type Item = &'a M;
 
-    type IntoIter = MappedBranchIterator<'a, S, C, A, M, All>;
+    type IntoIter = MappedBranchIterator<'a, C, A, S, M, All>;
 
     fn into_iter(self) -> Self::IntoIter {
         MappedBranchIterator::Initial(self, All)
     }
 }
 
-impl<'a, S, C, A, M, W> Iterator for MappedBranchIterator<'a, S, C, A, M, W>
+impl<'a, C, A, S, M, W> Iterator for MappedBranchIterator<'a, C, A, S, M, W>
 where
     S: Store,
     C: Compound<A, S>,

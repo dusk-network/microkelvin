@@ -79,7 +79,7 @@ where
     }
 }
 
-impl<S, C, A, S2> Deserialize<Link<C, A, S>, S2> for ArchivedLink<C, A, S>
+impl<C, A, S, S2> Deserialize<Link<C, A, S>, S2> for ArchivedLink<C, A, S>
 where
     S: Store,
     S2: Store,

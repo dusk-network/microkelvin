@@ -275,7 +275,7 @@ where
 // iterators
 
 #[derive(Debug)]
-pub enum BranchMutIterator<'a, S, C, A, W>
+pub enum BranchMutIterator<'a, C, A, S, W>
 where
     S: Store,
     C: Compound<A, S> + Clone,
@@ -297,14 +297,14 @@ where
 {
     type Item = &'a mut C::Leaf;
 
-    type IntoIter = BranchMutIterator<'a, S, C, A, All>;
+    type IntoIter = BranchMutIterator<'a, C, A, S, All>;
 
     fn into_iter(self) -> Self::IntoIter {
         BranchMutIterator::Initial(self, All)
     }
 }
 
-impl<'a, S, C, A, W> Iterator for BranchMutIterator<'a, S, C, A, W>
+impl<'a, C, A, S, W> Iterator for BranchMutIterator<'a, C, A, S, W>
 where
     S: Store,
     C: Compound<A, S> + Clone,
