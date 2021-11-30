@@ -9,7 +9,9 @@ use core::marker::PhantomData;
 
 use rkyv::{ser::Serializer, Archive, Fallible, Serialize};
 
+#[cfg(feature = "host")]
 mod host_store;
+#[cfg(feature = "host")]
 pub use host_store::HostStore;
 
 use crate::{
