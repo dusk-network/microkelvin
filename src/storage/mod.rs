@@ -133,7 +133,7 @@ pub trait Store: Clone + Fallible<Error = core::convert::Infallible> {
 
 /// The main trait for providing storage backends to use with `microkelvin`
 pub trait Storage<I>:
-    Serializer + Fallible<Error = std::convert::Infallible>
+    Serializer + Fallible<Error = core::convert::Infallible>
 {
     /// Write a value into the storage, returns a representation
     fn put<T>(&mut self, t: &T) -> I

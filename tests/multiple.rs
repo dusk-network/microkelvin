@@ -10,7 +10,7 @@ use rand::{prelude::SliceRandom, thread_rng};
 mod linked_list;
 use linked_list::LinkedList;
 
-use rend::LittleEndian;
+use rkyv::rend::LittleEndian;
 use rkyv::{Archive, Deserialize, Serialize};
 
 use microkelvin::{

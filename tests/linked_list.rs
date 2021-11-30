@@ -10,7 +10,7 @@ use microkelvin::{
     All, Annotation, ArchivedChild, ArchivedCompound, Cardinality, Child,
     ChildMut, Compound, HostStore, Link, MutableLeaves, Nth, Store,
 };
-use rend::LittleEndian;
+use rkyv::rend::LittleEndian;
 use rkyv::{Archive, Deserialize, Serialize};
 
 #[derive(Clone, Archive, Serialize, Deserialize)]

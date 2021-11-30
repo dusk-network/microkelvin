@@ -179,7 +179,6 @@ where
 {
     fn walk(&mut self, walk: impl Walkable<C, A, S>) -> Step {
         for i in 0.. {
-            println!("probing {}", i);
             match walk.probe(i) {
                 Discriminant::Empty => (),
                 Discriminant::Leaf(leaf) => {

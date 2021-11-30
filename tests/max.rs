@@ -5,7 +5,7 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use rand::{prelude::SliceRandom, thread_rng};
-use rend::LittleEndian;
+use rkyv::rend::LittleEndian;
 use rkyv::{Archive, Deserialize, Serialize};
 
 mod linked_list;

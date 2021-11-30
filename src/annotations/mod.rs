@@ -7,7 +7,6 @@
 use core::cell::Ref;
 use core::ops::Deref;
 
-use owning_ref::OwningRef;
 use rkyv::Archive;
 
 use crate::{Compound, Primitive, Store};
@@ -62,7 +61,7 @@ pub enum ARef<'a, A> {
     /// The annotation is a reference
     Borrowed(&'a A),
     /// Referenced
-    Referenced(OwningRef<Ref<'a, Option<A>>, A>),
+    Referenced(Ref<'a, Option<A>>),
 }
 
 impl<'a, A> Deref for ARef<'a, A> {
@@ -72,7 +71,7 @@ impl<'a, A> Deref for ARef<'a, A> {
         match self {
             ARef::Owned(ref a) => a,
             ARef::Borrowed(a) => *a,
-            ARef::Referenced(a) => a,
+            ARef::Referenced(r) => &r.as_ref().unwrap(),
         }
     }
 }

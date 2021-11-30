@@ -8,7 +8,7 @@
 /// i.e. the amount of elements in a collection
 use core::borrow::Borrow;
 
-use rend::LittleEndian;
+use rkyv::rend::LittleEndian;
 use rkyv::{Archive, Deserialize, Serialize};
 
 use crate::annotations::{Annotation, Combine};

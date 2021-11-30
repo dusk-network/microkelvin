@@ -180,7 +180,7 @@ mod test {
 
     use microkelvin::{HostStore, Keyed, Member};
     use rand::prelude::SliceRandom;
-    use rend::LittleEndian;
+    use rkyv::rend::LittleEndian;
 
     #[derive(
         Ord, PartialOrd, PartialEq, Eq, Archive, Clone, Deserialize, Serialize,

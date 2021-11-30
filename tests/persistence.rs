@@ -14,7 +14,7 @@ mod persist_tests {
 
     use std::io;
 
-    use rend::LittleEndian;
+    use rkyv::rend::LittleEndian;
 
     use microkelvin::{Cardinality, HostStore, Keyed, Nth, Store};
 
