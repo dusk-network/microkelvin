@@ -275,11 +275,11 @@ where
     /// Used in maps for example, to get easy access to the value of the KV-pair
     pub fn map_leaf<M>(
         self,
-        closure: for<'b> fn(MaybeArchived<'b, C::Leaf>) -> &'b M,
+        closure: fn(MaybeArchived<'a, C::Leaf>) -> M,
     ) -> MappedBranch<'a, C, A, S, M>
     where
         C: Compound<A, S>,
-        M: Archive,
+        M: 'a,
     {
         MappedBranch {
             inner: self,
@@ -336,10 +336,13 @@ where
     S: Store,
     C: Compound<A, S>,
     C::Leaf: Archive,
+    M: 'a,
 {
     inner: Branch<'a, C, A, S>,
-    closure: for<'b> fn(MaybeArchived<'b, C::Leaf>) -> &'b M,
+    closure: MapClosure<'a, C::Leaf, M>,
 }
+
+type MapClosure<'a, L, M> = fn(MaybeArchived<'a, L>) -> M;
 
 impl<'a, C, A, S, M> MappedBranch<'a, C, A, S, M>
 where
@@ -347,10 +350,9 @@ where
     C: Compound<A, S>,
     C::Archived: ArchivedCompound<C, A, S>,
     C::Leaf: Archive,
-    M: Archive,
 {
     /// Get the mapped leaf of the branch
-    pub fn leaf(&'a self) -> &'a M {
+    pub fn leaf(&'a self) -> M {
         (self.closure)(self.inner.leaf())
     }
 }
@@ -429,14 +431,14 @@ where
     }
 }
 
-pub enum MappedBranchIterator<'a, C, A, S, M, W>
+pub enum MappedBranchIterator<'a, C, A, S, R, W>
 where
     S: Store,
     C: Archive + Compound<A, S>,
     C::Leaf: Archive,
 {
-    Initial(MappedBranch<'a, C, A, S, M>, W),
-    Intermediate(MappedBranch<'a, C, A, S, M>, W),
+    Initial(Branch<'a, C, A, S>, MapClosure<'a, C::Leaf, R>, W),
+    Intermediate(Branch<'a, C, A, S>, MapClosure<'a, C::Leaf, R>, W),
     Exhausted,
 }
 
@@ -449,12 +451,13 @@ where
     A: Annotation<C::Leaf>,
     M: 'a + Archive,
 {
-    type Item = &'a M;
+    type Item = M;
 
     type IntoIter = MappedBranchIterator<'a, C, A, S, M, All>;
 
     fn into_iter(self) -> Self::IntoIter {
-        MappedBranchIterator::Initial(self, All)
+        let MappedBranch { inner, closure } = self;
+        MappedBranchIterator::Initial(inner, closure, All)
     }
 }
 
@@ -464,26 +467,26 @@ where
     C: Compound<A, S>,
     C::Archived: ArchivedCompound<C, A, S>,
     A: Annotation<C::Leaf>,
-    M: 'a + Archive,
+    M: 'a,
     W: Walker<C, A, S>,
 {
-    type Item = &'a M;
+    type Item = M;
 
     fn next(&mut self) -> Option<Self::Item> {
         match core::mem::replace(self, Self::Exhausted) {
-            Self::Initial(branch, walker) => {
-                *self = Self::Intermediate(branch, walker);
+            Self::Initial(branch, closure, walker) => {
+                *self = Self::Intermediate(branch, closure, walker);
             }
-            Self::Intermediate(mut branch, mut walker) => {
-                branch.inner.0.advance();
+            Self::Intermediate(mut branch, closure, mut walker) => {
+                branch.0.advance();
                 // access partialbranch
-                match branch.inner.0.walk(&mut walker) {
+                match branch.0.walk(&mut walker) {
                     None => {
                         *self = Self::Exhausted;
                         return None;
                     }
                     Some(_) => {
-                        *self = Self::Intermediate(branch, walker);
+                        *self = Self::Intermediate(branch, closure, walker);
                     }
                 }
             }
@@ -493,13 +496,39 @@ where
         }
 
         match self {
-            Self::Intermediate(branch, _) => {
-                let leaf = branch.leaf();
-                let leaf_extended: &'a M =
+            Self::Intermediate(branch, closure, _) => {
+                let leaf: MaybeArchived<'_, _> = branch.leaf();
+                let leaf_extended: MaybeArchived<'a, _> =
                     unsafe { core::mem::transmute(leaf) };
-                Some(leaf_extended)
+                let mapped = closure(leaf_extended);
+                Some(mapped)
             }
             _ => unreachable!(),
         }
+    }
+}
+
+/// A trait for refering to a branch based solely on its leaf type
+pub trait BranchRef<'a, T>
+where
+    T: Archive,
+{
+    /// Provides a reference to the leaf of the branch
+    fn leaf(&self) -> MaybeArchived<T>;
+}
+
+impl<'a, C, A, S, T> BranchRef<'a, T>
+    for MappedBranch<'a, C, A, S, MaybeArchived<'a, T>>
+where
+    S: Store,
+    C: Compound<A, S>,
+    C::Archived: ArchivedCompound<C, A, S>,
+    T: Archive,
+{
+    fn leaf(&self) -> MaybeArchived<T> {
+        let leaf: MaybeArchived<'_, C::Leaf> = self.inner.leaf();
+        let leaf: MaybeArchived<'a, C::Leaf> =
+            unsafe { core::mem::transmute(leaf) };
+        (self.closure)(leaf)
     }
 }

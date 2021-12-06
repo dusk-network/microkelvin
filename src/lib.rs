@@ -30,7 +30,7 @@ pub use annotations::{
     ARef, Annotation, Cardinality, Combine, FindMaxKey, Keyed, MaxKey, Member,
     Nth,
 };
-pub use branch::{Branch, MappedBranch};
+pub use branch::{Branch, BranchRef, MappedBranch};
 pub use branch_mut::{BranchMut, MappedBranchMut};
 pub use compound::{
     ArchivedChild, ArchivedCompound, Child, ChildMut, Compound, MutableLeaves,
