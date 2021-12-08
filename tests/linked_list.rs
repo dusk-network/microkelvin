@@ -4,89 +4,100 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use core::borrow::Borrow;
+
 use microkelvin::{
-    Annotation, ArchivedChild, ArchivedCompound, Cardinality, Child, ChildMut,
-    Compound, First, Link, MutableLeaves, Nth, Portal, Storage,
-    StorageSerializer,
+    All, Annotation, ArchivedChild, ArchivedCompound, Cardinality, Child,
+    ChildMut, Compound, HostStore, Link, MutableLeaves, Nth, Store,
 };
 use rend::LittleEndian;
 use rkyv::{Archive, Deserialize, Serialize};
 
 #[derive(Clone, Archive, Serialize, Deserialize)]
 #[archive(bound(serialize = "
-  T: Serialize<Storage>,
-  A: Annotation<T>,
-  __S: StorageSerializer"))]
+  A: Archive + Clone + Annotation<T>,
+  T: Clone,
+  S: Store<Storage = __S>,"))]
 #[archive(bound(deserialize = "
-  A: Archive + Clone,
-  T::Archived: Deserialize<T, __D>,
-  A::Archived: Deserialize<A, __D>,
-  __D: Sized"))]
-pub enum LinkedList<T, A> {
+  T: Archive + Clone,
+  T::Archived: Deserialize<T, S>,
+  A: Clone + Annotation<T>,
+  for<'a> &'a mut __D: Borrow<S>,
+  __D: Store"))]
+pub enum LinkedList<T, A, S>
+where
+    S: Store,
+{
     Empty,
     Node {
         val: T,
         #[omit_bounds]
-        next: Link<Self, A>,
+        next: Link<Self, A, S>,
     },
 }
 
-impl<T, A> Default for LinkedList<T, A> {
+impl<T, A, S> Default for LinkedList<T, A, S>
+where
+    S: Store,
+{
     fn default() -> Self {
         LinkedList::Empty
     }
 }
 
-impl<T, A> ArchivedCompound<LinkedList<T, A>, A> for ArchivedLinkedList<T, A>
+impl<T, A, S> ArchivedCompound<LinkedList<T, A, S>, A, S>
+    for ArchivedLinkedList<T, A, S>
 where
+    S: Store,
     T: Archive,
-    A: Annotation<T>,
 {
-    fn child(&self, ofs: usize) -> ArchivedChild<LinkedList<T, A>, A> {
-        match (self, ofs) {
-            (ArchivedLinkedList::Node { val, .. }, 0) => {
+    fn child(&self, ofs: usize) -> ArchivedChild<LinkedList<T, A, S>, A, S> {
+        match (ofs, self) {
+            (0, ArchivedLinkedList::Node { val, .. }) => {
                 ArchivedChild::Leaf(val)
             }
-            (ArchivedLinkedList::Node { next, .. }, 1) => {
-                ArchivedChild::Node(next)
+            (1, ArchivedLinkedList::Node { next, .. }) => {
+                ArchivedChild::Link(next)
             }
-            (ArchivedLinkedList::Node { .. }, _) => ArchivedChild::EndOfNode,
-            (ArchivedLinkedList::Empty, _) => ArchivedChild::EndOfNode,
+            (
+                _,
+                ArchivedLinkedList::Node { .. } | ArchivedLinkedList::Empty,
+            ) => ArchivedChild::End,
         }
     }
 }
 
-impl<T, A> Compound<A> for LinkedList<T, A>
+impl<T, A, S> Compound<A, S> for LinkedList<T, A, S>
 where
+    S: Store,
     T: Archive,
-    A: Annotation<T>,
 {
     type Leaf = T;
 
-    fn child(&self, ofs: usize) -> Child<Self, A> {
+    fn child(&self, ofs: usize) -> Child<Self, A, S> {
         match (ofs, self) {
             (0, LinkedList::Node { val, .. }) => Child::Leaf(val),
-            (1, LinkedList::Node { next, .. }) => Child::Node(next),
-            (_, LinkedList::Node { .. }) => Child::EndOfNode,
-            (_, LinkedList::Empty) => Child::EndOfNode,
+            (1, LinkedList::Node { next, .. }) => Child::Link(next),
+            (_, LinkedList::Node { .. }) => Child::End,
+            (_, LinkedList::Empty) => Child::End,
         }
     }
 
-    fn child_mut(&mut self, ofs: usize) -> ChildMut<Self, A> {
+    fn child_mut(&mut self, ofs: usize) -> ChildMut<Self, A, S> {
         match (ofs, self) {
             (0, LinkedList::Node { val, .. }) => ChildMut::Leaf(val),
-            (1, LinkedList::Node { next, .. }) => ChildMut::Node(next),
-            (_, LinkedList::Node { .. }) => ChildMut::EndOfNode,
-            (_, LinkedList::Empty) => ChildMut::EndOfNode,
+            (1, LinkedList::Node { next, .. }) => ChildMut::Link(next),
+            (_, LinkedList::Node { .. }) => ChildMut::End,
+            (_, LinkedList::Empty) => ChildMut::End,
         }
     }
 }
 
-impl<T, A> MutableLeaves for LinkedList<T, A> where A: Archive + Annotation<T> {}
+impl<T, A, S> MutableLeaves for LinkedList<T, A, S> where S: Store {}
 
-impl<T, A> LinkedList<T, A>
+impl<T, A, S> LinkedList<T, A, S>
 where
-    A: Annotation<T>,
+    S: Store,
 {
     pub fn new() -> Self {
         Default::default()
@@ -97,7 +108,7 @@ where
             LinkedList::Empty => {
                 *self = LinkedList::Node {
                     val: t,
-                    next: Link::new(LinkedList::<T, A>::Empty),
+                    next: Link::new(LinkedList::Empty),
                 }
             }
             old @ LinkedList::Node { .. } => {
@@ -111,8 +122,10 @@ where
 
     pub fn pop(&mut self) -> Option<T>
     where
-        T: Clone,
-        A: Clone,
+        T: Archive + Clone,
+        T::Archived: Deserialize<T, S>,
+        A: Archive + Clone + Annotation<T>,
+        A::Archived: Deserialize<A, S>,
     {
         match core::mem::take(self) {
             LinkedList::Empty => None,
@@ -128,11 +141,11 @@ where
 fn push() {
     let n: u64 = 1024;
 
-    let mut list = LinkedList::<_, ()>::new();
+    let mut list = LinkedList::<_, (), HostStore>::new();
 
     for i in 0..n {
         let i: LittleEndian<u64> = i.into();
-        list.push(i)
+        list.push(i);
     }
 }
 
@@ -140,7 +153,7 @@ fn push() {
 fn push_cardinality() {
     let n: u64 = 1024;
 
-    let mut list = LinkedList::<_, Cardinality>::new();
+    let mut list = LinkedList::<_, Cardinality, HostStore>::new();
 
     for i in 0..n {
         let i: LittleEndian<u64> = i.into();
@@ -152,7 +165,7 @@ fn push_cardinality() {
 fn push_nth() {
     let n = 1024;
 
-    let mut list = LinkedList::<_, Cardinality>::new();
+    let mut list = LinkedList::<_, Cardinality, HostStore>::new();
 
     for i in 0..n {
         let i: LittleEndian<u64> = i.into();
@@ -169,7 +182,7 @@ fn push_nth() {
 fn push_pop() {
     let n: u64 = 1024;
 
-    let mut list = LinkedList::<_, ()>::new();
+    let mut list = LinkedList::<_, (), HostStore>::new();
 
     for i in 0..n {
         let i: LittleEndian<u64> = i.into();
@@ -185,7 +198,7 @@ fn push_pop() {
 fn push_mut() {
     let n: u64 = 64;
 
-    let mut list = LinkedList::<_, Cardinality>::new();
+    let mut list = LinkedList::<_, Cardinality, HostStore>::new();
 
     for i in 0..n {
         let i: LittleEndian<u64> = i.into();
@@ -193,8 +206,8 @@ fn push_mut() {
     }
 
     for i in 0..n {
-        let mut nth = list.walk_mut(Nth(i)).expect("Some(Branch)");
-        *nth += 1;
+        let mut branch = list.walk_mut(Nth(i)).expect("Some(Branch)");
+        *branch.leaf_mut() += 1;
     }
 
     for i in 0..n {
@@ -207,7 +220,7 @@ fn push_mut() {
 fn iterate_immutable() {
     let n: u64 = 1024;
 
-    let mut list = LinkedList::<_, Cardinality>::new();
+    let mut list = LinkedList::<_, Cardinality, HostStore>::new();
 
     for i in 0..n {
         let i: LittleEndian<u64> = i.into();
@@ -216,7 +229,7 @@ fn iterate_immutable() {
 
     // branch from first element
 
-    let branch = list.walk(First).expect("Some(Branch)");
+    let branch = list.walk(All).expect("Some(Branch)");
 
     let mut count = n;
 
@@ -240,7 +253,7 @@ fn iterate_immutable() {
 fn iterate_mutable() {
     let n: u64 = 32;
 
-    let mut list = LinkedList::<_, Cardinality>::new();
+    let mut list = LinkedList::<_, Cardinality, HostStore>::new();
 
     for i in 0..n {
         let i: LittleEndian<u64> = i.into();
@@ -248,7 +261,7 @@ fn iterate_mutable() {
     }
 
     // branch from first element
-    let branch_mut = list.walk_mut(First).expect("Some(Branch)");
+    let branch_mut = list.walk_mut(All).expect("Some(Branch)");
 
     let mut count = n;
 
@@ -257,7 +270,7 @@ fn iterate_mutable() {
     }
 
     // branch from first element
-    let branch = list.walk(First).expect("Some(Branch)");
+    let branch = list.walk(All).expect("Some(Branch)");
 
     for leaf in branch {
         assert_eq!(*leaf, count);
@@ -280,7 +293,7 @@ fn iterate_mutable() {
 fn iterate_map() {
     let n: u64 = 32;
 
-    let mut list = LinkedList::<_, ()>::new();
+    let mut list = LinkedList::<_, (), HostStore>::new();
 
     for i in 0..n {
         let i: LittleEndian<u64> = i.into();
@@ -288,7 +301,7 @@ fn iterate_map() {
     }
 
     // branch from first element
-    let branch_mut = list.walk_mut(First).expect("Some(Branch)");
+    let branch_mut = list.walk_mut(All).expect("Some(Branch)");
 
     let mapped = branch_mut.map_leaf(|x| x);
 
@@ -304,7 +317,7 @@ fn iterate_map() {
 fn iterate_map_mutable() {
     let n: u64 = 32;
 
-    let mut list = LinkedList::<_, ()>::new();
+    let mut list = LinkedList::<_, (), HostStore>::new();
 
     for i in 0..n {
         let i: LittleEndian<u64> = i.into();
@@ -312,7 +325,7 @@ fn iterate_map_mutable() {
     }
 
     // branch from first element
-    let branch_mut = list.walk_mut(First).expect("Some(Branch)");
+    let branch_mut = list.walk_mut(All).expect("Some(Branch)");
 
     let mapped = branch_mut.map_leaf(|x| x);
 
@@ -329,7 +342,7 @@ fn iterate_map_mutable() {
 fn deref_mapped_mutable_branch() {
     let n: u64 = 32;
 
-    let mut list = LinkedList::<_, ()>::new();
+    let mut list = LinkedList::<_, (), HostStore>::new();
 
     for i in 0..n {
         let i: LittleEndian<u64> = i.into();
@@ -337,18 +350,20 @@ fn deref_mapped_mutable_branch() {
     }
 
     // branch from first element
-    let branch_mut = list.walk_mut(First).expect("Some(Branch)");
+    let branch_mut = list.walk_mut(All).expect("Some(Branch)");
 
-    let mapped = branch_mut.map_leaf(|x| x);
+    let mut mapped = branch_mut.map_leaf(|x| x);
 
-    assert_eq!(core::ops::Deref::deref(&mapped), &31);
+    assert_eq!(mapped.leaf_mut(), &31);
 }
 
 #[test]
 fn push_nth_persist() {
+    let store = HostStore::new();
+
     let n = 16;
 
-    let mut list = LinkedList::<_, Cardinality>::new();
+    let mut list = LinkedList::<_, Cardinality, _>::new();
 
     for i in 0..n {
         let i: LittleEndian<u64> = i.into();
@@ -357,15 +372,14 @@ fn push_nth_persist() {
 
     for i in 0..n {
         let nth = *list.walk(Nth(i.into())).expect("Some(Branch)").leaf();
-
         assert_eq!(nth, n - i - 1)
     }
 
-    let stored = Portal::put(&list);
+    let stored = store.put(&list);
 
-    let restored = Portal::get(stored);
     for i in 0..n {
-        let nth = *restored.walk(Nth(i.into())).expect("Some(Branch)").leaf();
+        let i = LittleEndian::from(i);
+        let nth = *stored.walk(Nth(i.into())).expect("Some(Branch)").leaf();
 
         assert_eq!(nth, n - i - 1)
     }

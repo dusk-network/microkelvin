@@ -14,8 +14,8 @@ use rend::LittleEndian;
 use rkyv::{Archive, Deserialize, Serialize};
 
 use microkelvin::{
-    AnnoIter, Annotation, ArchivedCompound, Cardinality, Combine, Compound,
-    FindMaxKey, Keyed, MaxKey, Primitive,
+    Annotation, Cardinality, Combine, Compound, FindMaxKey, HostStore, Keyed,
+    MaxKey, Primitive,
 };
 
 #[derive(Default, Clone, Archive, Serialize, Debug, Deserialize)]
@@ -57,19 +57,11 @@ where
 impl<K, A> Combine<A> for Anno<K>
 where
     K: Clone + Ord + Default,
-    A: Borrow<MaxKey<K>> + Borrow<Cardinality>,
+    A: Borrow<MaxKey<K>> + Borrow<Cardinality> + Archive<Archived = A>,
 {
-    fn combine<C>(iter: AnnoIter<C, A>) -> Self
-    where
-        C: Archive + Compound<A>,
-        C::Archived: ArchivedCompound<C, A>,
-        C::Leaf: Archive,
-        A: Annotation<C::Leaf>,
-    {
-        Anno {
-            max: MaxKey::combine(iter.clone()),
-            card: Cardinality::combine(iter.clone()),
-        }
+    fn combine(&mut self, other: &A) {
+        self.max.combine(other);
+        self.card.combine(other);
     }
 }
 
@@ -98,7 +90,7 @@ fn maximum_multiple() {
 
     keys.shuffle(&mut thread_rng());
 
-    let mut list = LinkedList::<_, Anno<LittleEndian<u64>>>::new();
+    let mut list = LinkedList::<_, Anno<LittleEndian<u64>>, HostStore>::new();
 
     for key in keys {
         let key: LittleEndian<u64> = key.into();

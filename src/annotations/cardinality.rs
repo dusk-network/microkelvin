@@ -12,8 +12,8 @@ use rend::LittleEndian;
 use rkyv::{Archive, Deserialize, Serialize};
 
 use crate::annotations::{Annotation, Combine};
-use crate::compound::{AnnoIter, ArchivedCompound, Compound};
-use crate::walk::{Slot, Slots, Step, Walker};
+use crate::walk::{Discriminant, Step, Walkable, Walker};
+use crate::Compound;
 
 /// The cardinality of a compound collection
 #[derive(
@@ -44,17 +44,8 @@ impl<A> Combine<A> for Cardinality
 where
     A: Borrow<Self>,
 {
-    fn combine<C>(iter: AnnoIter<C, A>) -> Self
-    where
-        C: Archive + Compound<A>,
-        C::Archived: ArchivedCompound<C, A>,
-        C::Leaf: Archive,
-        A: Annotation<C::Leaf>,
-    {
-        Cardinality(iter.fold(LittleEndian::from(0), |sum, ann| {
-            let add: LittleEndian<_> = (*ann).borrow().0;
-            (sum + add).into()
-        }))
+    fn combine(&mut self, other: &A) {
+        self.0 += other.borrow().0
     }
 }
 
@@ -62,31 +53,22 @@ where
 #[derive(Debug)]
 pub struct Nth(pub u64);
 
-impl<C, A> Walker<C, A> for Nth
+impl<C, A, S> Walker<C, A, S> for Nth
 where
-    C: Archive + Compound<A>,
-    C::Archived: ArchivedCompound<C, A>,
-    C::Leaf: Archive,
-    A: Annotation<C::Leaf> + Borrow<Cardinality>,
+    C: Compound<A, S>,
+    A: Borrow<Cardinality>,
 {
-    fn walk(&mut self, walk: impl Slots<C, A>) -> Step {
+    fn walk(&mut self, walk: impl Walkable<C, A, S>) -> Step {
         for i in 0.. {
-            match walk.slot(i) {
-                Slot::Leaf(_) => {
+            match walk.probe(i) {
+                Discriminant::Leaf(_) => {
                     if self.0 == 0 {
                         return Step::Found(i);
                     } else {
                         self.0 -= 1;
                     }
                 }
-                Slot::ArchivedLeaf(_) => {
-                    if self.0 == 0 {
-                        return Step::Found(i);
-                    } else {
-                        self.0 -= 1;
-                    }
-                }
-                Slot::Annotation(a) => {
+                Discriminant::Annotation(a) => {
                     let card: &Cardinality = (*a).borrow();
                     if card.0 <= self.0 {
                         self.0 -= u64::from(card.0);
@@ -94,8 +76,8 @@ where
                         return Step::Found(i);
                     }
                 }
-                Slot::Empty => (),
-                Slot::End => return Step::Abort,
+                Discriminant::Empty => (),
+                Discriminant::End => return Step::Abort,
             };
         }
         unreachable!()

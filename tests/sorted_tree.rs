@@ -4,199 +4,336 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use rkyv::{Archive, Deserialize, Infallible, Serialize};
-use std::cmp::Ordering;
+use core::borrow::Borrow;
+use core::cmp::Ordering;
+
+use rkyv::{Archive, Deserialize, Serialize};
 
 use microkelvin::{
-    AWrap, Annotation, ArchivedChild, ArchivedCompound, Child, ChildMut,
-    Compound, Link, Portal, Storage, StorageSerializer,
+    Annotation, ArchivedChild, ArchivedCompound, BranchRef, BranchRefMut,
+    Child, ChildMut, Compound, Discriminant, Keyed, Link, MaxKey,
+    MaybeArchived, Step, Store, Walkable, Walker,
 };
 
-impl<T, A> Default for NaiveTree<T, A> {
+#[derive(Clone, Archive, Serialize, Deserialize)]
+#[archive(bound(serialize = "
+  A: Archive + Clone + Annotation<T>,
+  T: Clone,
+  S: Store<Storage = __S>,"))]
+#[archive(bound(deserialize = "
+  T: Archive + Clone,
+  T::Archived: Deserialize<T, S>,
+  A: Clone + Annotation<T>,
+  for<'a> &'a mut __D: Borrow<S>,
+  __D: Store"))]
+pub enum NaiveTree<T, A, S>
+where
+    S: Store,
+{
+    Empty,
+    Single(T),
+    Double(T, T),
+    Middle(
+        #[omit_bounds] Link<NaiveTree<T, A, S>, A, S>,
+        T,
+        #[omit_bounds] Link<NaiveTree<T, A, S>, A, S>,
+    ),
+}
+
+impl<T, A, S> Default for NaiveTree<T, A, S>
+where
+    S: Store,
+{
     fn default() -> Self {
         NaiveTree::Empty
     }
 }
 
-#[derive(Clone, Archive, Serialize, Deserialize)]
-#[archive(bound(serialize = "
-  T: Serialize<Storage>,
-  A: Annotation<T>,
-  __S: StorageSerializer"))]
-#[archive(bound(deserialize = "
-  A: Archive + Clone,
-  T::Archived: Deserialize<T, __D>,
-  A::Archived: Deserialize<A, __D>,
-  __D: Sized"))]
-enum NaiveTree<T, A> {
-    Empty,
-    Single(T),
-    Double(T, T),
-    Middle(
-        #[omit_bounds] Link<NaiveTree<T, A>, A>,
-        T,
-        #[omit_bounds] Link<NaiveTree<T, A>, A>,
-    ),
-}
-
-impl<T, A> Compound<A> for NaiveTree<T, A>
+impl<T, A, S> Compound<A, S> for NaiveTree<T, A, S>
 where
+    S: Store,
     T: Archive,
-    A: Annotation<T>,
 {
     type Leaf = T;
 
-    fn child(&self, ofs: usize) -> Child<Self, A> {
+    fn child(&self, ofs: usize) -> Child<Self, A, S> {
         match (ofs, self) {
             (0, NaiveTree::Single(a)) => Child::Leaf(a),
+
             (0, NaiveTree::Double(a, _)) => Child::Leaf(a),
             (1, NaiveTree::Double(_, b)) => Child::Leaf(b),
-            (0, NaiveTree::Middle(a, _, _)) => Child::Node(a),
+
+            (0, NaiveTree::Middle(a, _, _)) => Child::Link(a),
             (1, NaiveTree::Middle(_, b, _)) => Child::Leaf(b),
-            (2, NaiveTree::Middle(_, _, c)) => Child::Node(c),
-            (_, NaiveTree::Empty) | (_, _) => Child::EndOfNode,
+            (2, NaiveTree::Middle(_, _, c)) => Child::Link(c),
+
+            (_, NaiveTree::Empty) | (_, _) => Child::End,
         }
     }
 
-    fn child_mut(&mut self, ofs: usize) -> ChildMut<Self, A> {
+    fn child_mut(&mut self, ofs: usize) -> ChildMut<Self, A, S> {
         match (ofs, self) {
             (0, NaiveTree::Single(a)) => ChildMut::Leaf(a),
+
             (0, NaiveTree::Double(a, _)) => ChildMut::Leaf(a),
             (1, NaiveTree::Double(_, b)) => ChildMut::Leaf(b),
-            (0, NaiveTree::Middle(a, _, _)) => ChildMut::Node(a),
+
+            (0, NaiveTree::Middle(a, _, _)) => ChildMut::Link(a),
             (1, NaiveTree::Middle(_, b, _)) => ChildMut::Leaf(b),
-            (2, NaiveTree::Middle(_, _, c)) => ChildMut::Node(c),
-            (_, NaiveTree::Empty) | (_, _) => ChildMut::EndOfNode,
+            (2, NaiveTree::Middle(_, _, c)) => ChildMut::Link(c),
+
+            (_, NaiveTree::Empty) | (_, _) => ChildMut::End,
         }
     }
 }
 
-impl<T, A> ArchivedCompound<NaiveTree<T, A>, A> for ArchivedNaiveTree<T, A>
+impl<T, A, S> ArchivedCompound<NaiveTree<T, A, S>, A, S>
+    for ArchivedNaiveTree<T, A, S>
 where
+    S: Store,
     T: Archive,
-    A: Annotation<T>,
 {
-    fn child(&self, ofs: usize) -> ArchivedChild<NaiveTree<T, A>, A> {
+    fn child(&self, ofs: usize) -> ArchivedChild<NaiveTree<T, A, S>, A, S> {
         match (ofs, self) {
             (0, ArchivedNaiveTree::Single(t)) => ArchivedChild::Leaf(t),
-            (1, ArchivedNaiveTree::Double(_, b)) => ArchivedChild::Leaf(b),
-            (0, ArchivedNaiveTree::Middle(a, _, _)) => ArchivedChild::Node(a),
+
+            (0, ArchivedNaiveTree::Double(t, _)) => ArchivedChild::Leaf(t),
+            (1, ArchivedNaiveTree::Double(_, t)) => ArchivedChild::Leaf(t),
+
+            (0, ArchivedNaiveTree::Middle(a, _, _)) => ArchivedChild::Link(a),
             (1, ArchivedNaiveTree::Middle(_, b, _)) => ArchivedChild::Leaf(b),
-            (2, ArchivedNaiveTree::Middle(_, _, c)) => ArchivedChild::Node(c),
-            (_, ArchivedNaiveTree::Empty) | (_, _) => ArchivedChild::EndOfNode,
+            (2, ArchivedNaiveTree::Middle(_, _, c)) => ArchivedChild::Link(c),
+
+            (_, ArchivedNaiveTree::Empty) | (_, _) => ArchivedChild::End,
         }
     }
 }
 
-impl<T, A> NaiveTree<T, A>
+impl<T, A, S> NaiveTree<T, A, S>
 where
+    S: Store,
     T: Archive + Ord + Clone,
-    T::Archived: Deserialize<T, Infallible>,
-    A: Annotation<Self> + Clone,
-    A::Archived: Deserialize<A, Infallible>,
+    T::Archived: Deserialize<T, S>,
+    A: Annotation<T> + Clone,
+    A::Archived: Deserialize<A, S>,
 {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Default::default()
     }
 
-    fn insert(&mut self, t: T) {
+    pub fn insert(&mut self, t: T) -> Option<T> {
         match std::mem::take(self) {
-            NaiveTree::Empty => *self = NaiveTree::Single(t),
-
-            NaiveTree::Single(a) => {
-                *self = match t.cmp(&a) {
-                    Ordering::Less => NaiveTree::Double(t, a),
-                    Ordering::Equal => NaiveTree::Single(a),
-                    Ordering::Greater => NaiveTree::Double(a, t),
-                }
+            NaiveTree::Empty => {
+                *self = NaiveTree::Single(t);
+                None
             }
-            NaiveTree::Double(a, b) => {
-                *self = match (t.cmp(&a), t.cmp(&b)) {
-                    (Ordering::Equal, _) | (_, Ordering::Equal) => {
-                        NaiveTree::Double(a, b)
-                    }
-                    (Ordering::Greater, Ordering::Greater) => {
-                        NaiveTree::Middle(
-                            Link::new(NaiveTree::Single(a)),
-                            b,
-                            Link::new(NaiveTree::Single(t)),
-                        )
-                    }
-                    (Ordering::Less, Ordering::Less) => NaiveTree::Middle(
+
+            NaiveTree::Single(a) => match t.cmp(&a) {
+                Ordering::Less => {
+                    *self = NaiveTree::Double(t, a);
+                    None
+                }
+                Ordering::Equal => {
+                    *self = NaiveTree::Single(t);
+                    Some(a)
+                }
+                Ordering::Greater => {
+                    *self = NaiveTree::Double(a, t);
+                    None
+                }
+            },
+            NaiveTree::Double(a, b) => match (t.cmp(&a), t.cmp(&b)) {
+                (Ordering::Equal, _) => {
+                    *self = NaiveTree::Double(t, b);
+                    Some(a)
+                }
+                (_, Ordering::Equal) => {
+                    *self = NaiveTree::Double(a, t);
+                    Some(b)
+                }
+                (Ordering::Greater, Ordering::Greater) => {
+                    *self = NaiveTree::Middle(
+                        Link::new(NaiveTree::Single(a)),
+                        b,
+                        Link::new(NaiveTree::Single(t)),
+                    );
+                    None
+                }
+                (Ordering::Less, Ordering::Less) => {
+                    *self = NaiveTree::Middle(
                         Link::new(NaiveTree::Single(t)),
                         a,
                         Link::new(NaiveTree::Single(b)),
-                    ),
-                    (Ordering::Greater, Ordering::Less) => NaiveTree::Middle(
+                    );
+                    None
+                }
+                (Ordering::Greater, Ordering::Less) => {
+                    *self = NaiveTree::Middle(
                         Link::new(NaiveTree::Single(a)),
                         t,
                         Link::new(NaiveTree::Single(b)),
-                    ),
-                    _ => unreachable!(),
+                    );
+                    None
                 }
-            }
-            NaiveTree::Middle(mut left, mid, mut right) => {
-                *self = match t.cmp(&mid) {
-                    Ordering::Less => {
-                        left.inner_mut().insert(t);
-                        NaiveTree::Middle(left, mid, right)
-                    }
-                    Ordering::Equal => NaiveTree::Middle(left, mid, right),
-                    Ordering::Greater => {
-                        right.inner_mut().insert(t);
-                        NaiveTree::Middle(left, mid, right)
-                    }
+                _ => unreachable!(),
+            },
+            NaiveTree::Middle(mut left, mid, mut right) => match t.cmp(&mid) {
+                Ordering::Less => {
+                    let res = left.inner_mut().insert(t);
+                    *self = NaiveTree::Middle(left, mid, right);
+                    res
                 }
-            }
-        }
-    }
-
-    fn member(&self, t: &T) -> bool
-    where
-        T::Archived: PartialEq<T> + PartialOrd<T>,
-    {
-        match self {
-            NaiveTree::Empty => false,
-            NaiveTree::Single(a) => a == t,
-            NaiveTree::Double(a, b) => a == t || b == t,
-            NaiveTree::Middle(left, mid, right) => match t.cmp(&mid) {
-                Ordering::Less => match left.inner() {
-                    AWrap::Memory(left) => left.member(t),
-                    AWrap::Archived(a_left) => a_left.member(t),
-                },
-                Ordering::Equal => true,
-                Ordering::Greater => match right.inner() {
-                    AWrap::Memory(right) => right.member(t),
-                    AWrap::Archived(a_right) => a_right.member(t),
-                },
+                Ordering::Equal => {
+                    *self = NaiveTree::Middle(left, t, right);
+                    Some(mid)
+                }
+                Ordering::Greater => {
+                    let res = right.inner_mut().insert(t);
+                    *self = NaiveTree::Middle(left, mid, right);
+                    res
+                }
             },
         }
     }
 }
 
-impl<T, A> ArchivedNaiveTree<T, A>
+#[derive(Clone, Archive, Serialize, Deserialize)]
+pub struct KvPair<K, V>(K, V);
+
+impl<K, V> PartialEq for KvPair<K, V>
 where
-    T: Archive + Ord + Clone,
-    T::Archived: Deserialize<T, Infallible>,
-    A: Annotation<NaiveTree<T, A>> + Clone,
+    K: PartialEq,
 {
-    fn member(&self, t: &T) -> bool
-    where
-        T::Archived: PartialOrd<T>,
-    {
-        match self {
-            ArchivedNaiveTree::Empty => false,
-            ArchivedNaiveTree::Single(a) => a == t,
-            ArchivedNaiveTree::Double(a, b) => a == t || b == t,
-            ArchivedNaiveTree::Middle(left, mid, right) => {
-                match mid.partial_cmp(t) {
-                    Some(Ordering::Less) => right.inner().member(t),
-                    Some(Ordering::Equal) => true,
-                    Some(Ordering::Greater) => left.inner().member(t),
-                    None => todo!(),
-                }
-            }
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}
+
+impl<K, V> PartialOrd for KvPair<K, V>
+where
+    K: PartialOrd,
+{
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        self.0.partial_cmp(&other.0)
+    }
+}
+
+impl<K, V> Ord for KvPair<K, V>
+where
+    K: Ord,
+{
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.0.cmp(&other.0)
+    }
+}
+
+impl<K, V> Eq for KvPair<K, V> where K: Eq {}
+
+impl<K, V> Keyed<K> for KvPair<K, V> {
+    fn key(&self) -> &K {
+        &self.0
+    }
+}
+
+impl<K, V> Keyed<K> for ArchivedKvPair<K, V>
+where
+    K: Archive<Archived = K>,
+    V: Archive,
+{
+    fn key(&self) -> &K {
+        &self.0
+    }
+}
+
+impl<K, V> KvPair<K, V> {
+    fn into_val(self) -> V {
+        self.1
+    }
+
+    fn value(&self) -> &V {
+        &self.1
+    }
+
+    fn value_mut(&mut self) -> &mut V {
+        &mut self.1
+    }
+}
+
+pub struct NaiveMap<K, V, A, S>(NaiveTree<KvPair<K, V>, A, S>)
+where
+    S: Store;
+
+struct Lookup<'k, K>(&'k K);
+
+impl<'k, C, A, S, K> Walker<C, A, S> for Lookup<'k, K>
+where
+    C: Compound<A, S>,
+    C::Leaf: Keyed<K>,
+    <C::Leaf as Archive>::Archived: Keyed<K>,
+    K: Ord,
+    A: Borrow<MaxKey<K>>,
+{
+    fn walk(&mut self, walk: impl Walkable<C, A, S>) -> Step {
+        for i in 0.. {
+            match walk.probe(i) {
+                Discriminant::Leaf(kv) => match self.0.cmp(kv.key()) {
+                    Ordering::Less => return Step::Abort,
+                    Ordering::Equal => return Step::Found(i),
+                    Ordering::Greater => (),
+                },
+                Discriminant::Annotation(anno) => match (*anno).borrow() {
+                    MaxKey::NegativeInfinity => unreachable!(),
+                    MaxKey::Maximum(key) => match self.0.cmp(key) {
+                        Ordering::Greater => (),
+                        Ordering::Equal | Ordering::Less => {
+                            return Step::Found(i)
+                        }
+                    },
+                },
+                Discriminant::Empty => unreachable!(),
+                Discriminant::End => return Step::Abort,
+            };
         }
+        unreachable!()
+    }
+}
+
+impl<K, V, A, S> NaiveMap<K, V, A, S>
+where
+    S: Store,
+    K: Archive<Archived = K> + Ord + Clone + Deserialize<K, S>,
+    V: Archive + Clone,
+    V::Archived: Deserialize<V, S>,
+    A: Annotation<KvPair<K, V>> + Deserialize<A, S> + Borrow<MaxKey<K>>,
+    KvPair<K, V>: Keyed<K>,
+{
+    pub fn new() -> Self {
+        NaiveMap(NaiveTree::new())
+    }
+
+    pub fn insert(&mut self, k: K, v: V) -> Option<V> {
+        self.0.insert(KvPair(k, v)).map(KvPair::into_val)
+    }
+
+    pub fn get(&self, k: &K) -> Option<impl BranchRef<V>> {
+        if let Some(branch) = self.0.walk(Lookup(k)) {
+            let mapped =
+                branch.map_leaf(|maybe_archived_kv| match maybe_archived_kv {
+                    MaybeArchived::Memory(kv) => {
+                        MaybeArchived::Memory(kv.value())
+                    }
+                    _ => todo!(),
+                });
+            Some(mapped)
+        } else {
+            None
+        }
+    }
+
+    pub fn get_mut(&mut self, k: &K) -> Option<impl BranchRefMut<V>> {
+        self.0
+            .walk_mut(Lookup(k))
+            .map(|branch| branch.map_leaf(|kv| kv.value_mut()))
     }
 }
 
@@ -206,43 +343,68 @@ mod test {
 
     use std::io;
 
+    use microkelvin::{HostStore, Keyed, Member};
     use rand::prelude::SliceRandom;
     use rend::LittleEndian;
 
+    #[derive(
+        Ord, PartialOrd, PartialEq, Eq, Archive, Clone, Deserialize, Serialize,
+    )]
+    struct TestLeaf {
+        key: LittleEndian<u16>,
+    }
+
+    impl Keyed<LittleEndian<u16>> for TestLeaf {
+        fn key(&self) -> &LittleEndian<u16> {
+            &self.key
+        }
+    }
+
+    impl Keyed<LittleEndian<u16>> for ArchivedTestLeaf {
+        fn key(&self) -> &LittleEndian<u16> {
+            &self.key
+        }
+    }
+
+    impl TestLeaf {
+        fn new(key: u16) -> Self {
+            TestLeaf { key: key.into() }
+        }
+    }
+
     #[test]
     fn many_many_many() -> Result<(), io::Error> {
+        let store = HostStore::new();
+
         const N: u16 = 1024;
 
         let mut rng = rand::thread_rng();
         let mut numbers = vec![];
 
         for i in 0..N {
-            let i: LittleEndian<u16> = i.into();
             numbers.push(i);
         }
 
         let ordered = numbers.clone();
         numbers.shuffle(&mut rng);
 
-        let mut tree = NaiveTree::<LittleEndian<u16>, ()>::new();
+        let mut tree = NaiveTree::<_, MaxKey<LittleEndian<u16>>, _>::new();
 
         for n in &numbers {
-            let n: LittleEndian<_> = *n;
-            tree.insert(n);
+            let leaf = TestLeaf::new(*n);
+            tree.insert(leaf);
         }
 
         for n in &numbers {
-            let n: LittleEndian<_> = *n;
-            assert!(tree.member(&n))
+            let n: LittleEndian<_> = n.into();
+            assert!(tree.walk(Member(&n)).is_some());
         }
 
-        let ofs = Portal::put(&tree);
+        let stored = store.put(&tree);
 
-        let archived_tree = Portal::get(ofs);
-
-        for n in &ordered {
-            let n: LittleEndian<_> = *n;
-            assert!(archived_tree.member(&n))
+        for n in ordered {
+            let n: LittleEndian<_> = n.into();
+            assert!(stored.walk(Member(&n)).is_some());
         }
 
         Ok(())

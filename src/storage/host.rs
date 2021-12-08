@@ -296,7 +296,7 @@ impl Storage {
 #[cfg(test)]
 mod test {
     use super::*;
-    use rend::LittleEndian;
+    use rkyv::rend::LittleEndian;
 
     #[test]
     fn many_raw() {

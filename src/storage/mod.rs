@@ -4,85 +4,165 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use core::borrow::{Borrow, BorrowMut};
+use core::hint::unreachable_unchecked;
 use core::marker::PhantomData;
 
-use rkyv::{ser::Serializer, Archive, Fallible, Infallible};
+use rkyv::{ser::Serializer, Archive, Fallible, Serialize};
 
-pub struct Stored<T> {
-    offset: u64,
+#[cfg(feature = "host")]
+mod host_store;
+#[cfg(feature = "host")]
+pub use host_store::HostStore;
+
+use crate::{
+    Annotation, ArchivedCompound, Branch, Compound, MaybeArchived, Walker,
+};
+
+/// Offset based identifier
+#[derive(Debug, Clone, Copy)]
+pub struct Offset(u64);
+
+/// An identifier representing a value stored somewhere else
+pub struct Ident<I, T> {
+    id: I,
     _marker: PhantomData<T>,
 }
 
-// Since `Stored` is just a wrapped u64, it is both sync and safe.
-// the compiler cannot infer this without a T: Send or Sync
-unsafe impl<T> Send for Stored<T> {}
-unsafe impl<T> Sync for Stored<T> {}
-
-impl<T> Clone for Stored<T> {
-    fn clone(&self) -> Self {
-        Stored {
-            offset: self.offset,
-            _marker: PhantomData,
-        }
-    }
-}
-
-impl<T> Copy for Stored<T> {}
-
-impl<T> Stored<T>
+impl<I, T> Clone for Ident<I, T>
 where
-    T: Archive,
+    I: Copy,
 {
-    #[allow(unused)]
-    pub(crate) fn new(offset: u64) -> Self {
-        debug_assert!(offset % core::mem::align_of::<T>() as u64 == 0);
-        Stored {
-            offset,
+    fn clone(&self) -> Self {
+        Self {
+            id: self.id,
+            _marker: PhantomData,
+        }
+    }
+}
+
+impl<I, T> Copy for Ident<I, T> where I: Copy {}
+
+impl<I, T> Ident<I, T> {
+    /// Creates a typed identifier
+    pub(crate) fn new(id: I) -> Self {
+        Ident {
+            id,
             _marker: PhantomData,
         }
     }
 
-    pub fn offset(self) -> u64 {
-        self.offset
+    /// Returns an untyped identifier
+    pub fn erase(self) -> I {
+        self.id
     }
 }
 
-impl<T> core::fmt::Debug for Stored<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_tuple("Offset").field(&self.offset).finish()
+/// Stored is a reference to a value stored, along with the backing store
+#[derive(Clone)]
+pub struct Stored<T, S>
+where
+    S: Store,
+{
+    store: S,
+    ident: Ident<S::Identifier, T>,
+}
+
+unsafe impl<T, S> Send for Stored<T, S> where S: Store + Send {}
+unsafe impl<T, S> Sync for Stored<T, S> where S: Store + Sync {}
+
+impl<T, S> Stored<T, S>
+where
+    S: Store,
+{
+    pub(crate) fn new(store: S, ident: Ident<S::Identifier, T>) -> Self {
+        Stored { store, ident }
+    }
+
+    /// Get a reference to the backing Store
+    pub fn store(&self) -> &S {
+        &self.store
+    }
+
+    /// Get a reference to the Identifier of the stored value
+    pub fn ident(&self) -> &Ident<S::Identifier, T> {
+        &self.ident
+    }
+
+    /// Get a reference to the inner value being stored
+    pub fn inner(&self) -> &T::Archived
+    where
+        T: Archive,
+    {
+        self.store.get_raw(&self.ident)
+    }
+
+    /// Start a branch walk using the stored `T` as the root.  
+    pub fn walk<W, A>(&self, walker: W) -> Option<Branch<T, A, S>>
+    where
+        S: Store,
+        T: Compound<A, S>,
+        T::Archived: ArchivedCompound<T, A, S>,
+        T::Leaf: Archive,
+        A: Annotation<T::Leaf>,
+        W: Walker<T, A, S>,
+    {
+        let inner = self.inner();
+        Branch::walk_with_store(
+            MaybeArchived::Archived(inner),
+            walker,
+            self.store().clone(),
+        )
     }
 }
 
-/// Portal
-///
-/// A hybrid memory/disk storage for an append only sequence of bytes.
-#[derive(Clone, Debug, Default)]
-pub struct Portal;
+/// A type that works as a handle to a `Storage` backend.
+pub trait Store: Clone + Fallible<Error = core::convert::Infallible> {
+    /// The identifier used for refering to stored values
+    type Identifier: Copy;
+    /// The underlying storage
+    type Storage: Storage<Self::Identifier>;
 
-/// Helper trait to constrain serializers used with Storage;
-pub trait StorageSerializer: Serializer + Sized + BorrowMut<Storage> {}
-impl<T> StorageSerializer for T where T: Serializer + Sized + BorrowMut<Storage> {}
+    /// Put a value into storage, and get a representative token back
+    fn put<T>(&self, t: &T) -> Stored<T, Self>
+    where
+        T: Serialize<Self::Storage>;
 
-/// Helper trait to constrain deserializers used with Storage;
-pub trait PortalDeserializer: Fallible + Sized + Borrow<Portal> {}
-impl<T> PortalDeserializer for T where T: Fallible + Sized + Borrow<Portal> {}
-
-/// Error handling
-impl Fallible for Storage {
-    type Error = Infallible;
+    /// Gets a reference to an archived value
+    fn get_raw<'a, T>(
+        &'a self,
+        ident: &Ident<Self::Identifier, T>,
+    ) -> &'a T::Archived
+    where
+        T: Archive;
 }
 
-impl Fallible for &Portal {
-    type Error = Infallible;
+/// The main trait for providing storage backends to use with `microkelvin`
+pub trait Storage<I>:
+    Serializer + Fallible<Error = core::convert::Infallible>
+{
+    /// Write a value into the storage, returns a representation
+    fn put<T>(&mut self, t: &T) -> I
+    where
+        T: Serialize<Self>;
+
+    /// Gets a value from the store
+    fn get<T>(&self, id: &I) -> &T::Archived
+    where
+        T: Archive;
 }
 
-#[cfg(feature = "host")]
-mod host;
-#[cfg(feature = "host")]
-pub use host::*;
+pub trait UnwrapInfallible<T> {
+    fn unwrap_infallible(self) -> T;
+}
 
-#[cfg(not(feature = "host"))]
-mod guest;
-#[cfg(not(feature = "host"))]
-pub use guest::*;
+impl<T> UnwrapInfallible<T> for Result<T, core::convert::Infallible> {
+    fn unwrap_infallible(self) -> T {
+        match self {
+            Ok(t) => t,
+            Err(_) => unsafe {
+                // safe, since the error type cannot be instantiated
+                unreachable_unchecked()
+            },
+        }
+    }
+}

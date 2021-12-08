@@ -12,15 +12,11 @@
 //! `Annotation`, a trait for annotated subtrees used for searching
 //! `Branch` and `BranchMut`, types for representing branches in tree-formed
 //! data as well as methods of search.
-
+#![cfg_attr(not(feature = "host"), no_std)]
 #![deny(missing_docs)]
 
 #[macro_use]
 extern crate alloc;
-
-#[cfg(feature = "host")]
-#[macro_use]
-extern crate lazy_static;
 
 mod annotations;
 mod branch;
@@ -31,17 +27,20 @@ mod walk;
 mod wrappers;
 
 pub use annotations::{
-    ARef, Annotation, Cardinality, Combine, FindMaxKey, Keyed, MaxKey, Nth,
+    ARef, Annotation, Cardinality, Combine, FindMaxKey, Keyed, MaxKey, Member,
+    Nth,
 };
-pub use branch::{Branch, MappedBranch};
-pub use branch_mut::{BranchMut, MappedBranchMut};
+pub use branch::{Branch, BranchRef, MappedBranch};
+pub use branch_mut::{BranchMut, BranchRefMut, MappedBranchMut};
 pub use compound::{
-    AnnoIter, ArchivedChild, ArchivedCompound, Child, ChildMut, Compound,
-    MutableLeaves,
+    ArchivedChild, ArchivedCompound, Child, ChildMut, Compound, MutableLeaves,
 };
-pub use link::Link;
-pub use walk::{First, Slot, Slots, Step, Walker};
-pub use wrappers::{AWrap, Primitive};
+pub use link::{ArchivedLink, Link};
+pub use walk::{All, Discriminant, Step, Walkable, Walker};
+pub use wrappers::{MaybeArchived, MaybeStored, Primitive};
 
 mod storage;
-pub use storage::{Portal, PortalDeserializer, Storage, StorageSerializer};
+pub use storage::{Ident, Offset, Storage, Store, Stored};
+
+#[cfg(feature = "host")]
+pub use storage::HostStore;

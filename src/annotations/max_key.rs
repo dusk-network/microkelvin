@@ -12,10 +12,9 @@ use core::marker::PhantomData;
 use rkyv::{Archive, Deserialize, Serialize};
 
 use crate::annotations::{Annotation, Combine};
-use crate::compound::{AnnoIter, Compound};
-use crate::walk::{Slot, Slots, Step, Walker};
+use crate::walk::{Discriminant, Step, Walkable, Walker};
 use crate::wrappers::Primitive;
-use crate::ArchivedCompound;
+use crate::Compound;
 
 /// The maximum value of a collection
 #[derive(PartialEq, Eq, Clone, Debug, Archive, Serialize, Deserialize)]
@@ -57,6 +56,31 @@ where
     }
 }
 
+impl<K> PartialEq<K> for MaxKey<K>
+where
+    K: PartialEq,
+{
+    fn eq(&self, other: &K) -> bool {
+        match self {
+            MaxKey::NegativeInfinity => false,
+            MaxKey::Maximum(k) => k == other,
+        }
+    }
+}
+
+impl<K> PartialOrd<K> for MaxKey<K>
+where
+    K: PartialEq<K>,
+    K: PartialOrd,
+{
+    fn partial_cmp(&self, other: &K) -> Option<Ordering> {
+        match self {
+            MaxKey::NegativeInfinity => Some(Ordering::Less),
+            MaxKey::Maximum(k) => k.partial_cmp(other),
+        }
+    }
+}
+
 impl<K> Ord for MaxKey<K>
 where
     K: Ord,
@@ -88,22 +112,11 @@ where
     K: Ord + Clone,
     A: Primitive + Borrow<Self>,
 {
-    fn combine<C>(iter: AnnoIter<C, A>) -> Self
-    where
-        C: Archive + Compound<A>,
-        C::Archived: ArchivedCompound<C, A>,
-        C::Leaf: Archive,
-        A: Annotation<C::Leaf>,
-    {
-        iter.fold(MaxKey::NegativeInfinity, |max, ann| {
-            let m = (*ann).borrow();
-            // We only clone if neccesary
-            if *m > max {
-                m.clone()
-            } else {
-                max
-            }
-        })
+    fn combine(&mut self, other: &A) {
+        let b = other.borrow();
+        if b > self {
+            *self = b.clone()
+        }
     }
 }
 
@@ -116,22 +129,21 @@ impl<K> Default for FindMaxKey<K> {
     }
 }
 
-impl<C, A, K> Walker<C, A> for FindMaxKey<K>
+impl<C, A, S, K> Walker<C, A, S> for FindMaxKey<K>
 where
-    C: Archive + Compound<A>,
-    C::Archived: ArchivedCompound<C, A>,
+    C: Compound<A, S>,
     C::Leaf: Archive + Keyed<K>,
     <C::Leaf as Archive>::Archived: Keyed<K>,
-    A: Annotation<C::Leaf> + Borrow<MaxKey<K>>,
+    A: Borrow<MaxKey<K>>,
     K: Ord + Clone,
 {
-    fn walk(&mut self, walk: impl Slots<C, A>) -> Step {
+    fn walk(&mut self, walk: impl Walkable<C, A, S>) -> Step {
         let mut current_max: MaxKey<K> = MaxKey::NegativeInfinity;
         let mut current_step = Step::Abort;
 
         for i in 0.. {
-            match walk.slot(i) {
-                Slot::Leaf(l) => {
+            match walk.probe(i) {
+                Discriminant::Leaf(l) => {
                     let leaf_max: MaxKey<K> = MaxKey::Maximum(l.key().clone());
 
                     if leaf_max > current_max {
@@ -139,23 +151,51 @@ where
                         current_step = Step::Found(i);
                     }
                 }
-                Slot::ArchivedLeaf(l) => {
-                    let leaf_max: MaxKey<K> = MaxKey::Maximum(l.key().clone());
-
-                    if leaf_max > current_max {
-                        current_max = leaf_max;
-                        current_step = Step::Found(i);
-                    }
-                }
-                Slot::Annotation(ann) => {
+                Discriminant::Annotation(ann) => {
                     let node_max: &MaxKey<K> = (*ann).borrow();
                     if node_max > &current_max {
                         current_max = node_max.clone();
                         current_step = Step::Found(i);
                     }
                 }
-                Slot::Empty => (),
-                Slot::End => return current_step,
+                Discriminant::Empty => (),
+                Discriminant::End => return current_step,
+            }
+        }
+        unreachable!()
+    }
+}
+
+/// Find a specific value in a sorted tree
+pub struct Member<'a, K>(pub &'a K);
+
+impl<'a, C, A, S, K> Walker<C, A, S> for Member<'a, K>
+where
+    C: Compound<A, S>,
+    C::Leaf: Clone + Archive + Ord + Keyed<K>,
+    <C::Leaf as Archive>::Archived: Keyed<K>,
+    K: PartialEq + PartialOrd,
+    A: Borrow<MaxKey<K>>,
+{
+    fn walk(&mut self, walk: impl Walkable<C, A, S>) -> Step {
+        for i in 0.. {
+            match walk.probe(i) {
+                Discriminant::Empty => (),
+                Discriminant::Leaf(leaf) => {
+                    let key = leaf.key();
+                    if key == self.0 {
+                        return Step::Found(i);
+                    }
+                }
+                Discriminant::Annotation(a) => {
+                    let max: &MaxKey<K> = (*a).borrow();
+                    if max >= self.0 {
+                        return Step::Found(i);
+                    }
+                }
+                Discriminant::End => {
+                    return Step::Abort;
+                }
             }
         }
         unreachable!()
