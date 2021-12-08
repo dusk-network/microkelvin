@@ -426,3 +426,24 @@ where
         }
     }
 }
+
+/// A trait for refering to a branch based solely on its leaf type
+pub trait BranchRefMut<'a, T>
+where
+    T: Archive,
+{
+    /// Provides a reference to the leaf of the branch
+    fn leaf_mut(&mut self) -> &mut T;
+}
+
+impl<'a, C, A, S, T> BranchRefMut<'a, T> for MappedBranchMut<'a, C, A, S, T>
+where
+    S: Store,
+    C: Compound<A, S> + Clone,
+    C::Archived: ArchivedCompound<C, A, S>,
+    T: Archive,
+{
+    fn leaf_mut(&mut self) -> &mut T {
+        MappedBranchMut::leaf_mut(self)
+    }
+}

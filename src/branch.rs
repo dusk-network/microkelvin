@@ -4,7 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use std::marker::PhantomData;
+use core::marker::PhantomData;
 
 use alloc::vec::Vec;
 use rkyv::Archive;

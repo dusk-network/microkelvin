@@ -13,7 +13,7 @@ use std::sync::Arc;
 
 use crate::Store;
 
-use super::{Ident, Storage, Stored, UnwrapInfallible};
+use super::{Ident, Offset, Storage, Stored, UnwrapInfallible};
 
 const PAGE_SIZE: usize = 1024 * 64;
 
@@ -65,9 +65,6 @@ impl PageStorage {
         PageStorage { pages: vec![] }
     }
 }
-
-#[derive(Debug, Clone, Copy)]
-pub struct Offset(u64);
 
 impl Serializer for PageStorage {
     fn pos(&self) -> usize {

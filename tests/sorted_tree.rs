@@ -5,13 +5,14 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use core::borrow::Borrow;
+use core::cmp::Ordering;
+
 use rkyv::{Archive, Deserialize, Serialize};
-use std::cmp::Ordering;
 
 use microkelvin::{
-    Annotation, ArchivedChild, ArchivedCompound, BranchRef, Child, ChildMut,
-    Compound, Discriminant, Keyed, Link, MaxKey, MaybeArchived, Step, Store,
-    Walkable, Walker,
+    Annotation, ArchivedChild, ArchivedCompound, BranchRef, BranchRefMut,
+    Child, ChildMut, Compound, Discriminant, Keyed, Link, MaxKey,
+    MaybeArchived, Step, Store, Walkable, Walker,
 };
 
 #[derive(Clone, Archive, Serialize, Deserialize)]
@@ -252,6 +253,10 @@ impl<K, V> KvPair<K, V> {
     fn value(&self) -> &V {
         &self.1
     }
+
+    fn value_mut(&mut self) -> &mut V {
+        &mut self.1
+    }
 }
 
 pub struct NaiveMap<K, V, A, S>(NaiveTree<KvPair<K, V>, A, S>)
@@ -310,7 +315,7 @@ where
         self.0.insert(KvPair(k, v)).map(KvPair::into_val)
     }
 
-    pub fn get(&mut self, k: &K) -> Option<impl BranchRef<V>> {
+    pub fn get(&self, k: &K) -> Option<impl BranchRef<V>> {
         if let Some(branch) = self.0.walk(Lookup(k)) {
             let mapped =
                 branch.map_leaf(|maybe_archived_kv| match maybe_archived_kv {
@@ -323,6 +328,12 @@ where
         } else {
             None
         }
+    }
+
+    pub fn get_mut(&mut self, k: &K) -> Option<impl BranchRefMut<V>> {
+        self.0
+            .walk_mut(Lookup(k))
+            .map(|branch| branch.map_leaf(|kv| kv.value_mut()))
     }
 }
 

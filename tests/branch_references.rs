@@ -7,9 +7,8 @@
 mod sorted_tree;
 use sorted_tree::NaiveMap;
 
-use microkelvin::{BranchRef, HostStore, MaxKey};
+use microkelvin::{BranchRef, BranchRefMut, HostStore, MaxKey};
 use rkyv::rend::LittleEndian;
-use rkyv::Archive;
 
 #[test]
 fn branch_ref() {
@@ -26,5 +25,16 @@ fn branch_ref() {
         let key: LittleEndian<u64> = i.into();
         let branch = map.get(&key).unwrap();
         assert_eq!(branch.leaf(), i + 1);
+    }
+
+    for i in 0..n {
+        let key: LittleEndian<u64> = i.into();
+        *map.get_mut(&key).unwrap().leaf_mut() += 1;
+    }
+
+    for i in 0..n {
+        let key: LittleEndian<u64> = i.into();
+        let branch = map.get(&key).unwrap();
+        assert_eq!(branch.leaf(), i + 2);
     }
 }

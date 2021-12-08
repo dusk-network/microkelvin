@@ -12,7 +12,7 @@
 //! `Annotation`, a trait for annotated subtrees used for searching
 //! `Branch` and `BranchMut`, types for representing branches in tree-formed
 //! data as well as methods of search.
-
+#![cfg_attr(not(feature = "host"), no_std)]
 #![deny(missing_docs)]
 
 #[macro_use]
@@ -31,7 +31,7 @@ pub use annotations::{
     Nth,
 };
 pub use branch::{Branch, BranchRef, MappedBranch};
-pub use branch_mut::{BranchMut, MappedBranchMut};
+pub use branch_mut::{BranchMut, BranchRefMut, MappedBranchMut};
 pub use compound::{
     ArchivedChild, ArchivedCompound, Child, ChildMut, Compound, MutableLeaves,
 };
@@ -40,7 +40,7 @@ pub use walk::{All, Discriminant, Step, Walkable, Walker};
 pub use wrappers::{MaybeArchived, MaybeStored, Primitive};
 
 mod storage;
-pub use storage::{Storage, Store};
+pub use storage::{Ident, Offset, Storage, Store, Stored};
 
 #[cfg(feature = "host")]
 pub use storage::HostStore;

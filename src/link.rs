@@ -4,8 +4,8 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use core::borrow::Borrow;
 use core::cell::RefCell;
-use std::borrow::Borrow;
 
 use alloc::rc::Rc;
 
