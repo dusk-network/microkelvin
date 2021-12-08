@@ -33,8 +33,8 @@ where
         /// an optional annotation
         annotation: RefCell<Option<A>>,
     },
-    /// A Link to an archived node
-    Archived {
+    /// A Link to a stored node
+    Stored {
         /// archived at offset
         stored: Stored<C, S>,
         /// the final annotation
@@ -91,7 +91,7 @@ where
         store: &mut S2,
     ) -> Result<Link<C, A, S>, <S as Fallible>::Error> {
         let local_store: &S = store.borrow();
-        Ok(Link::Archived {
+        Ok(Link::Stored {
             stored: Stored::new(local_store.clone(), self.0),
             a: self.1.clone(),
         })
@@ -123,9 +123,7 @@ where
                 let ident = Ident::new(ser.put(to_insert));
                 Ok((ident, a))
             }
-            Link::Archived { .. } => {
-                unreachable!("FIXME motivate why this does not happen")
-            }
+            Link::Stored { stored, a } => Ok((*stored.ident(), a.clone())),
         }
     }
 }
@@ -179,7 +177,7 @@ where
                     self.annotation()
                 }
             }
-            Link::Archived { a, .. } => ARef::Borrowed(a),
+            Link::Stored { a, .. } => ARef::Borrowed(a),
         }
     }
 
@@ -194,7 +192,7 @@ where
                 Ok(c) => c,
                 Err(rc) => (&*rc).clone(),
             },
-            Link::Archived { stored, .. } => {
+            Link::Stored { stored, .. } => {
                 let inner: &C::Archived = stored.inner();
                 let de: C = inner
                     .deserialize(&mut stored.store().clone())
@@ -211,7 +209,7 @@ where
     {
         match self {
             Link::Memory { rc, .. } => MaybeStored::Memory(&(*rc)),
-            Link::Archived { stored, .. } => MaybeStored::Stored(stored),
+            Link::Stored { stored, .. } => MaybeStored::Stored(stored),
         }
     }
 
@@ -229,7 +227,7 @@ where
                 annotation.borrow_mut().take();
                 return Rc::make_mut(rc);
             }
-            Link::Archived { stored, .. } => {
+            Link::Stored { stored, .. } => {
                 let mut store = stored.store().clone();
                 let inner = stored.inner();
                 let c: C = inner.deserialize(&mut store).unwrap_infallible();
