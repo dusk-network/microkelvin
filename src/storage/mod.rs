@@ -20,7 +20,7 @@ use crate::{
 
 /// Offset based identifier
 #[derive(Debug, Clone, Copy)]
-pub struct Offset(u64);
+pub struct Offset(pub u64);
 
 impl Offset {
     /// Creates an offset with a given value
@@ -81,7 +81,8 @@ impl<T, S> Stored<T, S>
 where
     S: Store,
 {
-    pub(crate) fn new(store: S, ident: Ident<S::Identifier, T>) -> Self {
+    /// Create a new `Stored` wrapper from an identifier and a store
+    pub fn new(store: S, ident: Ident<S::Identifier, T>) -> Self {
         Stored { store, ident }
     }
 
