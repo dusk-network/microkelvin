@@ -9,7 +9,6 @@ use core::cell::RefCell;
 
 use alloc::rc::Rc;
 
-use owning_ref::OwningRef;
 use rkyv::Fallible;
 use rkyv::{Archive, Deserialize, Serialize};
 
@@ -164,13 +163,7 @@ where
             Link::Memory { rc, annotation, .. } => {
                 let borrow = annotation.borrow();
                 if let Some(_) = *borrow {
-                    ARef::Referenced(OwningRef::new(borrow).map(|brw| {
-                        if let Some(a) = &*brw {
-                            a
-                        } else {
-                            unreachable!()
-                        }
-                    }))
+                    ARef::Referenced(borrow)
                 } else {
                     drop(borrow);
                     *annotation.borrow_mut() = Some(A::from_node(&**rc));
