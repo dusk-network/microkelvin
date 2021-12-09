@@ -20,7 +20,7 @@ use crate::{
 
 /// Offset based identifier
 #[derive(Debug, Clone, Copy)]
-pub struct Offset(u64);
+pub struct Offset(pub u64);
 
 /// An identifier representing a value stored somewhere else
 pub struct Ident<I, T> {
@@ -44,7 +44,7 @@ impl<I, T> Copy for Ident<I, T> where I: Copy {}
 
 impl<I, T> Ident<I, T> {
     /// Creates a typed identifier
-    pub(crate) fn new(id: I) -> Self {
+    pub fn new(id: I) -> Self {
         Ident {
             id,
             _marker: PhantomData,
@@ -74,7 +74,8 @@ impl<T, S> Stored<T, S>
 where
     S: Store,
 {
-    pub(crate) fn new(store: S, ident: Ident<S::Identifier, T>) -> Self {
+    /// Create a new `Stored` wrapper from an identifier and a store
+    pub fn new(store: S, ident: Ident<S::Identifier, T>) -> Self {
         Stored { store, ident }
     }
 
