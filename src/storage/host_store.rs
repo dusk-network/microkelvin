@@ -7,8 +7,12 @@
 use core::convert::Infallible;
 use rkyv::{ser::Serializer, Archive, Fallible, Serialize};
 
+use memmap::Mmap;
 use parking_lot::RwLock;
 
+use std::fs::{File, OpenOptions};
+use std::io::{self, Write};
+use std::path::Path;
 use std::sync::Arc;
 
 use crate::Store;
@@ -23,9 +27,16 @@ struct Page {
     written: usize,
 }
 
+#[derive(Debug)]
+struct MmapStorage {
+    mmap: Mmap,
+    file: File,
+}
+
 /// Storage that uses a FrozenVec of Pages to store data
 #[derive(Debug)]
 pub struct PageStorage {
+    mmap: Option<MmapStorage>,
     pages: Vec<Page>,
 }
 
@@ -60,21 +71,86 @@ impl Page {
 }
 
 impl PageStorage {
+    const STORAGE_FILENAME: &'static str = "STORAGE";
+
     /// Creates a new empty `PageStorage`
     pub fn new() -> PageStorage {
-        PageStorage { pages: vec![] }
+        PageStorage {
+            mmap: None,
+            pages: vec![],
+        }
+    }
+
+    /// Persists page storage to disk
+    #[allow(dead_code)]
+    fn persist<P: AsRef<Path>>(&mut self, path: P) -> io::Result<()> {
+        #[allow(unused_must_use)]
+        fn write_pages(pages: &Vec<Page>, file: &mut File) -> io::Result<()> {
+            for page in pages {
+                file.write(&page.bytes[..page.written])?;
+            }
+            file.flush()
+        }
+        match &mut self.mmap {
+            Some(mmap) => {
+                write_pages(&self.pages, &mut mmap.file)?;
+                self.pages.clear();
+            }
+            None => {
+                let path = path.as_ref().join(Self::STORAGE_FILENAME);
+                let mut file = OpenOptions::new()
+                    .append(true)
+                    .read(true)
+                    .create(true)
+                    .open(&path)?;
+                write_pages(&self.pages, &mut file)?;
+                let mmap = unsafe { Mmap::map(&file)? };
+                self.mmap = Some(MmapStorage { mmap, file });
+                self.pages.clear();
+            }
+        }
+        Ok(())
+    }
+
+    /// Restore page storage from disk
+    #[allow(dead_code)]
+    fn restore<P: AsRef<Path>>(path: P) -> io::Result<Self> {
+        let path = path.as_ref().join(Self::STORAGE_FILENAME);
+        if path.exists() {
+            let file = OpenOptions::new()
+                .append(true)
+                .read(true)
+                .create(false)
+                .open(&path)?;
+
+            let mmap = unsafe { Mmap::map(&file)? };
+            Ok(Self {
+                mmap: Some(MmapStorage { mmap, file }),
+                pages: Vec::<Page>::new(),
+            })
+        } else {
+            Ok(Self::new())
+        }
+    }
+
+    fn mmap_len(&self) -> usize {
+        match &self.mmap {
+            Some(mmap_storage) => mmap_storage.mmap.len(),
+            None => 0,
+        }
     }
 }
 
 impl Serializer for PageStorage {
     fn pos(&self) -> usize {
-        match self.pages.last() {
+        let pages_pos = match self.pages.last() {
             None => 0,
             Some(page) => {
                 let full_pages = self.pages.len() - 1;
                 full_pages * PAGE_SIZE + page.written
             }
-        }
+        };
+        pages_pos + self.mmap_len()
     }
 
     fn write(&mut self, bytes: &[u8]) -> Result<(), Self::Error> {
@@ -106,22 +182,35 @@ impl Storage<Offset> for PageStorage {
 
     fn get<T: Archive>(&self, ofs: &Offset) -> &T::Archived {
         let Offset(ofs) = *ofs;
-
-        let page_nr = ofs as usize / PAGE_SIZE;
-        let ofs = ofs as usize % PAGE_SIZE;
-
-        let page = &self.pages[page_nr];
+        if ofs == 0 {
+            panic!("zero offset at page storage get");
+        }
 
         let size = core::mem::size_of::<T::Archived>();
-        let start = ofs as usize - size;
-        let slice = &page.slice()[start..][..size];
-
+        let slice = match &self.mmap {
+            Some(mmap_storage) if ofs <= mmap_storage.mmap.len() as u64 => {
+                let start_pos = ofs as usize - size;
+                &mmap_storage.mmap[start_pos..][..size]
+            }
+            _ => {
+                let pages_ofs = ofs as usize - self.mmap_len();
+                let cur_page_ofs = pages_ofs % PAGE_SIZE;
+                let cur_page = pages_ofs as usize / PAGE_SIZE;
+                let (page_nr, start_pos) = if cur_page_ofs == 0 {
+                    (cur_page - 1, PAGE_SIZE - size)
+                } else {
+                    (cur_page, cur_page_ofs as usize - size)
+                };
+                &self.pages[page_nr].slice()[start_pos..][..size]
+            }
+        };
         unsafe { rkyv::archived_root::<T>(slice) }
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use crate::storage::{HostStore, Store};
     use rkyv::rend::LittleEndian;
 
@@ -153,6 +242,98 @@ mod tests {
             assert_eq!(*got, comp)
         }
     }
+
+    #[test]
+    fn many_raw_persist_and_restore() -> io::Result<()> {
+        const N: usize = 1024 * 64;
+
+        let mut references = vec![];
+
+        let mut page_storage = PageStorage::new();
+
+        for i in 0..N {
+            let le: LittleEndian<u32> = (i as u32).into();
+
+            references.push(page_storage.put(&le));
+        }
+
+        let le: LittleEndian<u32> = (0 as u32).into();
+
+        assert_eq!(page_storage.get::<u32>(&references[0]), &le);
+
+        let le: LittleEndian<u32> = (65534 as u32).into();
+
+        assert_eq!(page_storage.get::<u32>(&references[65534]), &le);
+
+        let le: LittleEndian<u32> = (65535 as u32).into();
+
+        assert_eq!(page_storage.get::<u32>(&references[65535]), &le);
+
+        for i in 0..N {
+            let le: LittleEndian<u32> = (i as u32).into();
+
+            assert_eq!(page_storage.get::<u32>(&references[i]), &le);
+        }
+
+        use tempfile::tempdir;
+
+        let dir = tempdir()?;
+
+        assert!(page_storage.pages.len() > 0);
+        page_storage.persist(dir.path())?;
+        assert_eq!(page_storage.pages.len(), 0);
+
+        for i in 0..N {
+            let le: LittleEndian<u32> = (i as u32).into();
+
+            assert_eq!(page_storage.get::<u32>(&references[i]), &le);
+        }
+
+        // now write some more!
+
+        for i in N..N * 2 {
+            let le: LittleEndian<u32> = (i as u32).into();
+
+            references.push(page_storage.put(&le));
+        }
+        assert!(page_storage.pages.len() > 0);
+
+        // and read all back
+
+        for i in 0..N * 2 {
+            let le: LittleEndian<u32> = (i as u32).into();
+
+            assert_eq!(page_storage.get::<u32>(&references[i]), &le);
+        }
+
+        // read all back again
+
+        for i in 0..N * 2 {
+            let le: LittleEndian<u32> = (i as u32).into();
+
+            assert_eq!(page_storage.get::<u32>(&references[i]), &le);
+        }
+
+        // persist again and restore
+
+        //let dir = tempdir()?; // todo it should work when persistence file is
+        // changed, currently it does not
+
+        assert!(page_storage.pages.len() > 0);
+        page_storage.persist(dir.path())?;
+        assert_eq!(page_storage.pages.len(), 0);
+
+        let page_storage_restored = PageStorage::restore(dir.path())?;
+        assert_eq!(page_storage_restored.pages.len(), 0);
+
+        for i in 0..N * 2 {
+            let le: LittleEndian<u32> = (i as u32).into();
+
+            assert_eq!(page_storage_restored.get::<u32>(&references[i]), &le);
+        }
+
+        Ok(())
+    }
 }
 
 /// Store that utilises a reference-counted PageStorage
@@ -175,8 +356,8 @@ impl Fallible for HostStore {
 }
 
 impl Store for HostStore {
-    type Storage = PageStorage;
     type Identifier = Offset;
+    type Storage = PageStorage;
 
     fn put<T>(&self, t: &T) -> Stored<T, Self>
     where
