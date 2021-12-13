@@ -128,14 +128,12 @@ impl Storage<Offset> for PageStorage {
 
     fn get<T: Archive>(&self, ofs: &Offset) -> &T::Archived {
         let Offset(ofs) = *ofs;
-        if ofs == 0 {
-            panic!("zero offset at page storage get");
-        }
-
         let size = core::mem::size_of::<T::Archived>();
         let slice = match &self.mmap {
             Some(mmap) if ofs <= mmap.len() as u64 => {
-                let start_pos = ofs as usize - size;
+                let start_pos = (ofs as usize)
+                    .checked_sub(size)
+                    .expect("Offset larger than size");
                 &mmap[start_pos..][..size]
             }
             _ => {
@@ -164,9 +162,9 @@ impl Storage<Offset> for PageStorage {
             .create(!path_exists)
             .open(&path)?;
         if path_exists {
-            self.mmap =
-                Some(unsafe { Mmap::map(&file)? })
+            self.mmap = Some(unsafe { Mmap::map(&file)? })
         } else {
+            self.mmap = None;
             self.persist()?
         }
         self.file = Some(file);
@@ -232,6 +230,18 @@ mod tests {
     }
 
     #[test]
+    #[should_panic]
+    fn get_raw_with_offset_zero() {
+        let host_store = HostStore::new();
+
+        let le: LittleEndian<u32> = (0 as u32).into();
+
+        host_store.put(&le);
+
+        host_store.get_raw::<LittleEndian<u32>>(&Ident::new(Offset(0)));
+    }
+
+    #[test]
     fn many_raw_persist_and_restore() -> io::Result<()> {
         const N: usize = 1024 * 64;
 
@@ -290,6 +300,8 @@ mod tests {
             );
         }
 
+        host_store.persist()?;
+
         // now write some more!
 
         for i in N..N * 2 {
@@ -324,14 +336,14 @@ mod tests {
 
         host_store.persist()?;
 
-        let mut page_storage_restored = HostStore::new();
-        page_storage_restored.attach(dir.path())?;
+        let mut host_store_restored = HostStore::new();
+        host_store_restored.attach(dir.path())?;
 
         for i in 0..N * 2 {
             let le: LittleEndian<u32> = (i as u32).into();
 
             assert_eq!(
-                page_storage_restored
+                host_store_restored
                     .get_raw::<LittleEndian<u32>>(&references[i]),
                 &le
             );

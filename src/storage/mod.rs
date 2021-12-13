@@ -130,10 +130,7 @@ pub trait Store: Clone + Fallible<Error = core::convert::Infallible> {
         T: Serialize<Self::Storage>;
 
     /// Gets a reference to an archived value
-    fn get_raw<T>(
-        &self,
-        ident: &Ident<Self::Identifier, T>,
-    ) -> &T::Archived
+    fn get_raw<T>(&self, ident: &Ident<Self::Identifier, T>) -> &T::Archived
     where
         T: Archive;
 
@@ -150,13 +147,13 @@ pub trait Storage<I>:
 {
     /// Write a value into the storage, returns a representation
     fn put<T>(&mut self, t: &T) -> I
-        where
-            T: Serialize<Self>;
+    where
+        T: Serialize<Self>;
 
     /// Gets a value from the store
     fn get<T>(&self, id: &I) -> &T::Archived
-        where
-            T: Archive;
+    where
+        T: Archive;
 
     /// Creates storage attached to file at a given path
     fn attach<P: AsRef<Path>>(&mut self, path: P) -> io::Result<()>;
