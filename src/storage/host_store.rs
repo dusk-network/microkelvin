@@ -91,7 +91,11 @@ impl PageStorage {
         } else {
             None
         };
-        Ok(Self {mmap, file: Some(file), pages: Vec::new()})
+        Ok(Self {
+            mmap,
+            file: Some(file),
+            pages: Vec::new(),
+        })
     }
 
     fn mmap_len(&self) -> usize {
