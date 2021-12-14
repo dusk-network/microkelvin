@@ -102,9 +102,14 @@ impl PageStorage {
         self.mmap.as_ref().map(|m| m.len()).unwrap_or(0)
     }
 
-    fn pages_len(&self) -> usize {
-        self.pages.len() * PAGE_SIZE
-            + self.pages.last().map(|p| p.slice().len()).unwrap_or(0)
+    fn pages_data_len(&self) -> usize {
+        match self.pages.len() {
+            0 => 0,
+            n => {
+                (n - 1) * PAGE_SIZE
+                    + self.pages.last().map(|p| p.slice().len()).unwrap_or(0)
+            }
+        }
     }
 }
 
@@ -180,7 +185,7 @@ impl Storage<Offset> for PageStorage {
             }
             file.flush()
         }
-        if self.pages_len() > 0 {
+        if self.pages_data_len() > 0 {
             if let Some(file) = &mut self.file {
                 write_pages(&self.pages, file)?;
                 self.pages.clear();
