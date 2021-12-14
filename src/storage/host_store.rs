@@ -27,7 +27,7 @@ struct Page {
     written: usize,
 }
 
-/// Storage that uses a FrozenVec of Pages to store data
+/// Storage that uses a Vec of Pages to store data
 #[derive(Debug)]
 pub struct PageStorage {
     mmap: Option<Mmap>,
