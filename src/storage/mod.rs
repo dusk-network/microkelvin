@@ -139,9 +139,6 @@ pub trait Store: Clone + Fallible<Error = core::convert::Infallible> {
     fn get_raw<T>(&self, ident: &Ident<Self::Identifier, T>) -> &T::Archived
     where
         T: Archive;
-
-    /// Persists storage to disk
-    fn persist(&mut self) -> io::Result<()>;
 }
 
 /// The main trait for providing storage backends to use with `microkelvin`

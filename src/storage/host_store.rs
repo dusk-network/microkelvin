@@ -217,6 +217,11 @@ impl HostStore {
             inner: Arc::new(RwLock::new(PageStorage::with_file(&path)?)),
         })
     }
+
+    /// Persists storage
+    pub fn persist(&mut self) -> io::Result<()> {
+        self.inner.write().persist()
+    }
 }
 
 impl Fallible for HostStore {
@@ -246,10 +251,5 @@ impl Store for HostStore {
         let extended: &'a T::Archived =
             unsafe { core::mem::transmute(reference) };
         extended
-    }
-
-    /// Persists storage
-    fn persist(&mut self) -> io::Result<()> {
-        self.inner.write().persist()
     }
 }
