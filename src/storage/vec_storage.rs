@@ -60,9 +60,6 @@ impl PageStorage {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-pub struct Offset(u64);
-
 impl Serializer for PageStorage {
     fn pos(&self) -> usize {
         match self.pages.last() {
