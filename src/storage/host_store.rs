@@ -111,6 +111,26 @@ impl PageStorage {
             }
         }
     }
+
+    /// Persists storage to disk
+    fn persist(&mut self) -> io::Result<()> {
+        fn write_pages(pages: &Vec<Page>, file: &mut File) -> io::Result<()> {
+            for page in pages {
+                file.write(&page.bytes[..page.written])?;
+            }
+            file.flush()
+        }
+        if self.pages_data_len() > 0 {
+            if let Some(file) = &mut self.file {
+                write_pages(&self.pages, file)?;
+                self.pages.clear();
+                if self.mmap.is_none() {
+                    self.mmap = Some(unsafe { Mmap::map(&file)? })
+                }
+            }
+        }
+        Ok(())
+    }
 }
 
 impl Serializer for PageStorage {
@@ -175,26 +195,6 @@ impl Storage<Offset> for PageStorage {
             }
         };
         unsafe { rkyv::archived_root::<T>(slice) }
-    }
-
-    /// Persists storage to disk
-    fn persist(&mut self) -> io::Result<()> {
-        fn write_pages(pages: &Vec<Page>, file: &mut File) -> io::Result<()> {
-            for page in pages {
-                file.write(&page.bytes[..page.written])?;
-            }
-            file.flush()
-        }
-        if self.pages_data_len() > 0 {
-            if let Some(file) = &mut self.file {
-                write_pages(&self.pages, file)?;
-                self.pages.clear();
-                if self.mmap.is_none() {
-                    self.mmap = Some(unsafe { Mmap::map(&file)? })
-                }
-            }
-        }
-        Ok(())
     }
 }
 

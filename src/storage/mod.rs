@@ -6,7 +6,6 @@
 
 use core::hint::unreachable_unchecked;
 use core::marker::PhantomData;
-use std::io;
 
 use rkyv::{ser::Serializer, Archive, Fallible, Serialize};
 
@@ -154,9 +153,6 @@ pub trait Storage<I>:
     fn get<T>(&self, id: &I) -> &T::Archived
     where
         T: Archive;
-
-    /// Persists storage to disk
-    fn persist(&mut self) -> io::Result<()>;
 }
 
 pub trait UnwrapInfallible<T> {
