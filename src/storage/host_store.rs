@@ -77,6 +77,23 @@ impl PageStorage {
         }
     }
 
+    /// Attaches storage to a file at a given path
+    fn with_file<P: AsRef<Path>>(path: P) -> io::Result<Self> {
+        let path = path.as_ref().join(Self::STORAGE_FILENAME);
+        let path_exists = path.exists();
+        let file = OpenOptions::new()
+            .append(true)
+            .read(true)
+            .create(!path_exists)
+            .open(&path)?;
+        let mmap = if path_exists {
+            Some(unsafe { Mmap::map(&file)? })
+        } else {
+            None
+        };
+        Ok(Self {mmap, file: Some(file), pages: Vec::new()})
+    }
+
     fn mmap_len(&self) -> usize {
         self.mmap.as_ref().map(|m| m.len()).unwrap_or(0)
     }
@@ -151,30 +168,8 @@ impl Storage<Offset> for PageStorage {
         unsafe { rkyv::archived_root::<T>(slice) }
     }
 
-    /// Attaches storage to a file at a given path
-    #[allow(dead_code)]
-    fn attach<P: AsRef<Path>>(&mut self, path: P) -> io::Result<()> {
-        let path = path.as_ref().join(Self::STORAGE_FILENAME);
-        let path_exists = path.exists();
-        let file = OpenOptions::new()
-            .append(true)
-            .read(true)
-            .create(!path_exists)
-            .open(&path)?;
-        if path_exists {
-            self.mmap = Some(unsafe { Mmap::map(&file)? })
-        } else {
-            self.mmap = None;
-            self.persist()?
-        }
-        self.file = Some(file);
-        Ok(())
-    }
-
     /// Persists storage to disk
-    #[allow(dead_code)]
     fn persist(&mut self) -> io::Result<()> {
-        #[allow(unused_must_use)]
         fn write_pages(pages: &Vec<Page>, file: &mut File) -> io::Result<()> {
             for page in pages {
                 file.write(&page.bytes[..page.written])?;
@@ -247,7 +242,11 @@ mod tests {
 
         let mut references = vec![];
 
-        let mut host_store = HostStore::new();
+        use tempfile::tempdir;
+
+        let dir = tempdir()?;
+
+        let mut host_store = HostStore::with_file(dir.path())?;
 
         for i in 0..N {
             let le: LittleEndian<u32> = (i as u32).into();
@@ -284,12 +283,6 @@ mod tests {
                 &le
             );
         }
-
-        use tempfile::tempdir;
-
-        let dir = tempdir()?;
-
-        host_store.attach(dir.path())?;
 
         for i in 0..N {
             let le: LittleEndian<u32> = (i as u32).into();
@@ -336,8 +329,7 @@ mod tests {
 
         host_store.persist()?;
 
-        let mut host_store_restored = HostStore::new();
-        host_store_restored.attach(dir.path())?;
+        let host_store_restored = HostStore::with_file(dir.path())?;
 
         for i in 0..N * 2 {
             let le: LittleEndian<u32> = (i as u32).into();
@@ -360,11 +352,17 @@ pub struct HostStore {
 }
 
 impl HostStore {
-    /// Creates a new LocalStore
+    /// Creates a new HostStore
     pub fn new() -> Self {
         HostStore {
             inner: Arc::new(RwLock::new(PageStorage::new())),
         }
+    }
+    /// Creates a new HostStore backed by a file
+    pub fn with_file<P: AsRef<Path>>(path: P) -> io::Result<Self> {
+        Ok(HostStore {
+            inner: Arc::new(RwLock::new(PageStorage::with_file(&path)?)),
+        })
     }
 }
 
@@ -395,11 +393,6 @@ impl Store for HostStore {
         let extended: &'a T::Archived =
             unsafe { core::mem::transmute(reference) };
         extended
-    }
-
-    /// Creates storage attached to file at a given path
-    fn attach<P: AsRef<Path>>(&mut self, path: P) -> io::Result<()> {
-        self.inner.write().attach(path)
     }
 
     /// Persists storage
