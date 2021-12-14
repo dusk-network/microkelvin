@@ -22,6 +22,13 @@ use crate::{
 #[derive(Debug, Clone, Copy)]
 pub struct Offset(u64);
 
+impl Offset {
+    /// Creates an offset with a given value
+    pub fn new(offset: u64) -> Offset {
+        Offset(offset)
+    }
+}
+
 /// An identifier representing a value stored somewhere else
 pub struct Ident<I, T> {
     id: I,
@@ -44,7 +51,7 @@ impl<I, T> Copy for Ident<I, T> where I: Copy {}
 
 impl<I, T> Ident<I, T> {
     /// Creates a typed identifier
-    pub(crate) fn new(id: I) -> Self {
+    pub fn new(id: I) -> Self {
         Ident {
             id,
             _marker: PhantomData,
@@ -128,10 +135,7 @@ pub trait Store: Clone + Fallible<Error = core::convert::Infallible> {
         T: Serialize<Self::Storage>;
 
     /// Gets a reference to an archived value
-    fn get_raw<'a, T>(
-        &'a self,
-        ident: &Ident<Self::Identifier, T>,
-    ) -> &'a T::Archived
+    fn get_raw<T>(&self, ident: &Ident<Self::Identifier, T>) -> &T::Archived
     where
         T: Archive;
 }
