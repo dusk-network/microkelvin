@@ -7,7 +7,8 @@
 use core::hint::unreachable_unchecked;
 use core::marker::PhantomData;
 
-use rkyv::{ser::Serializer, Archive, Fallible, Serialize};
+use rkyv::rend::LittleEndian;
+use rkyv::{ser::Serializer, Archive, Deserialize, Fallible, Serialize};
 
 #[cfg(feature = "host")]
 mod host_store;
@@ -19,13 +20,19 @@ use crate::{
 };
 
 /// Offset based identifier
-#[derive(Debug, Clone, Copy)]
-pub struct Offset(pub u64);
+#[derive(Debug, Clone, Copy, Archive, Serialize, Deserialize)]
+#[archive(as = "Self")]
+pub struct Offset(LittleEndian<u64>);
 
 impl Offset {
     /// Creates an offset with a given value
-    pub fn new(offset: u64) -> Offset {
-        Offset(offset)
+    pub fn new<I: Into<LittleEndian<u64>>>(offset: I) -> Offset {
+        Offset(offset.into())
+    }
+
+    /// Return the numerical offset
+    pub fn inner(&self) -> u64 {
+        self.0.into()
     }
 }
 
@@ -126,7 +133,10 @@ where
 /// A type that works as a handle to a `Storage` backend.
 pub trait Store: Clone + Fallible<Error = core::convert::Infallible> {
     /// The identifier used for refering to stored values
-    type Identifier: Copy;
+    type Identifier: Copy
+        + Archive<Archived = Self::Identifier>
+        + Serialize<Self::Storage>
+        + Deserialize<Self::Identifier, Self>;
     /// The underlying storage
     type Storage: Storage<Self::Identifier>;
 

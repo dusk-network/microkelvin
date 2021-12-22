@@ -169,7 +169,7 @@ impl Serializer for PageStorage {
 impl Storage<Offset> for PageStorage {
     fn put<T: Serialize<PageStorage>>(&mut self, t: &T) -> Offset {
         self.serialize_value(t).unwrap_infallible();
-        Offset(self.pos() as u64)
+        Offset((self.pos() as u64).into())
     }
 
     fn get<T: Archive>(&self, ofs: &Offset) -> &T::Archived {
@@ -177,13 +177,14 @@ impl Storage<Offset> for PageStorage {
         let size = core::mem::size_of::<T::Archived>();
         let slice = match &self.mmap {
             Some(mmap) if ofs <= mmap.len() as u64 => {
-                let start_pos = (ofs as usize)
+                let start_pos = (Into::<u64>::into(ofs) as usize)
                     .checked_sub(size)
                     .expect("Offset larger than size");
                 &mmap[start_pos..][..size]
             }
             _ => {
-                let pages_ofs = ofs as usize - self.mmap_len();
+                let pages_ofs =
+                    (Into::<u64>::into(ofs) as usize) - self.mmap_len();
                 let cur_page_ofs = pages_ofs % PAGE_SIZE;
                 let cur_page = pages_ofs as usize / PAGE_SIZE;
                 let (page_nr, start_pos) = if cur_page_ofs == 0 {
