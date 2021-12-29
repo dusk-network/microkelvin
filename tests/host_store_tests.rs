@@ -38,18 +38,6 @@ fn lot_more() {
 }
 
 #[test]
-#[should_panic]
-fn get_raw_with_offset_zero() {
-    let host_store = HostStore::new();
-
-    let le: LittleEndian<u32> = (0 as u32).into();
-
-    host_store.put(&le);
-
-    host_store.get_raw::<LittleEndian<u32>>(&Ident::new(Offset::new(0)));
-}
-
-#[test]
 fn many_raw_persist_and_restore() -> io::Result<()> {
     const N: usize = 1024 * 64;
 

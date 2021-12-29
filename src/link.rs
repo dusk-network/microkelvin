@@ -9,10 +9,11 @@ use core::cell::RefCell;
 
 use alloc::rc::Rc;
 
+use rkyv::ser::Serializer;
 use rkyv::Fallible;
 use rkyv::{Archive, Deserialize, Serialize};
 
-use crate::storage::{Ident, Storage, Store, Stored, UnwrapInfallible};
+use crate::storage::{Ident, Store, StoreProvider, Stored, UnwrapInfallible};
 use crate::wrappers::MaybeStored;
 use crate::{ARef, Annotation, Compound};
 
@@ -97,16 +98,16 @@ where
     }
 }
 
-impl<C, A, S> Serialize<S::Storage> for Link<C, A, S>
+impl<C, A, S> Serialize<S::Serializer> for Link<C, A, S>
 where
-    C: Compound<A, S> + Serialize<S::Storage>,
+    C: Compound<A, S> + Serialize<S::Serializer>,
     A: Clone + Annotation<C::Leaf>,
     S: Store,
 {
     fn serialize(
         &self,
-        ser: &mut S::Storage,
-    ) -> Result<Self::Resolver, S::Error> {
+        ser: &mut S::Serializer,
+    ) -> Result<Self::Resolver, <S::Serializer as Fallible>::Error> {
         match self {
             Link::Memory { rc, annotation } => {
                 let borrow = annotation.borrow();
@@ -119,8 +120,15 @@ where
                     a
                 };
                 let to_insert = &(**rc);
-                let ident = Ident::new(ser.put(to_insert));
-                Ok((ident, a))
+
+                let store = ser.store();
+                let mut inner_serializer = store.serializer();
+
+                inner_serializer.serialize_value(to_insert)?;
+                let bytes: Vec<u8> = inner_serializer.into();
+                let ident = store.put_raw(&bytes);
+
+                Ok((Ident::new(ident), a))
             }
             Link::Stored { stored, a } => Ok((*stored.ident(), a.clone())),
         }

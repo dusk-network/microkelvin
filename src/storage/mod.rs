@@ -42,6 +42,15 @@ pub struct Ident<I, T> {
     _marker: PhantomData<T>,
 }
 
+impl<I, T> core::fmt::Debug for Ident<I, T>
+where
+    I: core::fmt::Debug,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Ident").field("id", &self.id).finish()
+    }
+}
+
 impl<I, T> Clone for Ident<I, T>
 where
     I: Copy,
@@ -130,40 +139,44 @@ where
     }
 }
 
+pub trait StoreProvider<S> {
+    fn store(&self) -> &S;
+}
+
 /// A type that works as a handle to a `Storage` backend.
 pub trait Store: Clone + Fallible<Error = core::convert::Infallible> {
     /// The identifier used for refering to stored values
     type Identifier: Copy
+        + core::fmt::Debug
         + Archive<Archived = Self::Identifier>
-        + Serialize<Self::Storage>
+        + Serialize<Self::Serializer>
         + Deserialize<Self::Identifier, Self>;
-    /// The underlying storage
-    type Storage: Storage<Self::Identifier>;
+
+    /// The serializer associated with the store
+    type Serializer: Serializer + StoreProvider<Self> + Into<Vec<u8>>;
 
     /// Put a value into storage, and get a representative token back
     fn put<T>(&self, t: &T) -> Stored<T, Self>
     where
-        T: Serialize<Self::Storage>;
+        T: Serialize<Self::Serializer>,
+    {
+        let mut ser = self.serializer();
+        let _ = ser.serialize_value(t);
+        let inner = ser.into();
+        let ident = Ident::new(self.put_raw(&inner[..]));
+        Stored::new(self.clone(), ident)
+    }
+
+    /// Put a value into storage, and get a representative token back
+    fn put_raw(&self, bytes: &[u8]) -> Self::Identifier;
 
     /// Gets a reference to an archived value
     fn get_raw<T>(&self, ident: &Ident<Self::Identifier, T>) -> &T::Archived
     where
         T: Archive;
-}
 
-/// The main trait for providing storage backends to use with `microkelvin`
-pub trait Storage<I>:
-    Serializer + Fallible<Error = core::convert::Infallible>
-{
-    /// Write a value into the storage, returns a representation
-    fn put<T>(&mut self, t: &T) -> I
-    where
-        T: Serialize<Self>;
-
-    /// Gets a value from the store
-    fn get<T>(&self, id: &I) -> &T::Archived
-    where
-        T: Archive;
+    /// Provide a serializer coupled to this store
+    fn serializer(&self) -> Self::Serializer;
 }
 
 pub trait UnwrapInfallible<T> {

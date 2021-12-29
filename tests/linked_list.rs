@@ -17,7 +17,7 @@ use rkyv::{Archive, Deserialize, Serialize};
 #[archive(bound(serialize = "
   A: Archive + Clone + Annotation<T>,
   T: Clone,
-  S: Store<Storage = __S>,"))]
+  S: Store<Serializer = __S>,"))]
 #[archive(bound(deserialize = "
   T: Archive + Clone,
   T::Archived: Deserialize<T, S>,

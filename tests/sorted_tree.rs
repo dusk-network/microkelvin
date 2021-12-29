@@ -19,7 +19,7 @@ use microkelvin::{
 #[archive(bound(serialize = "
   A: Archive + Clone + Annotation<T>,
   T: Clone,
-  S: Store<Storage = __S>,"))]
+  S: Store<Serializer = __S>,"))]
 #[archive(bound(deserialize = "
   T: Archive + Clone,
   T::Archived: Deserialize<T, S>,
@@ -376,7 +376,7 @@ mod test {
     fn many_many_many() -> Result<(), io::Error> {
         let store = HostStore::new();
 
-        const N: u16 = 1024;
+        const N: u16 = 2;
 
         let mut rng = rand::thread_rng();
         let mut numbers = vec![];
