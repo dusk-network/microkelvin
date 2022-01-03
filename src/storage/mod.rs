@@ -8,12 +8,13 @@ use core::hint::unreachable_unchecked;
 use core::marker::PhantomData;
 
 use rkyv::rend::LittleEndian;
+use rkyv::ser::serializers::BufferSerializer;
 use rkyv::{ser::Serializer, Archive, Deserialize, Fallible, Serialize};
 
 #[cfg(feature = "host")]
 mod host_store;
 #[cfg(feature = "host")]
-pub use host_store::HostStore;
+pub use host_store::{HostSerializer, HostStore};
 
 use crate::{
     Annotation, ArchivedCompound, Branch, Compound, MaybeArchived, Walker,
@@ -82,12 +83,9 @@ impl<I, T> Ident<I, T> {
 
 /// Stored is a reference to a value stored, along with the backing store
 #[derive(Clone)]
-pub struct Stored<T, S>
-where
-    S: Store,
-{
-    store: S,
-    ident: Ident<S::Identifier, T>,
+pub struct Stored<T, I> {
+    store: Box<dyn Store<Identifier = I>>,
+    ident: Ident<I, T>,
 }
 
 unsafe impl<T, S> Send for Stored<T, S> where S: Store + Send {}
@@ -117,7 +115,7 @@ where
     where
         T: Archive,
     {
-        self.store.get_raw(&self.ident)
+        self.store.get(&self.ident)
     }
 
     /// Start a branch walk using the stored `T` as the root.  
@@ -139,7 +137,9 @@ where
     }
 }
 
+/// A value that carries a store with it
 pub trait StoreProvider<S> {
+    /// Returns a reference to the associated store
     fn store(&self) -> &S;
 }
 
@@ -149,37 +149,23 @@ pub trait Store: Clone + Fallible<Error = core::convert::Infallible> {
     type Identifier: Copy
         + core::fmt::Debug
         + Archive<Archived = Self::Identifier>
-        + Serialize<Self::Serializer>
+        + Serialize<BufferSerializer>
         + Deserialize<Self::Identifier, Self>;
 
-    /// The serializer associated with the store
-    type Serializer: Serializer + StoreProvider<Self> + Into<Vec<u8>>;
-
-    /// Put a value into storage, and get a representative token back
-    fn put<T>(&self, t: &T) -> Stored<T, Self>
+    /// Put a value into storage
+    fn put<T>(&self, t: &T) -> Ident<Self::Identifier, T>
     where
-        T: Serialize<Self::Serializer>,
-    {
-        let mut ser = self.serializer();
-        let _ = ser.serialize_value(t);
-        let inner = ser.into();
-        let ident = Ident::new(self.put_raw(&inner[..]));
-        Stored::new(self.clone(), ident)
-    }
-
-    /// Put a value into storage, and get a representative token back
-    fn put_raw(&self, bytes: &[u8]) -> Self::Identifier;
+        T: Serialize<Self::Serializer>;
 
     /// Gets a reference to an archived value
-    fn get_raw<T>(&self, ident: &Ident<Self::Identifier, T>) -> &T::Archived
+    fn get<T>(&self, ident: &Ident<Self::Identifier, T>) -> &T::Archived
     where
         T: Archive;
-
-    /// Provide a serializer coupled to this store
-    fn serializer(&self) -> Self::Serializer;
 }
 
+/// Unwrap a result known not to have a instantiable error
 pub trait UnwrapInfallible<T> {
+    /// Unwrap contained value
     fn unwrap_infallible(self) -> T;
 }
 

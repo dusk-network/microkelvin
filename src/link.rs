@@ -9,7 +9,6 @@ use core::cell::RefCell;
 
 use alloc::rc::Rc;
 
-use rkyv::ser::Serializer;
 use rkyv::Fallible;
 use rkyv::{Archive, Deserialize, Serialize};
 
@@ -22,10 +21,7 @@ use crate::{ARef, Annotation, Compound};
 ///
 /// The link takes care of lazily evaluating the annotation of the inner type,
 /// and to load it from memory or backend when needed.
-pub enum Link<C, A, S>
-where
-    S: Store,
-{
+pub enum Link<C, A, I> {
     /// A Link to a node in memory
     Memory {
         /// the underlying rc
@@ -36,7 +32,7 @@ where
     /// A Link to a stored node
     Stored {
         /// archived at offset
-        stored: Stored<C, S>,
+        stored: Stored<C, I>,
         /// the final annotation
         a: A,
     },
@@ -100,7 +96,7 @@ where
 
 impl<C, A, S> Serialize<S::Serializer> for Link<C, A, S>
 where
-    C: Compound<A, S> + Serialize<S::Serializer>,
+    C: Compound<A, S> + Serialize<BufferSerializer>,
     A: Clone + Annotation<C::Leaf>,
     S: Store,
 {
@@ -122,13 +118,10 @@ where
                 let to_insert = &(**rc);
 
                 let store = ser.store();
-                let mut inner_serializer = store.serializer();
 
-                inner_serializer.serialize_value(to_insert)?;
-                let bytes: Vec<u8> = inner_serializer.into();
-                let ident = store.put_raw(&bytes);
+                let ident = store.put(to_insert);
 
-                Ok((Ident::new(ident), a))
+                Ok((ident, a))
             }
             Link::Stored { stored, a } => Ok((*stored.ident(), a.clone())),
         }

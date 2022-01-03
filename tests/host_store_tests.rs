@@ -58,21 +58,21 @@ fn many_raw_persist_and_restore() -> io::Result<()> {
     let le: LittleEndian<u32> = (0 as u32).into();
 
     assert_eq!(
-        host_store.get_raw::<LittleEndian<u32>>(&references[0].ident()),
+        host_store.get::<LittleEndian<u32>>(&references[0].ident()),
         &le
     );
 
     let le: LittleEndian<u32> = (65534 as u32).into();
 
     assert_eq!(
-        host_store.get_raw::<LittleEndian<u32>>(&references[65534].ident()),
+        host_store.get::<LittleEndian<u32>>(&references[65534].ident()),
         &le
     );
 
     let le: LittleEndian<u32> = (65535 as u32).into();
 
     assert_eq!(
-        host_store.get_raw::<LittleEndian<u32>>(&references[65535].ident()),
+        host_store.get::<LittleEndian<u32>>(&references[65535].ident()),
         &le
     );
 
@@ -80,7 +80,7 @@ fn many_raw_persist_and_restore() -> io::Result<()> {
         let le: LittleEndian<u32> = (i as u32).into();
 
         assert_eq!(
-            host_store.get_raw::<LittleEndian<u32>>(&references[i].ident()),
+            host_store.get::<LittleEndian<u32>>(&references[i].ident()),
             &le
         );
     }
@@ -89,7 +89,7 @@ fn many_raw_persist_and_restore() -> io::Result<()> {
         let le: LittleEndian<u32> = (i as u32).into();
 
         assert_eq!(
-            host_store.get_raw::<LittleEndian<u32>>(&references[i].ident()),
+            host_store.get::<LittleEndian<u32>>(&references[i].ident()),
             &le
         );
     }
@@ -110,7 +110,7 @@ fn many_raw_persist_and_restore() -> io::Result<()> {
         let le: LittleEndian<u32> = (i as u32).into();
 
         assert_eq!(
-            host_store.get_raw::<LittleEndian<u32>>(&references[i].ident()),
+            host_store.get::<LittleEndian<u32>>(&references[i].ident()),
             &le
         );
     }
@@ -121,7 +121,7 @@ fn many_raw_persist_and_restore() -> io::Result<()> {
         let le: LittleEndian<u32> = (i as u32).into();
 
         assert_eq!(
-            host_store.get_raw::<LittleEndian<u32>>(&references[i].ident()),
+            host_store.get::<LittleEndian<u32>>(&references[i].ident()),
             &le
         );
     }
@@ -137,7 +137,7 @@ fn many_raw_persist_and_restore() -> io::Result<()> {
 
         assert_eq!(
             host_store_restored
-                .get_raw::<LittleEndian<u32>>(&references[i].ident()),
+                .get::<LittleEndian<u32>>(&references[i].ident()),
             &le
         );
     }

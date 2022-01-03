@@ -227,7 +227,7 @@ where
                                 ArchivedChild::Leaf(_) => return Some(()),
                                 ArchivedChild::Link(link) => {
                                     if let Some(ref store) = self.store {
-                                        store.get_raw(link.ident())
+                                        store.get(link.ident())
                                     } else {
                                         unreachable!()
                                     }

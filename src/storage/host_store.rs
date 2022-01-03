@@ -218,9 +218,25 @@ impl Fallible for HostStore {
     type Error = Infallible;
 }
 
+/// Serializer running in the host context.
 pub struct HostSerializer {
     store: HostStore,
     serializer: AllocSerializer<1024>,
+}
+
+impl HostSerializer {
+    /// Creates a new hostserializer given a store
+    pub fn new(store: HostStore) -> Self {
+        HostSerializer {
+            store,
+            serializer: Default::default(),
+        }
+    }
+
+    /// Finish the serialization and return the bytes encoded
+    pub fn into_vec(self) -> Vec<u8> {
+        self.serializer.into_serializer().into_inner().into()
+    }
 }
 
 impl StoreProvider<HostStore> for HostSerializer {
@@ -251,17 +267,8 @@ impl Into<Vec<u8>> for HostSerializer {
 
 impl Store for HostStore {
     type Identifier = Offset;
-    type Serializer = HostSerializer;
 
-    fn put_raw(&self, encoded: &[u8]) -> Self::Identifier {
-        let mut guard = self.inner.write();
-        guard.put(encoded).unwrap()
-    }
-
-    fn get_raw<'a, T>(
-        &'a self,
-        id: &Ident<Self::Identifier, T>,
-    ) -> &'a T::Archived
+    fn get<'a, T>(&'a self, id: &Ident<Self::Identifier, T>) -> &'a T::Archived
     where
         T: Archive,
     {
@@ -272,10 +279,16 @@ impl Store for HostStore {
         extended
     }
 
-    fn serializer(&self) -> Self::Serializer {
-        HostSerializer {
-            store: self.clone(),
-            serializer: Default::default(),
-        }
+    fn put<T>(&self, t: &T) -> Ident<Self::Identifier, T>
+    where
+        T: rkyv::Serialize<Self::Serializer>,
+    {
+        let mut ser = HostSerializer::new(self.clone());
+        let _ = ser.serialize_value(t);
+        let bytes: Vec<u8> = ser.into();
+        let mut guard = self.inner.write();
+        let offset = guard.offset();
+        guard.put(&bytes).unwrap();
+        Ident::new(offset)
     }
 }
