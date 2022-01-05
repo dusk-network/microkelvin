@@ -4,15 +4,18 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use bytecheck::CheckBytes;
 use rand::{prelude::SliceRandom, thread_rng};
 use rend::LittleEndian;
 use rkyv::{Archive, Deserialize, Serialize};
 
 mod linked_list;
 use linked_list::LinkedList;
-use microkelvin::{Compound, FindMaxKey, HostStore, Keyed, MaxKey};
+use microkelvin::{Compound, FindMaxKey, Keyed, MaxKey, OffsetLen};
 
-#[derive(PartialEq, Clone, Debug, Archive, Serialize, Deserialize)]
+#[derive(
+    PartialEq, Clone, Debug, Archive, Serialize, Deserialize, CheckBytes,
+)]
 #[archive(as = "Self")]
 struct TestLeaf {
     key: LittleEndian<u64>,
@@ -38,7 +41,7 @@ fn maximum() {
 
     keys.shuffle(&mut thread_rng());
 
-    let mut list = LinkedList::<_, MaxKey<LittleEndian<u64>>, HostStore>::new();
+    let mut list = LinkedList::<_, MaxKey<LittleEndian<u64>>, OffsetLen>::new();
 
     for key in keys {
         list.push(TestLeaf { key, other: () });

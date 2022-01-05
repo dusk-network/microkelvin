@@ -4,31 +4,43 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use core::convert::Infallible;
 use core::hint::unreachable_unchecked;
 use core::marker::PhantomData;
 
+use bytecheck::CheckBytes;
 use rkyv::rend::LittleEndian;
 use rkyv::ser::serializers::BufferSerializer;
+use rkyv::validation::validators::DefaultValidator;
 use rkyv::{ser::Serializer, Archive, Deserialize, Fallible, Serialize};
 
 #[cfg(feature = "host")]
 mod host_store;
 #[cfg(feature = "host")]
-pub use host_store::{HostSerializer, HostStore};
+pub use host_store::HostStore;
+
+mod store_ref;
+pub use store_ref::*;
+
+mod token_buffer;
+pub use token_buffer::*;
 
 use crate::{
     Annotation, ArchivedCompound, Branch, Compound, MaybeArchived, Walker,
 };
 
 /// Offset based identifier
-#[derive(Debug, Clone, Copy, Archive, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Archive, Serialize, Deserialize, CheckBytes)]
 #[archive(as = "Self")]
-pub struct Offset(LittleEndian<u64>);
+pub struct OffsetLen(LittleEndian<u64>, LittleEndian<u16>);
 
-impl Offset {
+impl OffsetLen {
     /// Creates an offset with a given value
-    pub fn new<I: Into<LittleEndian<u64>>>(offset: I) -> Offset {
-        Offset(offset.into())
+    pub fn new<O: Into<LittleEndian<u64>>, L: Into<LittleEndian<u16>>>(
+        offset: O,
+        len: L,
+    ) -> OffsetLen {
+        OffsetLen(offset.into(), len.into())
     }
 
     /// Return the numerical offset
@@ -38,12 +50,13 @@ impl Offset {
 }
 
 /// An identifier representing a value stored somewhere else
-pub struct Ident<I, T> {
+#[derive(CheckBytes)]
+pub struct Ident<T, I> {
     id: I,
     _marker: PhantomData<T>,
 }
 
-impl<I, T> core::fmt::Debug for Ident<I, T>
+impl<T, I> core::fmt::Debug for Ident<T, I>
 where
     I: core::fmt::Debug,
 {
@@ -52,21 +65,21 @@ where
     }
 }
 
-impl<I, T> Clone for Ident<I, T>
+impl<T, I> Clone for Ident<T, I>
 where
-    I: Copy,
+    I: Clone,
 {
     fn clone(&self) -> Self {
         Self {
-            id: self.id,
+            id: self.id.clone(),
             _marker: PhantomData,
         }
     }
 }
 
-impl<I, T> Copy for Ident<I, T> where I: Copy {}
+impl<T, I> Copy for Ident<T, I> where I: Copy {}
 
-impl<I, T> Ident<I, T> {
+impl<T, I> Ident<T, I> {
     /// Creates a typed identifier
     pub fn new(id: I) -> Self {
         Ident {
@@ -76,37 +89,34 @@ impl<I, T> Ident<I, T> {
     }
 
     /// Returns an untyped identifier
-    pub fn erase(self) -> I {
-        self.id
+    pub fn erase(&self) -> &I {
+        &self.id
     }
 }
 
 /// Stored is a reference to a value stored, along with the backing store
 #[derive(Clone)]
 pub struct Stored<T, I> {
-    store: Box<dyn Store<Identifier = I>>,
-    ident: Ident<I, T>,
+    store: StoreRef<I>,
+    ident: Ident<T, I>,
 }
 
-unsafe impl<T, S> Send for Stored<T, S> where S: Store + Send {}
-unsafe impl<T, S> Sync for Stored<T, S> where S: Store + Sync {}
+unsafe impl<T, I> Send for Stored<T, I> where I: Send {}
+unsafe impl<T, I> Sync for Stored<T, I> where I: Sync {}
 
-impl<T, S> Stored<T, S>
-where
-    S: Store,
-{
+impl<T, I> Stored<T, I> {
     /// Create a new `Stored` wrapper from an identifier and a store
-    pub fn new(store: S, ident: Ident<S::Identifier, T>) -> Self {
+    pub fn new(store: StoreRef<I>, ident: Ident<T, I>) -> Self {
         Stored { store, ident }
     }
 
     /// Get a reference to the backing Store
-    pub fn store(&self) -> &S {
+    pub fn store(&self) -> &StoreRef<I> {
         &self.store
     }
 
     /// Get a reference to the Identifier of the stored value
-    pub fn ident(&self) -> &Ident<S::Identifier, T> {
+    pub fn ident(&self) -> &Ident<T, I> {
         &self.ident
     }
 
@@ -114,19 +124,20 @@ where
     pub fn inner(&self) -> &T::Archived
     where
         T: Archive,
+        T::Archived: for<'a> CheckBytes<DefaultValidator<'a>>,
     {
         self.store.get(&self.ident)
     }
 
     /// Start a branch walk using the stored `T` as the root.  
-    pub fn walk<W, A>(&self, walker: W) -> Option<Branch<T, A, S>>
+    pub fn walk<W, A>(&self, walker: W) -> Option<Branch<T, A, I>>
     where
-        S: Store,
-        T: Compound<A, S>,
-        T::Archived: ArchivedCompound<T, A, S>,
-        T::Leaf: Archive,
+        T: Compound<A, I>,
+        T::Archived: ArchivedCompound<T, A, I>
+            + for<'any> CheckBytes<DefaultValidator<'any>>,
+        T::Leaf: 'static + Archive,
         A: Annotation<T::Leaf>,
-        W: Walker<T, A, S>,
+        W: Walker<T, A, I>,
     {
         let inner = self.inner();
         Branch::walk_with_store(
@@ -137,30 +148,75 @@ where
     }
 }
 
-/// A value that carries a store with it
-pub trait StoreProvider<S> {
-    /// Returns a reference to the associated store
-    fn store(&self) -> &S;
+/// Trait that ensures the value has access to a store backend
+pub trait StoreProvider<I>: Sized + Fallible {
+    /// Get a `StoreRef` associated with `Self`
+    fn store(&self) -> &StoreRef<I>;
+}
+
+/// A buffered serializer wrapping a `StoreRef`
+pub struct StoreSerializer<'a, I> {
+    #[allow(unused)]
+    store: StoreRef<I>,
+    buffer: BufferSerializer<TokenBuffer<'a>>,
+}
+
+impl<'a, I> StoreProvider<I> for StoreSerializer<'a, I> {
+    fn store(&self) -> &StoreRef<I> {
+        &self.store
+    }
+}
+
+impl<'a, I> StoreSerializer<'a, I> {
+    fn new(store: StoreRef<I>, buf: TokenBuffer<'a>) -> Self {
+        StoreSerializer {
+            store,
+            buffer: BufferSerializer::new(buf),
+        }
+    }
+
+    /// Consumes the serializer returning the held Token
+    pub fn consume(self) -> Token {
+        self.buffer.into_inner().consume()
+    }
+}
+
+impl<'a, I> Fallible for StoreSerializer<'a, I> {
+    type Error = <BufferSerializer<&'a mut [u8]> as Fallible>::Error;
+}
+
+impl<'a, I> Serializer for StoreSerializer<'a, I> {
+    fn pos(&self) -> usize {
+        self.buffer.pos()
+    }
+
+    fn write(&mut self, bytes: &[u8]) -> Result<(), Self::Error> {
+        self.buffer.write(bytes)
+    }
 }
 
 /// A type that works as a handle to a `Storage` backend.
-pub trait Store: Clone + Fallible<Error = core::convert::Infallible> {
+pub trait Store {
     /// The identifier used for refering to stored values
-    type Identifier: Copy
-        + core::fmt::Debug
-        + Archive<Archived = Self::Identifier>
-        + Serialize<BufferSerializer>
-        + Deserialize<Self::Identifier, Self>;
-
-    /// Put a value into storage
-    fn put<T>(&self, t: &T) -> Ident<Self::Identifier, T>
-    where
-        T: Serialize<Self::Serializer>;
+    type Identifier;
 
     /// Gets a reference to an archived value
-    fn get<T>(&self, ident: &Ident<Self::Identifier, T>) -> &T::Archived
-    where
-        T: Archive;
+    fn get(&self, ident: &Self::Identifier) -> &[u8];
+
+    /// Request a buffer to write data
+    fn write(&self) -> TokenBuffer;
+
+    /// Commit written data, moving back the buffer
+    fn commit(&self, token: Token, len: usize) -> Self::Identifier;
+
+    /// Request more buffer space
+    fn extend(&self, token: Token) -> TokenBuffer;
+
+    /// Persist to underlying storage.
+    ///
+    /// To keep the trait simple, the error type is omitted, and will have to be
+    /// returned by other means, for example in logging.
+    fn persist(&self) -> Result<(), ()>;
 }
 
 /// Unwrap a result known not to have a instantiable error
@@ -169,7 +225,7 @@ pub trait UnwrapInfallible<T> {
     fn unwrap_infallible(self) -> T;
 }
 
-impl<T> UnwrapInfallible<T> for Result<T, core::convert::Infallible> {
+impl<T> UnwrapInfallible<T> for Result<T, Infallible> {
     fn unwrap_infallible(self) -> T {
         match self {
             Ok(t) => t,

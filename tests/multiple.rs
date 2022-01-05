@@ -10,15 +10,18 @@ use rand::{prelude::SliceRandom, thread_rng};
 mod linked_list;
 use linked_list::LinkedList;
 
+use bytecheck::CheckBytes;
 use rend::LittleEndian;
 use rkyv::{Archive, Deserialize, Serialize};
 
 use microkelvin::{
-    Annotation, Cardinality, Combine, Compound, FindMaxKey, HostStore, Keyed,
-    MaxKey, Primitive,
+    Annotation, Cardinality, Combine, Compound, FindMaxKey, Keyed, MaxKey,
+    OffsetLen, Primitive,
 };
 
-#[derive(Default, Clone, Archive, Serialize, Debug, Deserialize)]
+#[derive(
+    Default, Clone, Archive, Serialize, Debug, Deserialize, CheckBytes,
+)]
 #[archive(as = "Self")]
 #[archive(bound(archive = "
   K: Primitive,
@@ -65,7 +68,9 @@ where
     }
 }
 
-#[derive(PartialEq, Clone, Debug, Archive, Serialize, Deserialize)]
+#[derive(
+    PartialEq, Clone, Debug, Archive, Serialize, Deserialize, CheckBytes,
+)]
 #[archive(as = "Self")]
 struct TestLeaf {
     key: LittleEndian<u64>,
@@ -90,7 +95,7 @@ fn maximum_multiple() {
 
     keys.shuffle(&mut thread_rng());
 
-    let mut list = LinkedList::<_, Anno<LittleEndian<u64>>, HostStore>::new();
+    let mut list = LinkedList::<_, Anno<LittleEndian<u64>>, OffsetLen>::new();
 
     for key in keys {
         let key: LittleEndian<u64> = key.into();

@@ -16,7 +16,7 @@ mod persist_tests {
 
     use rend::LittleEndian;
 
-    use microkelvin::{Cardinality, HostStore, Keyed, Nth, Store};
+    use microkelvin::{Cardinality, HostStore, Keyed, Nth, StoreRef};
 
     #[derive(PartialEq, Clone, Debug)]
     struct TestLeaf {
@@ -31,7 +31,7 @@ mod persist_tests {
     }
 
     fn persist() -> Result<(), io::Error> {
-        let store = HostStore::new();
+        let store = StoreRef::new(HostStore::new());
 
         let n: u64 = 16;
 
@@ -82,7 +82,7 @@ mod persist_tests {
     }
 
     fn persist_across_threads() -> Result<(), io::Error> {
-        let store = HostStore::new();
+        let store = StoreRef::new(HostStore::new());
 
         let n: u64 = 16;
 

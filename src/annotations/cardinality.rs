@@ -8,7 +8,8 @@
 /// i.e. the amount of elements in a collection
 use core::borrow::Borrow;
 
-use rend::LittleEndian;
+use bytecheck::CheckBytes;
+use rkyv::rend::LittleEndian;
 use rkyv::{Archive, Deserialize, Serialize};
 
 use crate::annotations::{Annotation, Combine};
@@ -17,10 +18,18 @@ use crate::Compound;
 
 /// The cardinality of a compound collection
 #[derive(
-    PartialEq, Debug, Clone, Default, Copy, Archive, Serialize, Deserialize,
+    PartialEq,
+    Debug,
+    Clone,
+    Default,
+    Copy,
+    Archive,
+    Serialize,
+    Deserialize,
+    CheckBytes,
 )]
 #[archive(as = "Self")]
-pub struct Cardinality(pub(crate) LittleEndian<u64>);
+pub struct Cardinality(LittleEndian<u64>);
 
 impl From<Cardinality> for u64 {
     fn from(c: Cardinality) -> Self {
@@ -36,7 +45,7 @@ impl<'a> From<&'a Cardinality> for u64 {
 
 impl<L> Annotation<L> for Cardinality {
     fn from_leaf(_: &L) -> Self {
-        Cardinality(1.into())
+        Cardinality { 0: 1.into() }
     }
 }
 

@@ -7,12 +7,12 @@
 mod sorted_tree;
 use sorted_tree::NaiveMap;
 
-use microkelvin::{BranchRef, BranchRefMut, HostStore, MaxKey};
+use microkelvin::{BranchRef, BranchRefMut, MaxKey, OffsetLen};
 use rkyv::rend::LittleEndian;
 
 #[test]
 fn branch_ref() {
-    let mut map = NaiveMap::<_, _, MaxKey<_>, HostStore>::new();
+    let mut map = NaiveMap::<_, _, MaxKey<_>, OffsetLen>::new();
 
     let n = 64;
 
