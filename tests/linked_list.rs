@@ -363,6 +363,7 @@ mod test {
     }
 
     #[test]
+    #[ignore]
     fn push_nth_persist() {
         let store = StoreRef::new(HostStore::new());
 

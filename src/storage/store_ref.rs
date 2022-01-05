@@ -1,5 +1,6 @@
 use alloc::sync::Arc;
 use core::convert::Infallible;
+use rkyv::ser::serializers::BufferSerializerError;
 
 use bytecheck::CheckBytes;
 use rkyv::ser::Serializer;
@@ -31,16 +32,21 @@ impl<I> StoreRef<I> {
     where
         T: for<'any> Serialize<StoreSerializer<'any, I>>,
     {
-        let buffer = self.inner.write();
-        let mut ser = StoreSerializer::new(self.clone(), buffer);
+        loop {
+            let mut ser =
+                StoreSerializer::new(self.clone(), self.inner.write());
 
-        match ser.serialize_value(t) {
-            Ok(size) => Stored::new(
-                self.clone(),
-                Ident::new(self.inner.commit(ser.consume(), size)),
-            ),
-            Err(_e) => {
-                todo!("Create new page and try again")
+            match ser.serialize_value(t) {
+                Ok(written) => {
+                    let size = written + core::mem::size_of::<T::Archived>();
+                    return Stored::new(
+                        self.clone(),
+                        Ident::new(self.inner.commit(ser.consume(), size)),
+                    );
+                }
+                Err(BufferSerializerError::Overflow { .. }) => {
+                    self.inner.extend(ser.consume());
+                }
             }
         }
     }

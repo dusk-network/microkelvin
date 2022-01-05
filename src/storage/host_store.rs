@@ -157,8 +157,9 @@ impl PageStorage {
         offset
     }
 
-    fn extend(&mut self) -> &mut [u8] {
-        todo!()
+    fn extend(&mut self, token: Token) {
+        self.token = Some(token);
+        self.pages.push(Page::new())
     }
 
     fn persist(&mut self) -> Result<(), std::io::Error> {
@@ -239,13 +240,10 @@ impl Store for HostStore {
         )
     }
 
-    fn extend<'a>(&'a self, token: Token) -> TokenBuffer<'a> {
+    fn extend(&self, token: Token) {
         let mut guard = self.inner.write();
 
-        let bytes = guard.extend();
-        let bytes_a: &'a mut [u8] = unsafe { core::mem::transmute(bytes) };
-
-        TokenBuffer::new(token, bytes_a)
+        guard.extend(token);
     }
 
     fn persist(&self) -> Result<(), ()> {

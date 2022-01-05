@@ -210,7 +210,7 @@ pub trait Store {
     fn commit(&self, token: Token, len: usize) -> Self::Identifier;
 
     /// Request more buffer space
-    fn extend(&self, token: Token) -> TokenBuffer;
+    fn extend(&self, token: Token);
 
     /// Persist to underlying storage.
     ///
