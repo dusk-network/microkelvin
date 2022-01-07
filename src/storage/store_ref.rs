@@ -1,13 +1,13 @@
 use alloc::sync::Arc;
 use core::convert::Infallible;
-use rkyv::ser::serializers::BufferSerializerError;
 
 use bytecheck::CheckBytes;
-use rkyv::ser::Serializer;
 use rkyv::validation::validators::DefaultValidator;
 use rkyv::{check_archived_root, Archive, Fallible, Serialize};
 
 use crate::{Ident, Store, StoreProvider, StoreSerializer, Stored};
+
+use super::{Token, TokenBuffer};
 
 // TODO: Create alternative for no_alloc
 /// A clonable reference to a store
@@ -27,28 +27,29 @@ impl<I> StoreRef<I> {
 }
 
 impl<I> StoreRef<I> {
-    /// Put a value into storage
-    pub fn put<T>(&self, t: &T) -> Stored<T, I>
+    /// Store a value, returning a `Stored` fat pointer that also carries a
+    /// reference to the underlying storage with it    
+    pub fn store<T>(&self, t: &T) -> Stored<T, I>
     where
-        T: for<'any> Serialize<StoreSerializer<'any, I>>,
+        T: Serialize<StoreSerializer<I>>,
     {
-        loop {
-            let mut ser =
-                StoreSerializer::new(self.clone(), self.inner.write());
+        Stored::new(self.clone(), self.put(t))
+    }
 
-            match ser.serialize_value(t) {
-                Ok(written) => {
-                    let size = written + core::mem::size_of::<T::Archived>();
-                    return Stored::new(
-                        self.clone(),
-                        Ident::new(self.inner.commit(ser.consume(), size)),
-                    );
-                }
-                Err(BufferSerializerError::Overflow { .. }) => {
-                    self.inner.extend(ser.consume());
-                }
-            }
-        }
+    /// Put a value into the store, returning an Ident.
+    pub fn put<T>(&self, t: &T) -> Ident<T, I>
+    where
+        T: Serialize<StoreSerializer<I>>,
+    {
+        let mut ser = self.serializer();
+        ser.serialize(t);
+        let id = ser.commit();
+        Ident::new(id)
+    }
+
+    /// Return a serializer assoociated with this store
+    pub fn serializer(&self) -> StoreSerializer<I> {
+        StoreSerializer::new(self.clone(), self.inner.request_buffer())
     }
 
     /// Gets a reference to an archived value
@@ -63,9 +64,24 @@ impl<I> StoreRef<I> {
         root
     }
 
-    /// Persist the store to underlying storage.
+    /// Persist the storage to a backend
     pub fn persist(&self) -> Result<(), ()> {
         self.inner.persist()
+    }
+
+    /// Commit written data, returns an identifier
+    pub fn commit(&self, buffer: &mut TokenBuffer) -> I {
+        self.inner.commit(buffer)
+    }
+
+    /// Commit written data, returns an identifier
+    pub fn extend(&self, buffer: &mut TokenBuffer) {
+        self.inner.extend(buffer)
+    }
+
+    /// Accept the token back
+    pub fn return_token(&self, token: Token) {
+        self.inner.return_token(token)
     }
 }
 

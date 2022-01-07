@@ -14,7 +14,8 @@ fn it_works() {
 
     let a = LittleEndian::<i128>::new(8);
 
-    let stored = store.put(&a);
+    let stored = store.store(&a);
+
     let res = store.get(stored.ident());
 
     assert_eq!(*res, a);
@@ -27,7 +28,7 @@ fn lot_more() {
     let mut ids = vec![];
 
     for i in 0..1024 {
-        ids.push(store.put(&LittleEndian::<i128>::new(i)));
+        ids.push(store.store(&LittleEndian::<i128>::new(i)));
     }
 
     for (stored, i) in ids.iter().zip(0..) {
@@ -57,41 +58,26 @@ fn many_raw_persist_and_restore() -> Result<(), io::Error> {
 
     let le: LittleEndian<u32> = (0 as u32).into();
 
-    assert_eq!(
-        host_store.get::<LittleEndian<u32>>(references[0].ident()),
-        &le
-    );
+    assert_eq!(host_store.get::<LittleEndian<u32>>(&references[0]), &le);
 
     let le: LittleEndian<u32> = (65534 as u32).into();
 
-    assert_eq!(
-        host_store.get::<LittleEndian<u32>>(&references[65534].ident()),
-        &le
-    );
+    assert_eq!(host_store.get::<LittleEndian<u32>>(&references[65534]), &le);
 
     let le: LittleEndian<u32> = (65535 as u32).into();
 
-    assert_eq!(
-        host_store.get::<LittleEndian<u32>>(&references[65535].ident()),
-        &le
-    );
+    assert_eq!(host_store.get::<LittleEndian<u32>>(&references[65535]), &le);
 
     for i in 0..N {
         let le: LittleEndian<u32> = (i as u32).into();
 
-        assert_eq!(
-            host_store.get::<LittleEndian<u32>>(&references[i].ident()),
-            &le
-        );
+        assert_eq!(host_store.get::<LittleEndian<u32>>(&references[i]), &le);
     }
 
     for i in 0..N {
         let le: LittleEndian<u32> = (i as u32).into();
 
-        assert_eq!(
-            host_store.get::<LittleEndian<u32>>(&references[i].ident()),
-            &le
-        );
+        assert_eq!(host_store.get::<LittleEndian<u32>>(&references[i]), &le);
     }
 
     host_store.persist().unwrap();
@@ -109,10 +95,7 @@ fn many_raw_persist_and_restore() -> Result<(), io::Error> {
     for i in 0..N * 2 {
         let le: LittleEndian<u32> = (i as u32).into();
 
-        assert_eq!(
-            host_store.get::<LittleEndian<u32>>(&references[i].ident()),
-            &le
-        );
+        assert_eq!(host_store.get::<LittleEndian<u32>>(&references[i]), &le);
     }
 
     // read all back again
@@ -120,10 +103,7 @@ fn many_raw_persist_and_restore() -> Result<(), io::Error> {
     for i in 0..N * 2 {
         let le: LittleEndian<u32> = (i as u32).into();
 
-        assert_eq!(
-            host_store.get::<LittleEndian<u32>>(&references[i].ident()),
-            &le
-        );
+        assert_eq!(host_store.get::<LittleEndian<u32>>(&references[i]), &le);
     }
 
     // persist again and restore
@@ -135,7 +115,7 @@ fn many_raw_persist_and_restore() -> Result<(), io::Error> {
     for i in 0..N * 2 {
         let le: LittleEndian<u32> = (i as u32).into();
 
-        assert_eq!(host_store_restored.get(&references[i].ident()), &le);
+        assert_eq!(host_store_restored.get(&references[i]), &le);
     }
 
     Ok(())

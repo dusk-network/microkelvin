@@ -10,9 +10,8 @@ use core::marker::PhantomData;
 
 use bytecheck::CheckBytes;
 use rkyv::rend::LittleEndian;
-use rkyv::ser::serializers::BufferSerializer;
 use rkyv::validation::validators::DefaultValidator;
-use rkyv::{ser::Serializer, Archive, Deserialize, Fallible, Serialize};
+use rkyv::{Archive, Deserialize, Fallible, Serialize};
 
 #[cfg(feature = "host")]
 mod host_store;
@@ -22,6 +21,9 @@ pub use host_store::HostStore;
 mod store_ref;
 pub use store_ref::*;
 
+mod store_serializer;
+pub use store_serializer::*;
+
 mod token_buffer;
 pub use token_buffer::*;
 
@@ -30,7 +32,9 @@ use crate::{
 };
 
 /// Offset based identifier
-#[derive(Debug, Clone, Copy, Archive, Serialize, Deserialize, CheckBytes)]
+#[derive(
+    Debug, Clone, Copy, Archive, Serialize, Deserialize, CheckBytes, Default,
+)]
 #[archive(as = "Self")]
 pub struct OffsetLen(LittleEndian<u64>, LittleEndian<u16>);
 
@@ -154,47 +158,6 @@ pub trait StoreProvider<I>: Sized + Fallible {
     fn store(&self) -> &StoreRef<I>;
 }
 
-/// A buffered serializer wrapping a `StoreRef`
-pub struct StoreSerializer<'a, I> {
-    #[allow(unused)]
-    store: StoreRef<I>,
-    buffer: BufferSerializer<TokenBuffer<'a>>,
-}
-
-impl<'a, I> StoreProvider<I> for StoreSerializer<'a, I> {
-    fn store(&self) -> &StoreRef<I> {
-        &self.store
-    }
-}
-
-impl<'a, I> StoreSerializer<'a, I> {
-    fn new(store: StoreRef<I>, buf: TokenBuffer<'a>) -> Self {
-        StoreSerializer {
-            store,
-            buffer: BufferSerializer::new(buf),
-        }
-    }
-
-    /// Consumes the serializer returning the held Token
-    pub fn consume(self) -> Token {
-        self.buffer.into_inner().consume()
-    }
-}
-
-impl<'a, I> Fallible for StoreSerializer<'a, I> {
-    type Error = <BufferSerializer<&'a mut [u8]> as Fallible>::Error;
-}
-
-impl<'a, I> Serializer for StoreSerializer<'a, I> {
-    fn pos(&self) -> usize {
-        self.buffer.pos()
-    }
-
-    fn write(&mut self, bytes: &[u8]) -> Result<(), Self::Error> {
-        self.buffer.write(bytes)
-    }
-}
-
 /// A type that works as a handle to a `Storage` backend.
 pub trait Store {
     /// The identifier used for refering to stored values
@@ -204,19 +167,22 @@ pub trait Store {
     fn get(&self, ident: &Self::Identifier) -> &[u8];
 
     /// Request a buffer to write data
-    fn write(&self) -> TokenBuffer;
-
-    /// Commit written data, moving back the buffer
-    fn commit(&self, token: Token, len: usize) -> Self::Identifier;
-
-    /// Request more buffer space
-    fn extend(&self, token: Token);
+    fn request_buffer(&self) -> TokenBuffer;
 
     /// Persist to underlying storage.
     ///
     /// To keep the trait simple, the error type is omitted, and will have to be
     /// returned by other means, for example in logging.
     fn persist(&self) -> Result<(), ()>;
+
+    /// Commit written bytes to the
+    fn commit(&self, buffer: &mut TokenBuffer) -> Self::Identifier;
+
+    /// Request additional bytes for writing
+    fn extend(&self, buffer: &mut TokenBuffer);
+
+    /// Return the token to the store
+    fn return_token(&self, token: Token);
 }
 
 /// Unwrap a result known not to have a instantiable error

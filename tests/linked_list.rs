@@ -4,6 +4,8 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use core::borrow::BorrowMut;
+
 use bytecheck::CheckBytes;
 use microkelvin::{
     All, Annotation, ArchivedChild, ArchivedCompound, ArchivedLink,
@@ -18,10 +20,10 @@ use rkyv::{
 #[derive(Clone, Archive, Serialize, Deserialize)]
 #[archive_attr(derive(CheckBytes))]
 #[archive(bound(serialize = "
-  T: Clone + for <'any > Serialize<StoreSerializer<'any, I>>, 
+  T: Clone + Serialize<StoreSerializer<I>>, 
   A: Clone + Clone + Annotation<T>,
-  I: Clone,
-  __S: StoreProvider<I>"))]
+  I: Clone + Default,
+  __S: Sized + BorrowMut<StoreSerializer<I>>"))]
 #[archive(bound(deserialize = "
   T::Archived: Deserialize<T, StoreRef<I>>,
   ArchivedLink<Self, A, I>: Deserialize<Link<Self, A, I>, __D>,
@@ -363,7 +365,6 @@ mod test {
     }
 
     #[test]
-    #[ignore]
     fn push_nth_persist() {
         let store = StoreRef::new(HostStore::new());
 
@@ -381,7 +382,7 @@ mod test {
             assert_eq!(nth, n - i - 1)
         }
 
-        let stored = store.put(&list);
+        let stored = store.store(&list);
 
         for i in 0..n {
             let i = LittleEndian::from(i);

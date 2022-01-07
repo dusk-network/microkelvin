@@ -31,9 +31,12 @@ mod persist_tests {
     }
 
     fn persist() -> Result<(), io::Error> {
+        println!("a");
         let store = StoreRef::new(HostStore::new());
 
         let n: u64 = 16;
+
+        println!("b");
 
         let mut list = LinkedList::<_, Cardinality, _>::new();
 
@@ -42,7 +45,11 @@ mod persist_tests {
             list.push(i);
         }
 
-        let stored = store.put(&list);
+        println!("c");
+
+        let stored = store.store(&list);
+
+        println!("d");
 
         // first empty the original
 
@@ -93,7 +100,7 @@ mod persist_tests {
             list.push(i);
         }
 
-        let persisted = store.put(&list);
+        let persisted = store.store(&list);
 
         // it should now be available from other threads
 

@@ -4,7 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use core::borrow::Borrow;
+use core::borrow::{Borrow, BorrowMut};
 use core::cmp::Ordering;
 
 use bytecheck::CheckBytes;
@@ -22,10 +22,10 @@ use microkelvin::{
 #[derive(Clone, Archive, Serialize, Deserialize)]
 #[archive_attr(derive(CheckBytes))]
 #[archive(bound(serialize = "
-  T: Clone + for <'any > Serialize<StoreSerializer<'any, I>>, 
+  T: Clone + Serialize<StoreSerializer<I>>, 
   A: Clone + Annotation<T>,
-  I: Clone,
-  __S: StoreProvider<I>"))]
+  I: Clone + Default,
+  __S: Sized + BorrowMut<StoreSerializer<I>>"))]
 #[archive(bound(deserialize = "
   T: Archive + Clone,
   T::Archived: Deserialize<T, StoreRef<I>>,
@@ -408,7 +408,7 @@ mod test {
             assert!(tree.walk(Member(&n)).is_some());
         }
 
-        let stored = store.put(&tree);
+        let stored = store.store(&tree);
 
         for n in ordered {
             let n: LittleEndian<_> = n.into();

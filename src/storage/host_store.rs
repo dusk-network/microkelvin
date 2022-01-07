@@ -33,7 +33,7 @@ pub struct PageStorage {
     mmap: Option<Mmap>,
     file: Option<File>,
     pages: Vec<Page>,
-    token: Option<Token>,
+    token: Token,
 }
 
 impl Fallible for PageStorage {
@@ -70,7 +70,7 @@ impl PageStorage {
             mmap: None,
             file: None,
             pages: vec![],
-            token: Some(Token::mint()),
+            token: Token::new(),
         }
     }
 
@@ -92,7 +92,7 @@ impl PageStorage {
             mmap,
             file: Some(file),
             pages: Vec::new(),
-            token: Some(Token::mint()),
+            token: Token::new(),
         })
     }
 
@@ -143,9 +143,9 @@ impl PageStorage {
         slice
     }
 
-    fn commit(&mut self, token: Token, len: usize) -> usize {
-        self.token = Some(token);
+    fn commit(&mut self, buffer: &mut TokenBuffer) -> OffsetLen {
         let offset = self.offset();
+        let len = buffer.advance();
 
         if let Some(page) = self.pages.last_mut() {
             page.commit(len)
@@ -154,12 +154,16 @@ impl PageStorage {
             // unless a write-buffer was already allocated
             unreachable!()
         }
-        offset
+        OffsetLen::new(offset as u64, len as u16)
     }
 
-    fn extend(&mut self, token: Token) {
-        self.token = Some(token);
-        self.pages.push(Page::new())
+    fn extend(&mut self, buffer: &mut TokenBuffer) {
+        self.pages.push(Page::new());
+        buffer.remap(self.unwritten_tail());
+    }
+
+    fn return_token(&mut self, token: Token) {
+        self.token.return_token(token)
     }
 
     fn persist(&mut self) -> Result<(), std::io::Error> {
@@ -215,38 +219,41 @@ impl Store for HostStore {
         bytes_a
     }
 
-    fn write<'a>(&'a self) -> TokenBuffer<'a> {
+    fn request_buffer(&self) -> TokenBuffer {
+        println!("waiting in write");
         // loop waiting to aquire write token
         let mut guard = self.inner.write();
+        println!("got in write");
+
+        println!("grabbing token!");
+
         let token = loop {
             if let Some(token) = guard.token.take() {
                 break token;
             } else {
-                guard = self.inner.write()
+                println!("no token?");
+                guard = self.inner.write();
+                println!("tried again?");
             }
         };
 
         let bytes = guard.unwritten_tail();
-        let bytes_a: &'a mut [u8] = unsafe { core::mem::transmute(bytes) };
-
-        TokenBuffer::new(token, bytes_a)
+        TokenBuffer::new(token, bytes)
     }
 
-    fn commit(&self, token: Token, len: usize) -> Self::Identifier {
-        let mut guard = self.inner.write();
-        OffsetLen(
-            (guard.commit(token, len) as u64).into(),
-            (len as u16).into(),
-        )
-    }
-
-    fn extend(&self, token: Token) {
-        let mut guard = self.inner.write();
-
-        guard.extend(token);
+    fn extend(&self, buffer: &mut TokenBuffer) {
+        self.inner.write().extend(buffer)
     }
 
     fn persist(&self) -> Result<(), ()> {
         self.inner.write().persist().map_err(|_| ())
+    }
+
+    fn commit(&self, buf: &mut TokenBuffer) -> Self::Identifier {
+        self.inner.write().commit(buf)
+    }
+
+    fn return_token(&self, token: Token) {
+        self.inner.write().return_token(token)
     }
 }

@@ -5,13 +5,13 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use core::cell::RefCell;
+use std::borrow::BorrowMut;
 
 use alloc::rc::Rc;
 
 use bytecheck::CheckBytes;
 use rkyv::validation::validators::DefaultValidator;
-use rkyv::Fallible;
-use rkyv::{Archive, Deserialize, Serialize};
+use rkyv::{Archive, Deserialize, Fallible, Serialize};
 
 use crate::storage::StoreRef;
 use crate::storage::{Ident, StoreProvider, Stored, UnwrapInfallible};
@@ -84,14 +84,12 @@ where
     }
 }
 
-impl<'a, C, A, I, S> Serialize<S> for Link<C, A, I>
+impl<C, A, I, S> Serialize<S> for Link<C, A, I>
 where
-    C: Compound<A, I>
-        + Serialize<S>
-        + for<'any> Serialize<StoreSerializer<'any, I>>,
+    C: Compound<A, I> + Serialize<S> + Serialize<StoreSerializer<I>>,
     A: Clone + Annotation<C::Leaf>,
     I: Clone,
-    S: StoreProvider<I>,
+    S: BorrowMut<StoreSerializer<I>> + Fallible,
 {
     fn serialize(
         &self,
@@ -108,13 +106,12 @@ where
                     *annotation.borrow_mut() = Some(a.clone());
                     a
                 };
-                let to_insert = &(**rc);
+                let to_serialize = &(**rc);
 
-                let store = ser.store().clone();
-
-                let stored = store.put(to_insert);
-
-                Ok((stored.ident().clone(), a))
+                let store_ser = ser.borrow_mut();
+                store_ser.serialize(to_serialize);
+                let id = Ident::new(store_ser.commit());
+                Ok((id, a))
             }
             Link::Stored { stored, a } => {
                 Ok((stored.ident().clone(), a.clone()))
@@ -173,6 +170,7 @@ impl<C, A, I> Link<C, A, I> {
         C::Archived: Deserialize<C, StoreRef<I>>
             + for<'a> CheckBytes<DefaultValidator<'a>>,
     {
+        println!("unlink");
         match self {
             Link::Memory { rc, .. } => match Rc::try_unwrap(rc) {
                 Ok(c) => c,
