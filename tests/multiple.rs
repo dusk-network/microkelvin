@@ -19,9 +19,7 @@ use microkelvin::{
     OffsetLen, Primitive,
 };
 
-#[derive(
-    Default, Clone, Archive, Serialize, Debug, Deserialize, CheckBytes,
-)]
+#[derive(Clone, Archive, Serialize, Debug, Deserialize, CheckBytes)]
 #[archive(as = "Self")]
 #[archive(bound(archive = "
   K: Primitive,
@@ -30,6 +28,15 @@ use microkelvin::{
 struct Anno<K> {
     max: MaxKey<K>,
     card: Cardinality,
+}
+
+impl<K> Default for Anno<K> {
+    fn default() -> Self {
+        Self {
+            max: Default::default(),
+            card: Default::default(),
+        }
+    }
 }
 
 impl<K> Borrow<MaxKey<K>> for Anno<K> {
@@ -47,7 +54,7 @@ impl<K> Borrow<Cardinality> for Anno<K> {
 impl<Leaf, K> Annotation<Leaf> for Anno<K>
 where
     Leaf: Keyed<K>,
-    K: Primitive + Ord + Default + Clone,
+    K: Primitive + Ord + Clone,
 {
     fn from_leaf(leaf: &Leaf) -> Self {
         Anno {
@@ -59,7 +66,7 @@ where
 
 impl<K, A> Combine<A> for Anno<K>
 where
-    K: Clone + Ord + Default,
+    K: Clone + Ord,
     A: Borrow<MaxKey<K>> + Borrow<Cardinality> + Archive<Archived = A>,
 {
     fn combine(&mut self, other: &A) {

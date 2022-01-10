@@ -31,12 +31,9 @@ mod persist_tests {
     }
 
     fn persist() -> Result<(), io::Error> {
-        println!("a");
         let store = StoreRef::new(HostStore::new());
 
         let n: u64 = 16;
-
-        println!("b");
 
         let mut list = LinkedList::<_, Cardinality, _>::new();
 
@@ -45,11 +42,7 @@ mod persist_tests {
             list.push(i);
         }
 
-        println!("c");
-
         let stored = store.store(&list);
-
-        println!("d");
 
         // first empty the original
 

@@ -170,7 +170,6 @@ impl<C, A, I> Link<C, A, I> {
         C::Archived: Deserialize<C, StoreRef<I>>
             + for<'a> CheckBytes<DefaultValidator<'a>>,
     {
-        println!("unlink");
         match self {
             Link::Memory { rc, .. } => match Rc::try_unwrap(rc) {
                 Ok(c) => c,

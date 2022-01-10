@@ -22,7 +22,7 @@ use rkyv::{
 #[archive(bound(serialize = "
   T: Clone + Serialize<StoreSerializer<I>>, 
   A: Clone + Clone + Annotation<T>,
-  I: Clone + Default,
+  I: Clone,
   __S: Sized + BorrowMut<StoreSerializer<I>>"))]
 #[archive(bound(deserialize = "
   T::Archived: Deserialize<T, StoreRef<I>>,

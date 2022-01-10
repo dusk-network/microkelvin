@@ -220,20 +220,14 @@ impl Store for HostStore {
     }
 
     fn request_buffer(&self) -> TokenBuffer {
-        println!("waiting in write");
         // loop waiting to aquire write token
         let mut guard = self.inner.write();
-        println!("got in write");
-
-        println!("grabbing token!");
 
         let token = loop {
             if let Some(token) = guard.token.take() {
                 break token;
             } else {
-                println!("no token?");
                 guard = self.inner.write();
-                println!("tried again?");
             }
         };
 
