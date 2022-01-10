@@ -3,7 +3,6 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
-
 //! Microkelvin
 //!
 //! A library for dealing with tree-shaped data. It has three parts:
@@ -42,6 +41,7 @@ pub use wrappers::{MaybeArchived, MaybeStored, Primitive};
 mod storage;
 pub use storage::{
     Ident, OffsetLen, Store, StoreProvider, StoreRef, StoreSerializer, Stored,
+    Token, TokenBuffer,
 };
 
 #[cfg(feature = "host")]

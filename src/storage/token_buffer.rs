@@ -6,17 +6,22 @@
 
 use rkyv::{ser::Serializer, Fallible};
 
+/// Marker type to be associated with write permissions to a backend
 #[derive(Debug)]
 pub enum Token {
+    /// Token is active, being passed around or used to guard the write buffer
     Active,
+    /// Token is somewhere else, no write permissions can be granted
     Vacant,
 }
 
 impl Token {
+    /// Create a new token
     pub fn new() -> Self {
         Token::Active
     }
 
+    /// Is the token being passed around?
     pub fn vacant(&self) -> bool {
         match self {
             Token::Active => false,
@@ -24,6 +29,7 @@ impl Token {
         }
     }
 
+    /// Take the token from the slot, if any
     pub fn take(&mut self) -> Option<Token> {
         match self {
             Token::Active => {
@@ -34,6 +40,7 @@ impl Token {
         }
     }
 
+    /// Put the token back in its place
     pub fn return_token(&mut self, token: Token) {
         debug_assert!(self.vacant());
         debug_assert!(!token.vacant());
@@ -41,6 +48,7 @@ impl Token {
     }
 }
 
+/// Writebuffer guarded by a `Token`
 pub struct TokenBuffer {
     token: Token,
     buffer: *mut [u8],
@@ -48,6 +56,7 @@ pub struct TokenBuffer {
 }
 
 impl TokenBuffer {
+    /// Construct a new `TokenBuffer` from a mutable slice of bytes and a token
     pub fn new(token: Token, buffer: &mut [u8]) -> Self {
         TokenBuffer {
             token,
@@ -64,20 +73,31 @@ impl TokenBuffer {
         }
     }
 
+    /// Consume the buffer, returning the held token
     pub fn consume(self) -> Token {
         self.token
     }
 
+    /// Return bytes that have been written into the tokenbuffer
     pub fn written_bytes(&self) -> &[u8] {
         let slice = unsafe { &*self.buffer };
         &slice[..self.written]
     }
 
-    pub fn unwritten_bytes(&mut self) -> &mut [u8] {
-        let slice = unsafe { &mut *self.buffer };
+    /// Return bytes that have not yet been written
+    ///
+    /// # Safety
+    /// It is up to the caller to assure that Only one mutable reference may
+    /// exist at a time
+    pub unsafe fn unwritten_bytes(&mut self) -> &mut [u8] {
+        let slice = &mut *self.buffer;
         &mut slice[self.written..]
     }
 
+    /// Bump the buffer pointer forward, and reduce the internal count of
+    /// written bytes.
+    ///
+    /// Returns the amount of bytes written into the lbuffer   
     pub fn advance(&mut self) -> usize {
         let written = self.written;
         self.buffer = &mut unsafe { &mut *self.buffer }[written..];
@@ -85,6 +105,7 @@ impl TokenBuffer {
         written
     }
 
+    /// Remap TokenBuffer to the provided bytesg
     pub fn remap(&mut self, buffer: &mut [u8]) {
         self.buffer = buffer;
         self.written = 0;
@@ -99,7 +120,7 @@ impl Serializer for TokenBuffer {
     }
 
     fn write(&mut self, bytes: &[u8]) -> Result<(), Self::Error> {
-        let remaining_buffer = self.unwritten_bytes();
+        let remaining_buffer = unsafe { self.unwritten_bytes() };
         let bytes_length = bytes.len();
         if remaining_buffer.len() >= bytes_length {
             remaining_buffer[..bytes_length].copy_from_slice(bytes);
