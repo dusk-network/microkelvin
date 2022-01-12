@@ -15,7 +15,6 @@ use crate::{Ident, Store, StoreProvider, StoreSerializer, Stored};
 
 use super::{Token, TokenBuffer};
 
-// TODO: Create alternative for no_alloc
 /// A clonable reference to a store
 pub struct StoreRef<I> {
     inner: Arc<dyn Store<Identifier = I>>,
@@ -78,8 +77,8 @@ impl<I> StoreRef<I> {
         self.inner.commit(buffer)
     }
 
-    /// Commit written data, returns an identifier
-    pub fn extend(&self, buffer: &mut TokenBuffer) {
+    /// Request extra space n the underlying buffer
+    pub fn extend(&self, buffer: &mut TokenBuffer) -> Result<(), ()> {
         self.inner.extend(buffer)
     }
 
