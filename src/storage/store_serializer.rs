@@ -4,17 +4,39 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use rkyv::{ser::Serializer, Fallible, Infallible, Serialize};
+use core::ops::{Deref, DerefMut};
+
+use rkyv::{
+    ser::{serializers::BufferScratch, ScratchSpace, Serializer},
+    Fallible, Infallible, Serialize,
+};
 
 use crate::{StoreProvider, StoreRef};
 
 use super::TokenBuffer;
+
+struct Buffer<B>(B);
+
+impl<B> Deref for Buffer<B> {
+    type Target = B;
+
+    fn deref(&self) -> &B {
+        &self.0
+    }
+}
+
+impl<B> DerefMut for Buffer<B> {
+    fn deref_mut(&mut self) -> &mut B {
+        &mut self.0
+    }
+}
 
 /// A buffered serializer wrapping a `StoreRef`
 pub struct StoreSerializer<I> {
     #[allow(unused)]
     store: StoreRef<I>,
     buffer: TokenBuffer,
+    scratch: BufferScratch<Buffer<[u8; 1024]>>,
 }
 
 impl<I> StoreProvider<I> for StoreSerializer<I> {
@@ -26,7 +48,11 @@ impl<I> StoreProvider<I> for StoreSerializer<I> {
 impl<I> StoreSerializer<I> {
     /// Creates a new serializer from a buffer
     pub fn new(store: StoreRef<I>, buffer: TokenBuffer) -> Self {
-        StoreSerializer { store, buffer }
+        StoreSerializer {
+            store,
+            buffer,
+            scratch: BufferScratch::new(Buffer([0u8; 1024])),
+        }
     }
 
     /// Serialize into store
@@ -41,6 +67,15 @@ impl<I> StoreSerializer<I> {
     /// Commit the bytes written
     pub fn commit(&mut self) -> I {
         self.store.commit(&mut self.buffer)
+    }
+
+    /// Get access to the written bytes without writing them into the backing
+    /// storage
+    pub fn spill_bytes<F, R>(self, f: F) -> R
+    where
+        F: Fn(&[u8]) -> R,
+    {
+        f(self.buffer.written_bytes())
     }
 }
 
@@ -60,6 +95,26 @@ impl<I> Serializer for StoreSerializer<I> {
                 Err(_) => self.store.extend(&mut self.buffer),
             }
         }
+    }
+}
+
+impl<I> ScratchSpace for StoreSerializer<I> {
+    unsafe fn push_scratch(
+        &mut self,
+        layout: core::alloc::Layout,
+    ) -> Result<core::ptr::NonNull<[u8]>, Self::Error> {
+        // TODO, proper error handling
+        Ok(self.scratch.push_scratch(layout).unwrap())
+    }
+
+    unsafe fn pop_scratch(
+        &mut self,
+        ptr: core::ptr::NonNull<u8>,
+        layout: core::alloc::Layout,
+    ) -> Result<(), Self::Error> {
+        // TODO, proper error handling
+        self.scratch.pop_scratch(ptr, layout).unwrap();
+        Ok(())
     }
 }
 

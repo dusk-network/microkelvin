@@ -18,14 +18,12 @@ use super::{Token, TokenBuffer};
 // TODO: Create alternative for no_alloc
 /// A clonable reference to a store
 pub struct StoreRef<I> {
-    inner: Arc<dyn Store<Identifier = I> + Send + Sync>,
+    inner: Arc<dyn Store<Identifier = I>>,
 }
 
 impl<I> StoreRef<I> {
     /// Creates a new StoreReference
-    pub fn new<S: 'static + Store<Identifier = I> + Send + Sync>(
-        store: S,
-    ) -> StoreRef<I> {
+    pub fn new<S: 'static + Store<Identifier = I>>(store: S) -> StoreRef<I> {
         StoreRef {
             inner: Arc::new(store),
         }

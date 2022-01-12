@@ -4,8 +4,8 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use core::borrow::BorrowMut;
 use core::cell::RefCell;
-use std::borrow::BorrowMut;
 
 use alloc::rc::Rc;
 

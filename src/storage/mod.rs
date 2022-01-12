@@ -51,6 +51,16 @@ impl OffsetLen {
     pub fn inner(&self) -> u64 {
         self.0.into()
     }
+
+    /// The offset in storage
+    pub fn offset(&self) -> u64 {
+        u64::from(self.0)
+    }
+
+    /// The length of the byte representation
+    pub fn len(&self) -> u16 {
+        u16::from(self.1)
+    }
 }
 
 /// An identifier representing a value stored somewhere else
@@ -64,7 +74,7 @@ impl<T, I> core::fmt::Debug for Ident<T, I>
 where
     I: core::fmt::Debug,
 {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("Ident").field("id", &self.id).finish()
     }
 }
