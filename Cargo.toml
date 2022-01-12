@@ -1,6 +1,6 @@
 [package]
 name = "microkelvin"
-version = "0.13.0-rc.0"
+version = "0.13.0-rc.1"
 authors = ["Kristoffer Ström <kristoffer@dusk.network>"]
 edition = "2018"
 keywords = ["datastructures"]
@@ -14,7 +14,6 @@ parking_lot = { version = "0.11.2", optional = true }
 rkyv = { version = "0.7.29", default_features = false, features = ["size_32", "archive_le", "validation"] }
 memmap = { version = "0.7.0", optional = true }
 bytecheck = { version = "0.6.7", default_features = false }
-take_mut = "0.2.2"
 
 [dev-dependencies]
 rand = "0.8.4"

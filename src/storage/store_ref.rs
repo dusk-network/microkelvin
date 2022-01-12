@@ -6,6 +6,7 @@
 
 use alloc::sync::Arc;
 use core::convert::Infallible;
+use rkyv::ser::Serializer;
 
 use bytecheck::CheckBytes;
 use rkyv::validation::validators::DefaultValidator;
@@ -50,7 +51,15 @@ impl<I> StoreRef<I> {
         Ident::new(id)
     }
 
-    /// Return a serializer assoociated with this store
+    /// Put raw bytes into the store, returning an Ident.
+    pub fn put_raw(&self, bytes: &[u8]) -> I {
+        let mut ser = self.serializer();
+        // write the bytes using the `Serializer` directly.
+        ser.write(bytes).unwrap();
+        ser.commit()
+    }
+
+    /// Return a serializer associated with this store
     pub fn serializer(&self) -> StoreSerializer<I> {
         StoreSerializer::new(self.clone(), self.inner.request_buffer())
     }
@@ -61,10 +70,15 @@ impl<I> StoreRef<I> {
         T: Archive,
         T::Archived: for<'a> CheckBytes<DefaultValidator<'a>>,
     {
-        let buffer = self.inner.get(ident.erase());
+        let buffer = self.get_raw(ident.erase());
 
         let root = check_archived_root::<T>(buffer).unwrap();
         root
+    }
+
+    /// Gets a reference to the backing bytes of an archived value
+    pub fn get_raw(&self, i: &I) -> &[u8] {
+        self.inner.get(i)
     }
 
     /// Persist the storage to a backend
