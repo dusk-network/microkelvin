@@ -4,27 +4,26 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use core::borrow::Borrow;
+use core::borrow::BorrowMut;
 use core::cell::RefCell;
 
 use alloc::rc::Rc;
 
-use rkyv::Fallible;
-use rkyv::{Archive, Deserialize, Serialize};
+use bytecheck::CheckBytes;
+use rkyv::validation::validators::DefaultValidator;
+use rkyv::{Archive, Deserialize, Fallible, Serialize};
 
-use crate::storage::{Ident, Storage, Store, Stored, UnwrapInfallible};
+use crate::storage::StoreRef;
+use crate::storage::{Ident, StoreProvider, Stored, UnwrapInfallible};
 use crate::wrappers::MaybeStored;
-use crate::{ARef, Annotation, Compound};
+use crate::{ARef, Annotation, Compound, StoreSerializer};
 
 #[derive(Clone)]
 /// The Link struct is an annotated merkle link to a compound type
 ///
 /// The link takes care of lazily evaluating the annotation of the inner type,
 /// and to load it from memory or backend when needed.
-pub enum Link<C, A, S>
-where
-    S: Store,
-{
+pub enum Link<C, A, I> {
     /// A Link to a node in memory
     Memory {
         /// the underlying rc
@@ -35,38 +34,31 @@ where
     /// A Link to a stored node
     Stored {
         /// archived at offset
-        stored: Stored<C, S>,
+        stored: Stored<C, I>,
         /// the final annotation
         a: A,
     },
 }
 
+#[derive(CheckBytes)]
 /// The archived version of a link, contains an identifier and an annotation
-pub struct ArchivedLink<C, A, S>(Ident<S::Identifier, C>, A)
-where
-    S: Store;
+pub struct ArchivedLink<C, A, I>(Ident<C, I>, A);
 
-impl<C, A, S> ArchivedLink<C, A, S>
-where
-    S: Store,
-{
+impl<C, A, I> ArchivedLink<C, A, I> {
     /// Get a reference to the link annotation
     pub fn annotation(&self) -> &A {
         &self.1
     }
 
     /// Get a reference to the link id     
-    pub fn ident<'a>(&self) -> &Ident<S::Identifier, C> {
+    pub fn ident<'a>(&self) -> &Ident<C, I> {
         &self.0
     }
 }
 
-impl<C, A, S> Archive for Link<C, A, S>
-where
-    S: Store,
-{
-    type Archived = ArchivedLink<C, A, S>;
-    type Resolver = (Ident<S::Identifier, C>, A);
+impl<C, A, I> Archive for Link<C, A, I> {
+    type Archived = ArchivedLink<C, A, I>;
+    type Resolver = (Ident<C, I>, A);
 
     unsafe fn resolve(
         &self,
@@ -78,35 +70,31 @@ where
     }
 }
 
-impl<C, A, S, S2> Deserialize<Link<C, A, S>, S2> for ArchivedLink<C, A, S>
+impl<C, A, I, D> Deserialize<Link<C, A, I>, D> for ArchivedLink<C, A, I>
 where
-    S: Store,
-    S2: Store,
-    for<'a> &'a mut S2: Borrow<S>,
     A: Clone,
+    I: Clone,
+    D: StoreProvider<I>,
 {
-    fn deserialize(
-        &self,
-        store: &mut S2,
-    ) -> Result<Link<C, A, S>, <S as Fallible>::Error> {
-        let local_store: &S = store.borrow();
+    fn deserialize(&self, de: &mut D) -> Result<Link<C, A, I>, D::Error> {
         Ok(Link::Stored {
-            stored: Stored::new(local_store.clone(), self.0),
+            stored: Stored::new(de.store().clone(), self.0.clone()),
             a: self.1.clone(),
         })
     }
 }
 
-impl<C, A, S> Serialize<S::Storage> for Link<C, A, S>
+impl<C, A, I, S> Serialize<S> for Link<C, A, I>
 where
-    C: Compound<A, S> + Serialize<S::Storage>,
+    C: Compound<A, I> + Serialize<S> + Serialize<StoreSerializer<I>>,
     A: Clone + Annotation<C::Leaf>,
-    S: Store,
+    I: Clone,
+    S: BorrowMut<StoreSerializer<I>> + Fallible,
 {
     fn serialize(
         &self,
-        ser: &mut S::Storage,
-    ) -> Result<Self::Resolver, S::Error> {
+        ser: &mut S,
+    ) -> Result<Self::Resolver, <S as Fallible>::Error> {
         match self {
             Link::Memory { rc, annotation } => {
                 let borrow = annotation.borrow();
@@ -118,19 +106,23 @@ where
                     *annotation.borrow_mut() = Some(a.clone());
                     a
                 };
-                let to_insert = &(**rc);
-                let ident = Ident::new(ser.put(to_insert));
-                Ok((ident, a))
+                let to_serialize = &(**rc);
+
+                let store_ser = ser.borrow_mut();
+                store_ser.serialize(to_serialize);
+                let id = Ident::new(store_ser.commit());
+                Ok((id, a))
             }
-            Link::Stored { stored, a } => Ok((*stored.ident(), a.clone())),
+            Link::Stored { stored, a } => {
+                Ok((stored.ident().clone(), a.clone()))
+            }
         }
     }
 }
 
-impl<C, A, S> Default for Link<C, A, S>
+impl<C, A, I> Default for Link<C, A, I>
 where
     C: Default,
-    S: Store,
 {
     fn default() -> Self {
         Link::Memory {
@@ -140,10 +132,7 @@ where
     }
 }
 
-impl<C, A, S> Link<C, A, S>
-where
-    S: Store,
-{
+impl<C, A, I> Link<C, A, I> {
     /// Create a new link
     pub fn new(compound: C) -> Self {
         Link::Memory {
@@ -155,7 +144,7 @@ where
     /// Returns a reference to to the annotation stored
     pub fn annotation(&self) -> ARef<A>
     where
-        C: Compound<A, S>,
+        C: Compound<A, I>,
         C::Leaf: Archive,
         A: Annotation<C::Leaf>,
     {
@@ -177,8 +166,9 @@ where
     /// Unwraps the underlying value, clones or deserializes it
     pub fn unlink(self) -> C
     where
-        C: Compound<A, S> + Clone,
-        C::Archived: Deserialize<C, S>,
+        C: Compound<A, I> + Clone,
+        C::Archived: Deserialize<C, StoreRef<I>>
+            + for<'a> CheckBytes<DefaultValidator<'a>>,
     {
         match self {
             Link::Memory { rc, .. } => match Rc::try_unwrap(rc) {
@@ -196,7 +186,7 @@ where
     }
 
     /// Returns a reference to the inner node, possibly in its stored form
-    pub fn inner<'a>(&'a self) -> MaybeStored<'a, C, S>
+    pub fn inner<'a>(&'a self) -> MaybeStored<'a, C, I>
     where
         C: Archive,
     {
@@ -212,7 +202,8 @@ where
     pub fn inner_mut(&mut self) -> &mut C
     where
         C: Archive + Clone,
-        C::Archived: Deserialize<C, S>,
+        C::Archived: Deserialize<C, StoreRef<I>>
+            + for<'a> CheckBytes<DefaultValidator<'a>>,
     {
         match self {
             Link::Memory { rc, annotation } => {

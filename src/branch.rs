@@ -7,30 +7,31 @@
 use core::marker::PhantomData;
 
 use alloc::vec::Vec;
+use bytecheck::CheckBytes;
+use rkyv::validation::validators::DefaultValidator;
 use rkyv::Archive;
 
 use crate::compound::{ArchivedChild, ArchivedCompound, Child, Compound};
+use crate::storage::StoreRef;
 use crate::walk::{All, Discriminant, Step, Walkable, Walker};
 use crate::wrappers::{MaybeArchived, MaybeStored};
-use crate::{ARef, Annotation, Store};
+use crate::{ARef, Annotation};
 
-pub struct Level<'a, C, A, S>
+pub struct Level<'a, C, A, I>
 where
-    S: Store,
     C: Archive,
 {
     offset: usize,
     // pub to be accesible from `walk.rs`
     pub(crate) node: MaybeArchived<'a, C>,
-    _marker: PhantomData<(A, S)>,
+    _marker: PhantomData<(A, I)>,
 }
 
-impl<'a, C, A, S> Level<'a, C, A, S>
+impl<'a, C, A, I> Level<'a, C, A, I>
 where
-    S: Store,
-    C: Archive + Compound<A, S>,
+    C: Archive + Compound<A, I>,
 {
-    pub fn new(root: MaybeArchived<'a, C>) -> Level<'a, C, A, S> {
+    pub fn new(root: MaybeArchived<'a, C>) -> Level<'a, C, A, I> {
         Level {
             offset: 0,
             node: root,
@@ -48,11 +49,10 @@ where
     }
 }
 
-impl<'a, C, A, S> Walkable<C, A, S> for &'a Level<'a, C, A, S>
+impl<'a, C, A, I> Walkable<C, A, I> for &'a Level<'a, C, A, I>
 where
-    S: Store,
-    C: Compound<A, S>,
-    C::Archived: ArchivedCompound<C, A, S>,
+    C: Compound<A, I>,
+    C::Archived: ArchivedCompound<C, A, I>,
     A: Annotation<C::Leaf>,
 {
     fn probe(&self, ofs: usize) -> Discriminant<C::Leaf, A> {
@@ -81,20 +81,18 @@ where
     }
 }
 
-pub struct PartialBranch<'a, C, A, S>
+pub struct PartialBranch<'a, C, A, I>
 where
-    S: Store,
     C: Archive,
 {
-    levels: Vec<Level<'a, C, A, S>>,
-    store: Option<S>,
+    levels: Vec<Level<'a, C, A, I>>,
+    store: Option<StoreRef<I>>,
 }
 
-impl<'a, C, A, S> PartialBranch<'a, C, A, S>
+impl<'a, C, A, I> PartialBranch<'a, C, A, I>
 where
-    S: Store,
-    C: Archive + Compound<A, S>,
-    C::Archived: ArchivedCompound<C, A, S>,
+    C: Archive + Compound<A, I>,
+    C::Archived: ArchivedCompound<C, A, I>,
     C::Leaf: Archive,
 {
     fn new(root: MaybeArchived<'a, C>) -> Self {
@@ -104,7 +102,7 @@ where
         }
     }
 
-    fn new_with_store(root: MaybeArchived<'a, C>, store: S) -> Self {
+    fn new_with_store(root: MaybeArchived<'a, C>, store: StoreRef<I>) -> Self {
         PartialBranch {
             levels: vec![Level::new(root)],
             store: Some(store),
@@ -115,13 +113,13 @@ where
         self.levels.len()
     }
 
-    pub fn levels(&self) -> &[Level<C, A, S>] {
+    pub fn levels(&self) -> &[Level<C, A, I>] {
         &self.levels
     }
 
     fn leaf(&self) -> Option<MaybeArchived<C::Leaf>>
     where
-        C: Compound<A, S>,
+        C: Compound<A, I>,
         C::Leaf: Archive,
     {
         let top = self.top();
@@ -139,11 +137,11 @@ where
         }
     }
 
-    fn top(&self) -> &Level<C, A, S> {
+    fn top(&self) -> &Level<C, A, I> {
         self.levels.last().expect("Never empty")
     }
 
-    fn top_mut(&mut self) -> &mut Level<'a, C, A, S> {
+    fn top_mut(&mut self) -> &mut Level<'a, C, A, I> {
         self.levels.last_mut().expect("Never empty")
     }
 
@@ -151,7 +149,7 @@ where
         *self.top_mut().offset_mut() += 1;
     }
 
-    fn pop(&mut self) -> Option<Level<'a, C, A, S>> {
+    fn pop(&mut self) -> Option<Level<'a, C, A, I>> {
         // We never pop the root
         if self.levels.len() > 1 {
             self.levels.pop()
@@ -162,19 +160,22 @@ where
 
     fn walk<W>(&mut self, walker: &mut W) -> Option<()>
     where
-        W: Walker<C, A, S>,
-        C: Compound<A, S>,
+        C: Compound<A, I>,
+        C::Archived: ArchivedCompound<C, A, I>
+            + for<'any> CheckBytes<DefaultValidator<'any>>,
+        C::Leaf: 'a + Archive,
         A: Annotation<C::Leaf>,
+        W: Walker<C, A, I>,
     {
-        enum State<'a, C, A, S>
+        enum State<'a, C, A, I>
         where
-            S: Store,
-            C: Archive + Compound<A, S>,
-            C::Archived: ArchivedCompound<C, A, S>,
+            C: Compound<A, I>,
+            C::Archived: for<'any> CheckBytes<DefaultValidator<'any>>,
             C::Leaf: Archive,
+            A: Annotation<C::Leaf>,
         {
             Init,
-            Push(Level<'a, C, A, S>),
+            Push(Level<'a, C, A, I>),
             Pop,
         }
 
@@ -203,10 +204,10 @@ where
                             Child::Leaf(_) => return Some(()),
                             Child::Link(link) => match link.inner() {
                                 MaybeStored::Memory(c) => {
-                                    let level = Level::<C, A, S>::new(
+                                    let level = Level::<C, A, I>::new(
                                         MaybeArchived::Memory(c),
                                     );
-                                    let extended: Level<'a, C, A, S> =
+                                    let extended: Level<'a, C, A, I> =
                                         unsafe { core::mem::transmute(level) };
                                     state = State::Push(extended);
                                     continue;
@@ -227,7 +228,7 @@ where
                                 ArchivedChild::Leaf(_) => return Some(()),
                                 ArchivedChild::Link(link) => {
                                     if let Some(ref store) = self.store {
-                                        store.get_raw(link.ident())
+                                        store.get(link.ident())
                                     } else {
                                         unreachable!()
                                     }
@@ -239,9 +240,9 @@ where
 
                     // continued archived branch
 
-                    let level: Level<C, A, S> =
+                    let level: Level<C, A, I> =
                         Level::new(MaybeArchived::Archived(archived));
-                    let extended: Level<'a, C, A, S> =
+                    let extended: Level<'a, C, A, I> =
                         unsafe { core::mem::transmute(level) };
                     state = State::Push(extended);
                 }
@@ -254,11 +255,10 @@ where
     }
 }
 
-impl<'a, C, A, S> Branch<'a, C, A, S>
+impl<'a, C, A, I> Branch<'a, C, A, I>
 where
-    S: Store,
-    C: Archive + Compound<A, S>,
-    C::Archived: ArchivedCompound<C, A, S>,
+    C: Archive + Compound<A, I>,
+    C::Archived: ArchivedCompound<C, A, I>,
     C::Leaf: Archive,
 {
     /// Returns the depth of the branch
@@ -267,7 +267,7 @@ where
     }
 
     /// Returns a slice into the levels of the tree.
-    pub fn levels(&self) -> &[Level<C, A, S>] {
+    pub fn levels(&self) -> &[Level<C, A, I>] {
         self.0.levels()
     }
 
@@ -276,9 +276,9 @@ where
     pub fn map_leaf<M>(
         self,
         closure: fn(MaybeArchived<'a, C::Leaf>) -> M,
-    ) -> MappedBranch<'a, C, A, S, M>
+    ) -> MappedBranch<'a, C, A, I, M>
     where
-        C: Compound<A, S>,
+        C: Compound<A, I>,
         M: 'a,
     {
         MappedBranch {
@@ -296,9 +296,12 @@ where
     /// walk failed.
     pub fn walk<W>(root: MaybeArchived<'a, C>, mut walker: W) -> Option<Self>
     where
-        C: Compound<A, S>,
-        W: Walker<C, A, S>,
+        C: Compound<A, I>,
+        C::Archived: ArchivedCompound<C, A, I>
+            + for<'any> CheckBytes<DefaultValidator<'any>>,
+        C::Leaf: 'a + Archive,
         A: Annotation<C::Leaf>,
+        W: Walker<C, A, I>,
     {
         let mut partial = PartialBranch::new(root);
         partial.walk(&mut walker).map(|()| Branch(partial))
@@ -309,12 +312,15 @@ where
     pub fn walk_with_store<W>(
         root: MaybeArchived<'a, C>,
         mut walker: W,
-        store: S,
+        store: StoreRef<I>,
     ) -> Option<Self>
     where
-        C: Compound<A, S>,
-        W: Walker<C, A, S>,
+        C: Compound<A, I>,
+        C::Archived: ArchivedCompound<C, A, I>
+            + for<'any> CheckBytes<DefaultValidator<'any>>,
+        C::Leaf: 'a + Archive,
         A: Annotation<C::Leaf>,
+        W: Walker<C, A, I>,
     {
         let mut partial = PartialBranch::new_with_store(root, store);
         partial.walk(&mut walker).map(|()| Branch(partial))
@@ -325,30 +331,27 @@ where
 ///
 /// Branche are always guaranteed to point at a leaf, and can be dereferenced
 /// to the pointed-at leaf.
-pub struct Branch<'a, C, A, S>(PartialBranch<'a, C, A, S>)
+pub struct Branch<'a, C, A, I>(PartialBranch<'a, C, A, I>)
 where
-    S: Store,
     C: Archive;
 
 /// A branch that applies a map to its leaf
-pub struct MappedBranch<'a, C, A, S, M>
+pub struct MappedBranch<'a, C, A, I, M>
 where
-    S: Store,
-    C: Compound<A, S>,
+    C: Compound<A, I>,
     C::Leaf: Archive,
     M: 'a,
 {
-    inner: Branch<'a, C, A, S>,
+    inner: Branch<'a, C, A, I>,
     closure: MapClosure<'a, C::Leaf, M>,
 }
 
 type MapClosure<'a, L, M> = fn(MaybeArchived<'a, L>) -> M;
 
-impl<'a, C, A, S, M> MappedBranch<'a, C, A, S, M>
+impl<'a, C, A, I, M> MappedBranch<'a, C, A, I, M>
 where
-    S: Store,
-    C: Compound<A, S>,
-    C::Archived: ArchivedCompound<C, A, S>,
+    C: Compound<A, I>,
+    C::Archived: ArchivedCompound<C, A, I>,
     C::Leaf: Archive,
 {
     /// Get the mapped leaf of the branch
@@ -357,42 +360,41 @@ where
     }
 }
 
-pub enum BranchIterator<'a, C, A, S, W>
+pub enum BranchIterator<'a, C, A, I, W>
 where
-    S: Store,
     C: Archive,
 {
-    Initial(Branch<'a, C, A, S>, W),
-    Intermediate(Branch<'a, C, A, S>, W),
+    Initial(Branch<'a, C, A, I>, W),
+    Intermediate(Branch<'a, C, A, I>, W),
     Exhausted,
 }
 
 // iterators
-impl<'a, C, A, S> IntoIterator for Branch<'a, C, A, S>
+impl<'a, C, A, I> IntoIterator for Branch<'a, C, A, I>
 where
-    S: Store,
-    C: Compound<A, S>,
+    C: Compound<A, I>,
+    C::Archived: ArchivedCompound<C, A, I>
+        + for<'any> CheckBytes<DefaultValidator<'any>>,
     C::Leaf: 'a + Archive,
-    C::Archived: ArchivedCompound<C, A, S>,
     A: Annotation<C::Leaf>,
 {
     type Item = MaybeArchived<'a, C::Leaf>;
 
-    type IntoIter = BranchIterator<'a, C, A, S, All>;
+    type IntoIter = BranchIterator<'a, C, A, I, All>;
 
     fn into_iter(self) -> Self::IntoIter {
         BranchIterator::Initial(self, All)
     }
 }
 
-impl<'a, C, A, S, W> Iterator for BranchIterator<'a, C, A, S, W>
+impl<'a, C, A, I, W> Iterator for BranchIterator<'a, C, A, I, W>
 where
-    S: Store,
-    C: Compound<A, S>,
+    C: Compound<A, I>,
+    C::Archived: ArchivedCompound<C, A, I>
+        + for<'any> CheckBytes<DefaultValidator<'any>>,
     C::Leaf: 'a + Archive,
-    C::Archived: ArchivedCompound<C, A, S>,
     A: Annotation<C::Leaf>,
-    W: Walker<C, A, S>,
+    W: Walker<C, A, I>,
 {
     type Item = MaybeArchived<'a, C::Leaf>;
 
@@ -431,29 +433,28 @@ where
     }
 }
 
-pub enum MappedBranchIterator<'a, C, A, S, R, W>
+pub enum MappedBranchIterator<'a, C, A, I, R, W>
 where
-    S: Store,
-    C: Archive + Compound<A, S>,
+    C: Archive + Compound<A, I>,
     C::Leaf: Archive,
 {
-    Initial(Branch<'a, C, A, S>, MapClosure<'a, C::Leaf, R>, W),
-    Intermediate(Branch<'a, C, A, S>, MapClosure<'a, C::Leaf, R>, W),
+    Initial(Branch<'a, C, A, I>, MapClosure<'a, C::Leaf, R>, W),
+    Intermediate(Branch<'a, C, A, I>, MapClosure<'a, C::Leaf, R>, W),
     Exhausted,
 }
 
-impl<'a, C, A, S, M> IntoIterator for MappedBranch<'a, C, A, S, M>
+impl<'a, C, A, I, M> IntoIterator for MappedBranch<'a, C, A, I, M>
 where
-    S: Store,
-    C: Compound<A, S>,
-    C::Archived: ArchivedCompound<C, A, S>,
-    C::Leaf: Archive,
+    C: Compound<A, I>,
+    C::Archived: ArchivedCompound<C, A, I>
+        + for<'any> CheckBytes<DefaultValidator<'any>>,
+    C::Leaf: 'a + Archive,
     A: Annotation<C::Leaf>,
     M: 'a + Archive,
 {
     type Item = M;
 
-    type IntoIter = MappedBranchIterator<'a, C, A, S, M, All>;
+    type IntoIter = MappedBranchIterator<'a, C, A, I, M, All>;
 
     fn into_iter(self) -> Self::IntoIter {
         let MappedBranch { inner, closure } = self;
@@ -461,14 +462,14 @@ where
     }
 }
 
-impl<'a, C, A, S, M, W> Iterator for MappedBranchIterator<'a, C, A, S, M, W>
+impl<'a, C, A, I, M, W> Iterator for MappedBranchIterator<'a, C, A, I, M, W>
 where
-    S: Store,
-    C: Compound<A, S>,
-    C::Archived: ArchivedCompound<C, A, S>,
+    C: Compound<A, I>,
+    C::Archived: ArchivedCompound<C, A, I>
+        + for<'any> CheckBytes<DefaultValidator<'any>>,
+    C::Leaf: 'a + Archive,
     A: Annotation<C::Leaf>,
-    M: 'a,
-    W: Walker<C, A, S>,
+    W: Walker<C, A, I>,
 {
     type Item = M;
 
@@ -517,12 +518,11 @@ where
     fn leaf(&self) -> MaybeArchived<T>;
 }
 
-impl<'a, C, A, S, T> BranchRef<'a, T>
-    for MappedBranch<'a, C, A, S, MaybeArchived<'a, T>>
+impl<'a, C, A, T, I> BranchRef<'a, T>
+    for MappedBranch<'a, C, A, I, MaybeArchived<'a, T>>
 where
-    S: Store,
-    C: Compound<A, S>,
-    C::Archived: ArchivedCompound<C, A, S>,
+    C: Compound<A, I>,
+    C::Archived: ArchivedCompound<C, A, I>,
     T: Archive,
 {
     fn leaf(&self) -> MaybeArchived<T> {

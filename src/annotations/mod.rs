@@ -9,7 +9,7 @@ use core::ops::Deref;
 
 use rkyv::Archive;
 
-use crate::{Compound, Primitive, Store};
+use crate::{Compound, Primitive};
 
 mod cardinality;
 mod max_key;
@@ -29,7 +29,6 @@ pub trait Annotation<Leaf>:
     /// Create an annotation from a node
     fn from_node<C, S>(node: &C) -> Self
     where
-        S: Store,
         C: Compound<Self, S, Leaf = Leaf>,
         C::Leaf: Archive,
     {

@@ -4,22 +4,24 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use bytecheck::CheckBytes;
+use rkyv::validation::validators::DefaultValidator;
 use rkyv::{Archive, Deserialize};
 
 use crate::link::{ArchivedLink, Link};
-use crate::{Annotation, Branch, BranchMut, MaybeArchived, Store, Walker};
+use crate::storage::StoreRef;
+use crate::{Annotation, Branch, BranchMut, MaybeArchived, Walker};
 
 /// The response of the `child` method on a `Compound` node.
-pub enum Child<'a, C, A, S>
+pub enum Child<'a, C, A, I>
 where
-    S: Store,
-    C: Compound<A, S>,
+    C: Compound<A, I>,
     C::Leaf: Archive,
 {
     /// Child is a leaf
     Leaf(&'a C::Leaf),
     /// Child is an annotated subtree node
-    Link(&'a Link<C, A, S>),
+    Link(&'a Link<C, A, I>),
     /// Empty slot
     Empty,
     /// No more children
@@ -27,15 +29,14 @@ where
 }
 
 /// The response of the `child` method on a `Compound` node.
-pub enum ArchivedChild<'a, C, A, S>
+pub enum ArchivedChild<'a, C, A, I>
 where
-    S: Store,
-    C: Compound<A, S>,
+    C: Compound<A, I>,
 {
     /// Child is a leaf
     Leaf(&'a <C::Leaf as Archive>::Archived),
     /// Child is an annotated subtree node
-    Link(&'a ArchivedLink<C, A, S>),
+    Link(&'a ArchivedLink<C, A, I>),
     /// Empty slot
     Empty,
     /// No more children
@@ -43,15 +44,14 @@ where
 }
 
 /// The response of the `child_mut` method on a `Compound` node.
-pub enum ChildMut<'a, C, A, S>
+pub enum ChildMut<'a, C, A, I>
 where
-    S: Store,
-    C: Compound<A, S>,
+    C: Compound<A, I>,
 {
     /// Child is a leaf
     Leaf(&'a mut C::Leaf),
     /// Child is an annotated node
-    Link(&'a mut Link<C, A, S>),
+    Link(&'a mut Link<C, A, I>),
     /// Empty slot
     Empty,
     /// No more children
@@ -59,39 +59,33 @@ where
 }
 
 /// Trait to support branch traversal in archived nodes
-pub trait ArchivedCompound<C, A, S>
+pub trait ArchivedCompound<C, A, I>
 where
-    S: Store,
-    C: Compound<A, S>,
-    C::Leaf: Archive,
+    C: Compound<A, I>,
 {
     /// Returns an archived child
-    fn child(&self, ofs: usize) -> ArchivedChild<C, A, S>;
+    fn child(&self, ofs: usize) -> ArchivedChild<C, A, I>;
 }
 
 /// A type that can recursively contain itself and leaves.
-pub trait Compound<A, S>: Sized + Archive {
+pub trait Compound<A, I>: Sized + Archive {
     /// The leaf type of the Compound collection
     type Leaf: Archive;
 
     /// Get a reference to a child    
-    fn child(&self, ofs: usize) -> Child<Self, A, S>
-    where
-        S: Store;
+    fn child(&self, ofs: usize) -> Child<Self, A, I>;
 
     /// Get a mutable reference to a child
-    fn child_mut(&mut self, ofs: usize) -> ChildMut<Self, A, S>
-    where
-        S: Store;
+    fn child_mut(&mut self, ofs: usize) -> ChildMut<Self, A, I>;
 
     /// Constructs a branch from this root compound
-    fn walk<'a, W>(&'a self, walker: W) -> Option<Branch<'a, Self, A, S>>
+    fn walk<'a, W>(&'a self, walker: W) -> Option<Branch<'a, Self, A, I>>
     where
-        S: Store,
-        Self::Archived: ArchivedCompound<Self, A, S>,
-        Self::Leaf: Archive,
+        W: Walker<Self, A, I>,
+        Self::Archived: ArchivedCompound<Self, A, I>
+            + for<'any> CheckBytes<DefaultValidator<'any>>,
+        Self::Leaf: 'a + Archive,
         A: Annotation<Self::Leaf>,
-        W: Walker<Self, A, S>,
     {
         Branch::walk(MaybeArchived::Memory(self), walker)
     }
@@ -100,14 +94,14 @@ pub trait Compound<A, S>: Sized + Archive {
     fn walk_mut<'a, W>(
         &'a mut self,
         walker: W,
-    ) -> Option<BranchMut<'a, Self, A, S>>
+    ) -> Option<BranchMut<'a, Self, A, I>>
     where
-        S: Store,
         Self: Clone,
-        Self::Archived: ArchivedCompound<Self, A, S> + Deserialize<Self, S>,
+        Self::Archived: Deserialize<Self, StoreRef<I>>
+            + for<'any> CheckBytes<DefaultValidator<'any>>,
         Self::Leaf: Archive,
         A: Annotation<Self::Leaf>,
-        W: Walker<Self, A, S>,
+        W: Walker<Self, A, I>,
     {
         BranchMut::walk(self, walker)
     }

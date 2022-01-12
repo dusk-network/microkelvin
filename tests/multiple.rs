@@ -10,15 +10,16 @@ use rand::{prelude::SliceRandom, thread_rng};
 mod linked_list;
 use linked_list::LinkedList;
 
+use bytecheck::CheckBytes;
 use rend::LittleEndian;
 use rkyv::{Archive, Deserialize, Serialize};
 
 use microkelvin::{
-    Annotation, Cardinality, Combine, Compound, FindMaxKey, HostStore, Keyed,
-    MaxKey, Primitive,
+    Annotation, Cardinality, Combine, Compound, FindMaxKey, Keyed, MaxKey,
+    OffsetLen, Primitive,
 };
 
-#[derive(Default, Clone, Archive, Serialize, Debug, Deserialize)]
+#[derive(Clone, Archive, Serialize, Debug, Deserialize, CheckBytes)]
 #[archive(as = "Self")]
 #[archive(bound(archive = "
   K: Primitive,
@@ -27,6 +28,15 @@ use microkelvin::{
 struct Anno<K> {
     max: MaxKey<K>,
     card: Cardinality,
+}
+
+impl<K> Default for Anno<K> {
+    fn default() -> Self {
+        Self {
+            max: Default::default(),
+            card: Default::default(),
+        }
+    }
 }
 
 impl<K> Borrow<MaxKey<K>> for Anno<K> {
@@ -44,7 +54,7 @@ impl<K> Borrow<Cardinality> for Anno<K> {
 impl<Leaf, K> Annotation<Leaf> for Anno<K>
 where
     Leaf: Keyed<K>,
-    K: Primitive + Ord + Default + Clone,
+    K: Primitive + Ord + Clone,
 {
     fn from_leaf(leaf: &Leaf) -> Self {
         Anno {
@@ -56,7 +66,7 @@ where
 
 impl<K, A> Combine<A> for Anno<K>
 where
-    K: Clone + Ord + Default,
+    K: Clone + Ord,
     A: Borrow<MaxKey<K>> + Borrow<Cardinality> + Archive<Archived = A>,
 {
     fn combine(&mut self, other: &A) {
@@ -65,7 +75,9 @@ where
     }
 }
 
-#[derive(PartialEq, Clone, Debug, Archive, Serialize, Deserialize)]
+#[derive(
+    PartialEq, Clone, Debug, Archive, Serialize, Deserialize, CheckBytes,
+)]
 #[archive(as = "Self")]
 struct TestLeaf {
     key: LittleEndian<u64>,
@@ -90,7 +102,7 @@ fn maximum_multiple() {
 
     keys.shuffle(&mut thread_rng());
 
-    let mut list = LinkedList::<_, Anno<LittleEndian<u64>>, HostStore>::new();
+    let mut list = LinkedList::<_, Anno<LittleEndian<u64>>, OffsetLen>::new();
 
     for key in keys {
         let key: LittleEndian<u64> = key.into();

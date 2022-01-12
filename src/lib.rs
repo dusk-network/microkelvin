@@ -40,7 +40,10 @@ pub use walk::{All, Discriminant, Step, Walkable, Walker};
 pub use wrappers::{MaybeArchived, MaybeStored, Primitive};
 
 mod storage;
-pub use storage::{Ident, Offset, Storage, Store, Stored};
+pub use storage::{
+    Ident, OffsetLen, Store, StoreProvider, StoreRef, StoreSerializer, Stored,
+    Token, TokenBuffer,
+};
 
 #[cfg(feature = "host")]
-pub use storage::HostStore;
+pub use storage::{HostStore, UnwrapInfallible};

@@ -4,59 +4,58 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use core::borrow::Borrow;
+use core::borrow::{Borrow, BorrowMut};
 use core::cmp::Ordering;
 
-use rkyv::{Archive, Deserialize, Serialize};
+use bytecheck::CheckBytes;
+use rkyv::{
+    validation::validators::DefaultValidator, Archive, Deserialize, Serialize,
+};
 
 use microkelvin::{
     Annotation, ArchivedChild, ArchivedCompound, BranchRef, BranchRefMut,
     Child, ChildMut, Compound, Discriminant, Keyed, Link, MaxKey,
-    MaybeArchived, Step, Store, Walkable, Walker,
+    MaybeArchived, Step, StoreProvider, StoreRef, StoreSerializer, Walkable,
+    Walker,
 };
 
 #[derive(Clone, Archive, Serialize, Deserialize)]
+#[archive_attr(derive(CheckBytes))]
 #[archive(bound(serialize = "
-  A: Archive + Clone + Annotation<T>,
-  T: Clone,
-  S: Store<Storage = __S>,"))]
+  T: Clone + Serialize<StoreSerializer<I>>, 
+  A: Clone + Annotation<T>,
+  I: Clone,
+  __S: Sized + BorrowMut<StoreSerializer<I>>"))]
 #[archive(bound(deserialize = "
   T: Archive + Clone,
-  T::Archived: Deserialize<T, S>,
+  T::Archived: Deserialize<T, StoreRef<I>>,
   A: Clone + Annotation<T>,
-  for<'a> &'a mut __D: Borrow<S>,
-  __D: Store"))]
-pub enum NaiveTree<T, A, S>
-where
-    S: Store,
-{
+  I: Clone, 
+  __D: StoreProvider<I>"))]
+pub enum NaiveTree<T, A, I> {
     Empty,
     Single(T),
     Double(T, T),
     Middle(
-        #[omit_bounds] Link<NaiveTree<T, A, S>, A, S>,
+        #[omit_bounds] Link<NaiveTree<T, A, I>, A, I>,
         T,
-        #[omit_bounds] Link<NaiveTree<T, A, S>, A, S>,
+        #[omit_bounds] Link<NaiveTree<T, A, I>, A, I>,
     ),
 }
 
-impl<T, A, S> Default for NaiveTree<T, A, S>
-where
-    S: Store,
-{
+impl<T, A, I> Default for NaiveTree<T, A, I> {
     fn default() -> Self {
         NaiveTree::Empty
     }
 }
 
-impl<T, A, S> Compound<A, S> for NaiveTree<T, A, S>
+impl<T, A, I> Compound<A, I> for NaiveTree<T, A, I>
 where
-    S: Store,
     T: Archive,
 {
     type Leaf = T;
 
-    fn child(&self, ofs: usize) -> Child<Self, A, S> {
+    fn child(&self, ofs: usize) -> Child<Self, A, I> {
         match (ofs, self) {
             (0, NaiveTree::Single(a)) => Child::Leaf(a),
 
@@ -71,7 +70,7 @@ where
         }
     }
 
-    fn child_mut(&mut self, ofs: usize) -> ChildMut<Self, A, S> {
+    fn child_mut(&mut self, ofs: usize) -> ChildMut<Self, A, I> {
         match (ofs, self) {
             (0, NaiveTree::Single(a)) => ChildMut::Leaf(a),
 
@@ -87,13 +86,12 @@ where
     }
 }
 
-impl<T, A, S> ArchivedCompound<NaiveTree<T, A, S>, A, S>
-    for ArchivedNaiveTree<T, A, S>
+impl<T, A, I> ArchivedCompound<NaiveTree<T, A, I>, A, I>
+    for ArchivedNaiveTree<T, A, I>
 where
-    S: Store,
     T: Archive,
 {
-    fn child(&self, ofs: usize) -> ArchivedChild<NaiveTree<T, A, S>, A, S> {
+    fn child(&self, ofs: usize) -> ArchivedChild<NaiveTree<T, A, I>, A, I> {
         match (ofs, self) {
             (0, ArchivedNaiveTree::Single(t)) => ArchivedChild::Leaf(t),
 
@@ -109,13 +107,15 @@ where
     }
 }
 
-impl<T, A, S> NaiveTree<T, A, S>
+impl<T, A, I> NaiveTree<T, A, I>
 where
-    S: Store,
     T: Archive + Ord + Clone,
-    T::Archived: Deserialize<T, S>,
+    T::Archived: Deserialize<T, StoreRef<I>>
+        + for<'any> CheckBytes<DefaultValidator<'any>>,
     A: Annotation<T> + Clone,
-    A::Archived: Deserialize<A, S>,
+    A::Archived: Deserialize<A, StoreRef<I>>
+        + for<'any> CheckBytes<DefaultValidator<'any>>,
+    I: Clone + for<'any> CheckBytes<DefaultValidator<'any>>,
 {
     pub fn new() -> Self {
         Default::default()
@@ -198,6 +198,7 @@ where
 }
 
 #[derive(Clone, Archive, Serialize, Deserialize)]
+#[archive_attr(derive(CheckBytes))]
 pub struct KvPair<K, V>(K, V);
 
 impl<K, V> PartialEq for KvPair<K, V>
@@ -259,21 +260,19 @@ impl<K, V> KvPair<K, V> {
     }
 }
 
-pub struct NaiveMap<K, V, A, S>(NaiveTree<KvPair<K, V>, A, S>)
-where
-    S: Store;
+pub struct NaiveMap<K, V, A, I>(NaiveTree<KvPair<K, V>, A, I>);
 
 struct Lookup<'k, K>(&'k K);
 
-impl<'k, C, A, S, K> Walker<C, A, S> for Lookup<'k, K>
+impl<'k, C, A, I, K> Walker<C, A, I> for Lookup<'k, K>
 where
-    C: Compound<A, S>,
+    C: Compound<A, I>,
     C::Leaf: Keyed<K>,
     <C::Leaf as Archive>::Archived: Keyed<K>,
     K: Ord,
     A: Borrow<MaxKey<K>>,
 {
-    fn walk(&mut self, walk: impl Walkable<C, A, S>) -> Step {
+    fn walk(&mut self, walk: impl Walkable<C, A, I>) -> Step {
         for i in 0.. {
             match walk.probe(i) {
                 Discriminant::Leaf(kv) => match self.0.cmp(kv.key()) {
@@ -298,14 +297,22 @@ where
     }
 }
 
-impl<K, V, A, S> NaiveMap<K, V, A, S>
+impl<K, V, A, I> NaiveMap<K, V, A, I>
 where
-    S: Store,
-    K: Archive<Archived = K> + Ord + Clone + Deserialize<K, S>,
+    K: Archive<Archived = K>
+        + Ord
+        + Clone
+        + Deserialize<K, StoreRef<I>>
+        + for<'a> CheckBytes<DefaultValidator<'a>>,
     V: Archive + Clone,
-    V::Archived: Deserialize<V, S>,
-    A: Annotation<KvPair<K, V>> + Deserialize<A, S> + Borrow<MaxKey<K>>,
+    V::Archived:
+        Deserialize<V, StoreRef<I>> + for<'a> CheckBytes<DefaultValidator<'a>>,
+    A: Annotation<KvPair<K, V>>
+        + Deserialize<A, StoreRef<I>>
+        + Borrow<MaxKey<K>>
+        + for<'a> CheckBytes<DefaultValidator<'a>>,
     KvPair<K, V>: Keyed<K>,
+    I: Clone + for<'a> CheckBytes<DefaultValidator<'a>>,
 {
     pub fn new() -> Self {
         NaiveMap(NaiveTree::new())
@@ -350,6 +357,7 @@ mod test {
     #[derive(
         Ord, PartialOrd, PartialEq, Eq, Archive, Clone, Deserialize, Serialize,
     )]
+    #[archive_attr(derive(CheckBytes))]
     struct TestLeaf {
         key: LittleEndian<u16>,
     }
@@ -374,9 +382,9 @@ mod test {
 
     #[test]
     fn many_many_many() -> Result<(), io::Error> {
-        let store = HostStore::new();
+        let store = StoreRef::new(HostStore::new());
 
-        const N: u16 = 1024;
+        const N: u16 = 2;
 
         let mut rng = rand::thread_rng();
         let mut numbers = vec![];
@@ -400,7 +408,7 @@ mod test {
             assert!(tree.walk(Member(&n)).is_some());
         }
 
-        let stored = store.put(&tree);
+        let stored = store.store(&tree);
 
         for n in ordered {
             let n: LittleEndian<_> = n.into();

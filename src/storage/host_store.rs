@@ -5,10 +5,10 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use core::convert::Infallible;
-use rkyv::{ser::Serializer, Archive, Fallible, Serialize};
 
 use memmap::Mmap;
 use parking_lot::RwLock;
+use rkyv::Fallible;
 
 use std::fs::{File, OpenOptions};
 use std::io::{self, Write};
@@ -17,7 +17,7 @@ use std::sync::Arc;
 
 use crate::Store;
 
-use super::{Ident, Offset, Storage, Stored, UnwrapInfallible};
+use super::{OffsetLen, Token, TokenBuffer};
 
 const PAGE_SIZE: usize = 1024 * 64;
 
@@ -33,6 +33,7 @@ pub struct PageStorage {
     mmap: Option<Mmap>,
     file: Option<File>,
     pages: Vec<Page>,
+    token: Token,
 }
 
 impl Fallible for PageStorage {
@@ -48,20 +49,15 @@ impl Page {
     }
 
     fn slice(&self) -> &[u8] {
-        &self.bytes[..]
+        &self.bytes[..self.written]
     }
 
-    fn try_write(&mut self, bytes: &[u8]) -> Result<(), usize> {
-        let space_left = PAGE_SIZE - self.written;
-        if space_left < bytes.len() {
-            self.written += space_left;
-            Err(space_left)
-        } else {
-            let write_into = &mut self.bytes[self.written..][..bytes.len()];
-            write_into.copy_from_slice(bytes);
-            self.written += bytes.len();
-            Ok(())
-        }
+    fn unwritten_tail(&mut self) -> &mut [u8] {
+        &mut self.bytes[self.written..]
+    }
+
+    fn commit(&mut self, len: usize) {
+        self.written += len;
     }
 }
 
@@ -74,6 +70,7 @@ impl PageStorage {
             mmap: None,
             file: None,
             pages: vec![],
+            token: Token::new(),
         }
     }
 
@@ -91,10 +88,11 @@ impl PageStorage {
         } else {
             None
         };
-        Ok(Self {
+        Ok(PageStorage {
             mmap,
             file: Some(file),
             pages: Vec::new(),
+            token: Token::new(),
         })
     }
 
@@ -112,8 +110,64 @@ impl PageStorage {
         }
     }
 
-    /// Persists storage to disk
-    fn persist(&mut self) -> io::Result<()> {
+    fn offset(&self) -> usize {
+        self.mmap_len() + self.pages_data_len()
+    }
+
+    fn unwritten_tail<'a>(&'a mut self) -> &'a mut [u8] {
+        let bytes = match self.pages.last_mut() {
+            Some(page) => page.unwritten_tail(),
+            None => {
+                self.pages = vec![Page::new()];
+                self.pages[0].unwritten_tail()
+            }
+        };
+        let extended: &'a mut [u8] = unsafe { core::mem::transmute(bytes) };
+        extended
+    }
+
+    fn get(&self, ofs: &OffsetLen) -> &[u8] {
+        let OffsetLen(ofs, len) = *ofs;
+        let (ofs, len) = (u64::from(ofs) as usize, u16::from(len) as usize);
+
+        let slice = match &self.mmap {
+            Some(mmap) if ofs <= mmap.len() - len => &mmap[ofs..][..len],
+            _ => {
+                let pages_ofs = ofs - self.mmap_len();
+                let cur_page_ofs = pages_ofs % PAGE_SIZE;
+                let cur_page = pages_ofs / PAGE_SIZE;
+
+                &self.pages[cur_page].slice()[cur_page_ofs..][..len]
+            }
+        };
+        slice
+    }
+
+    fn commit(&mut self, buffer: &mut TokenBuffer) -> OffsetLen {
+        let offset = self.offset();
+        let len = buffer.advance();
+
+        if let Some(page) = self.pages.last_mut() {
+            page.commit(len)
+        } else {
+            // the token could not have been provided
+            // unless a write-buffer was already allocated
+            unreachable!()
+        }
+        OffsetLen::new(offset as u64, len as u16)
+    }
+
+    fn extend(&mut self, buffer: &mut TokenBuffer) -> Result<(), ()> {
+        self.pages.push(Page::new());
+        buffer.remap(self.unwritten_tail());
+        Ok(())
+    }
+
+    fn return_token(&mut self, token: Token) {
+        self.token.return_token(token)
+    }
+
+    fn persist(&mut self) -> Result<(), std::io::Error> {
         fn write_pages(pages: &Vec<Page>, file: &mut File) -> io::Result<()> {
             for page in pages {
                 file.write(&page.bytes[..page.written])?;
@@ -133,72 +187,6 @@ impl PageStorage {
     }
 }
 
-impl Serializer for PageStorage {
-    fn pos(&self) -> usize {
-        let pages_pos = match self.pages.last() {
-            None => 0,
-            Some(page) => {
-                let full_pages = self.pages.len() - 1;
-                full_pages * PAGE_SIZE + page.written
-            }
-        };
-        pages_pos + self.mmap_len()
-    }
-
-    fn write(&mut self, bytes: &[u8]) -> Result<(), Self::Error> {
-        if let Some(page) = self.pages.last_mut() {
-            if let Ok(_) = page.try_write(bytes) {
-                return Ok(());
-            }
-        };
-
-        self.pages.push(Page::new());
-
-        if let Some(page) = self.pages.last_mut() {
-            match page.try_write(bytes) {
-                Ok(()) => {
-                    return Ok(());
-                }
-                Err(_) => unreachable!(),
-            }
-        }
-        unreachable!()
-    }
-}
-
-impl Storage<Offset> for PageStorage {
-    fn put<T: Serialize<PageStorage>>(&mut self, t: &T) -> Offset {
-        self.serialize_value(t).unwrap_infallible();
-        Offset((self.pos() as u64).into())
-    }
-
-    fn get<T: Archive>(&self, ofs: &Offset) -> &T::Archived {
-        let Offset(ofs) = *ofs;
-        let size = core::mem::size_of::<T::Archived>();
-        let slice = match &self.mmap {
-            Some(mmap) if ofs <= mmap.len() as u64 => {
-                let start_pos = (Into::<u64>::into(ofs) as usize)
-                    .checked_sub(size)
-                    .expect("Offset larger than size");
-                &mmap[start_pos..][..size]
-            }
-            _ => {
-                let pages_ofs =
-                    (Into::<u64>::into(ofs) as usize) - self.mmap_len();
-                let cur_page_ofs = pages_ofs % PAGE_SIZE;
-                let cur_page = pages_ofs as usize / PAGE_SIZE;
-                let (page_nr, start_pos) = if cur_page_ofs == 0 {
-                    (cur_page - 1, PAGE_SIZE - size)
-                } else {
-                    (cur_page, cur_page_ofs as usize - size)
-                };
-                &self.pages[page_nr].slice()[start_pos..][..size]
-            }
-        };
-        unsafe { rkyv::archived_root::<T>(slice) }
-    }
-}
-
 /// Store that utilises a reference-counted PageStorage
 #[derive(Clone)]
 pub struct HostStore {
@@ -212,45 +200,55 @@ impl HostStore {
             inner: Arc::new(RwLock::new(PageStorage::new())),
         }
     }
+
     /// Creates a new HostStore backed by a file
     pub fn with_file<P: AsRef<Path>>(path: P) -> io::Result<Self> {
         Ok(HostStore {
             inner: Arc::new(RwLock::new(PageStorage::with_file(&path)?)),
         })
     }
-
-    /// Persists storage
-    pub fn persist(&mut self) -> io::Result<()> {
-        self.inner.write().persist()
-    }
-}
-
-impl Fallible for HostStore {
-    type Error = Infallible;
 }
 
 impl Store for HostStore {
-    type Identifier = Offset;
-    type Storage = PageStorage;
+    type Identifier = OffsetLen;
 
-    fn put<T>(&self, t: &T) -> Stored<T, Self>
-    where
-        T: Serialize<Self::Storage>,
-    {
-        Stored::new(self.clone(), Ident::new(self.inner.write().put::<T>(t)))
+    fn get<'a>(&'a self, id: &Self::Identifier) -> &'a [u8] {
+        let guard = self.inner.read();
+        let bytes = guard.get(&id);
+
+        let bytes_a: &'a [u8] = unsafe { core::mem::transmute(bytes) };
+        bytes_a
     }
 
-    fn get_raw<'a, T>(
-        &'a self,
-        id: &Ident<Self::Identifier, T>,
-    ) -> &'a T::Archived
-    where
-        T: Archive,
-    {
-        let guard = self.inner.read();
-        let reference = guard.get::<T>(&id.erase());
-        let extended: &'a T::Archived =
-            unsafe { core::mem::transmute(reference) };
-        extended
+    fn request_buffer(&self) -> TokenBuffer {
+        // loop waiting to aquire write token
+        let mut guard = self.inner.write();
+
+        let token = loop {
+            if let Some(token) = guard.token.take() {
+                break token;
+            } else {
+                guard = self.inner.write();
+            }
+        };
+
+        let bytes = guard.unwritten_tail();
+        TokenBuffer::new(token, bytes)
+    }
+
+    fn extend(&self, buffer: &mut TokenBuffer) -> Result<(), ()> {
+        self.inner.write().extend(buffer)
+    }
+
+    fn persist(&self) -> Result<(), ()> {
+        self.inner.write().persist().map_err(|_| ())
+    }
+
+    fn commit(&self, buf: &mut TokenBuffer) -> Self::Identifier {
+        self.inner.write().commit(buf)
+    }
+
+    fn return_token(&self, token: Token) {
+        self.inner.write().return_token(token)
     }
 }

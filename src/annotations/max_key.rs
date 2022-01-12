@@ -9,6 +9,7 @@ use core::borrow::Borrow;
 use core::cmp::Ordering;
 use core::marker::PhantomData;
 
+use bytecheck::CheckBytes;
 use rkyv::{Archive, Deserialize, Serialize};
 
 use crate::annotations::{Annotation, Combine};
@@ -17,7 +18,10 @@ use crate::wrappers::Primitive;
 use crate::Compound;
 
 /// The maximum value of a collection
-#[derive(PartialEq, Eq, Clone, Debug, Archive, Serialize, Deserialize)]
+#[derive(
+    PartialEq, Eq, Clone, Debug, Archive, Serialize, Deserialize, CheckBytes,
+)]
+#[repr(u8)]
 #[archive(as = "Self")]
 #[archive(bound(archive = "
   K: Primitive"))]
