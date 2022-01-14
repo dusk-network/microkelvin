@@ -17,6 +17,8 @@ mod disk;
 
 use crate::Child;
 use canonical::{Canon, CanonError, Id};
+use canonical_derive::Canon;
+
 use lazy_static::lazy_static;
 use parking_lot::{RwLock, RwLockWriteGuard};
 
@@ -103,6 +105,7 @@ impl<B> BackendCtor<B> {
 }
 
 /// Id of a persisted GenericTree
+#[derive(Canon, Clone, Copy, Debug)]
 pub struct PersistedId(Id);
 
 impl PersistedId {
