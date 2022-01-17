@@ -25,7 +25,7 @@ use parking_lot::{RwLock, RwLockWriteGuard};
 pub use disk::DiskBackend;
 
 use crate::{Annotation, Compound, GenericTree};
-pub(crate) struct WrappedBackend(Arc<RwLock<dyn Backend>>);
+pub struct WrappedBackend(Arc<RwLock<dyn Backend>>);
 
 impl WrappedBackend {
     fn new<B: 'static + Backend>(backend: B) -> Self {
@@ -65,10 +65,7 @@ impl WrappedBackend {
                     for i in 0.. {
                         match tree.child(i) {
                             Child::Node(node) => {
-                                Self::persist_inner(
-                                    backend,
-                                    &*node.compound()?,
-                                )?;
+                                Self::persist_inner(backend, &*node.inner()?)?;
                             }
                             Child::EndOfNode => break,
                             _ => (),
@@ -130,14 +127,28 @@ impl Persistence {
         A: Annotation<C::Leaf>,
         B: 'static + Backend,
     {
+        Self::with_backend(ctor, |backend| backend.persist(c))
+    }
+
+    /// Performs an operation with reference to a backend
+    ///
+    /// Also used for initializing backends on startup.
+    pub fn with_backend<B, F, R>(
+        ctor: &BackendCtor<B>,
+        closure: F,
+    ) -> Result<R, PersistError>
+    where
+        F: Fn(&mut WrappedBackend) -> Result<R, PersistError>,
+        B: 'static + Backend,
+    {
         let mut backends = BACKENDS.write();
         let entry = backends.entry(ctor.id);
 
         match entry {
-            Entry::Occupied(mut occupied) => occupied.get_mut().persist(c),
+            Entry::Occupied(mut occupied) => closure(occupied.get_mut()),
             Entry::Vacant(vacant) => {
                 let backend = (ctor.ctor)()?;
-                vacant.insert(WrappedBackend::new(backend)).persist(c)
+                closure(vacant.insert(WrappedBackend::new(backend)))
             }
         }
     }
