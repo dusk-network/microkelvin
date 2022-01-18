@@ -47,7 +47,7 @@ impl DiskBackend {
         let index_path = path.join("index");
         let data_path = path.join("data");
 
-        fs::create_dir(&index_path)?;
+        fs::create_dir_all(&index_path)?;
 
         let index = Index::new(&index_path)?;
 
