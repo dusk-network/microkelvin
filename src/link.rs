@@ -4,10 +4,10 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use alloc::rc::Rc;
-use core::cell::{Ref, RefCell, RefMut};
+use alloc::sync::Arc;
 use core::mem;
 use core::ops::{Deref, DerefMut};
+use spin::{RwLock, RwLockReadGuard, RwLockUpgradableGuard, RwLockWriteGuard};
 
 use canonical::{Canon, CanonError, Id, Sink, Source};
 
@@ -20,20 +20,31 @@ use crate::{Annotation, Compound};
 #[derive(Debug, Clone)]
 enum LinkInner<C, A> {
     Placeholder,
-    C(Rc<C>),
-    Ca(Rc<C>, A),
+    C(Arc<C>),
+    Ca(Arc<C>, A),
     Ia(Id, A),
     #[allow(unused)]
-    Ica(Id, Rc<C>, A),
+    Ica(Id, Arc<C>, A),
 }
 
-#[derive(Clone)]
 /// The Link struct is an annotated merkle link to a compound type
 ///
 /// The link takes care of lazily evaluating the annotation of the inner type,
 /// and to load it from memory or backend when needed.
 pub struct Link<C, A> {
-    inner: RefCell<LinkInner<C, A>>,
+    inner: RwLock<LinkInner<C, A>>,
+}
+
+impl<C, A> Clone for Link<C, A>
+where
+    C: Clone,
+    A: Clone,
+{
+    fn clone(&self) -> Self {
+        Self {
+            inner: RwLock::new(self.inner.read().clone()),
+        }
+    }
 }
 
 impl<C, A> Default for Link<C, A>
@@ -42,7 +53,7 @@ where
 {
     fn default() -> Self {
         Link {
-            inner: RefCell::new(LinkInner::C(Rc::new(C::default()))),
+            inner: RwLock::new(LinkInner::C(Arc::new(C::default()))),
         }
     }
 }
@@ -65,14 +76,14 @@ where
         A: Annotation<C::Leaf>,
     {
         Link {
-            inner: RefCell::new(LinkInner::C(Rc::new(compound))),
+            inner: RwLock::new(LinkInner::C(Arc::new(compound))),
         }
     }
 
     /// Creates a new link from an id and annotation
     pub fn new_persisted(id: Id, annotation: A) -> Self {
         Link {
-            inner: RefCell::new(LinkInner::Ia(id, annotation)),
+            inner: RwLock::new(LinkInner::Ia(id, annotation)),
         }
     }
 
@@ -81,17 +92,16 @@ where
     where
         A: Annotation<C::Leaf>,
     {
-        let borrow = self.inner.borrow();
+        let borrow = self.inner.upgradeable_read();
         let a = match *borrow {
             LinkInner::Ca(_, _)
             | LinkInner::Ica(_, _, _)
-            | LinkInner::Ia(_, _) => return LinkAnnotation(borrow),
+            | LinkInner::Ia(_, _) => return LinkAnnotation(borrow.downgrade()),
             LinkInner::C(ref c) => A::combine(c.annotations()),
             LinkInner::Placeholder => unreachable!(),
         };
 
-        drop(borrow);
-        let mut borrow = self.inner.borrow_mut();
+        let mut borrow = RwLockUpgradableGuard::upgrade(borrow);
 
         if let LinkInner::C(c) =
             mem::replace(&mut *borrow, LinkInner::Placeholder)
@@ -100,8 +110,7 @@ where
         } else {
             unreachable!()
         }
-        drop(borrow);
-        let borrow = self.inner.borrow();
+        let borrow = borrow.downgrade();
         LinkAnnotation(borrow)
     }
 
@@ -119,7 +128,7 @@ where
         match inner {
             LinkInner::C(rc)
             | LinkInner::Ca(rc, _)
-            | LinkInner::Ica(_, rc, _) => match Rc::try_unwrap(rc) {
+            | LinkInner::Ica(_, rc, _) => match Arc::try_unwrap(rc) {
                 Ok(c) => Ok(c),
                 Err(rc) => Ok((&*rc).clone()),
             },
@@ -134,7 +143,7 @@ where
         C::Leaf: Canon,
         A: Annotation<C::Leaf>,
     {
-        let borrow = self.inner.borrow();
+        let borrow = self.inner.read();
         match &*borrow {
             LinkInner::Placeholder => unreachable!(),
             LinkInner::C(c) | LinkInner::Ca(c, _) => {
@@ -155,12 +164,12 @@ where
     ///
     /// Can fail when trying to fetch data over i/o
     pub fn inner(&self) -> Result<LinkCompound<C, A>, CanonError> {
-        let borrow = self.inner.borrow();
+        let borrow = self.inner.upgradeable_read();
 
         match *borrow {
             LinkInner::Placeholder => unreachable!(),
             LinkInner::C(_) | LinkInner::Ca(_, _) | LinkInner::Ica(_, _, _) => {
-                return Ok(LinkCompound(borrow))
+                return Ok(LinkCompound(borrow.downgrade()))
             }
             LinkInner::Ia(id, _) => {
                 // First we check if the value is available to be reified
@@ -168,17 +177,15 @@ where
                 match id.reify::<GenericTree>() {
                     Ok(generic) => {
                         // re-borrow mutable
-                        drop(borrow);
-                        let mut borrow = self.inner.borrow_mut();
+                        let mut borrow = borrow.upgrade();
                         if let LinkInner::Ia(id, anno) =
                             mem::replace(&mut *borrow, LinkInner::Placeholder)
                         {
                             let value = C::from_generic(&generic)?;
-                            *borrow = LinkInner::Ica(id, Rc::new(value), anno);
+                            *borrow = LinkInner::Ica(id, Arc::new(value), anno);
 
                             // re-borrow immutable
-                            drop(borrow);
-                            let borrow = self.inner.borrow();
+                            let borrow = borrow.downgrade();
 
                             Ok(LinkCompound(borrow))
                         } else {
@@ -195,8 +202,7 @@ where
                         #[cfg(feature = "persistence")]
                         {
                             // re-borrow mutable
-                            drop(borrow);
-                            let mut borrow = self.inner.borrow_mut();
+                            let mut borrow = borrow.upgrade();
                             if let LinkInner::Ia(id, anno) = mem::replace(
                                 &mut *borrow,
                                 LinkInner::Placeholder,
@@ -207,13 +213,12 @@ where
                                             C::from_generic(&generic)?;
                                         *borrow = LinkInner::Ica(
                                             id,
-                                            Rc::new(compound),
+                                            Arc::new(compound),
                                             anno,
                                         );
 
                                         // re-borrow immutable
-                                        drop(borrow);
-                                        let borrow = self.inner.borrow();
+                                        let borrow = borrow.downgrade();
 
                                         Ok(LinkCompound(borrow))
                                     }
@@ -264,7 +269,7 @@ where
         // assure inner value is loaded
         let _ = self.inner()?;
 
-        let mut borrow: RefMut<LinkInner<C, A>> = self.inner.borrow_mut();
+        let mut borrow: RwLockWriteGuard<LinkInner<C, A>> = self.inner.write();
 
         match mem::replace(&mut *borrow, LinkInner::Placeholder) {
             LinkInner::C(c) | LinkInner::Ca(c, _) | LinkInner::Ica(_, c, _) => {
@@ -292,7 +297,7 @@ where
         let id = Id::decode(source)?;
         let a = A::decode(source)?;
         Ok(Link {
-            inner: RefCell::new(LinkInner::Ia(id, a)),
+            inner: RwLock::new(LinkInner::Ia(id, a)),
         })
     }
 
@@ -304,16 +309,16 @@ where
 /// A wrapped borrow of an inner link guaranteed to contain a computed
 /// annotation
 #[derive(Debug)]
-pub struct LinkAnnotation<'a, C, A>(Ref<'a, LinkInner<C, A>>);
+pub struct LinkAnnotation<'a, C, A>(RwLockReadGuard<'a, LinkInner<C, A>>);
 
 /// A wrapped borrow of an inner node guaranteed to contain a compound node
 #[derive(Debug)]
-pub struct LinkCompound<'a, C, A>(Ref<'a, LinkInner<C, A>>);
+pub struct LinkCompound<'a, C, A>(RwLockReadGuard<'a, LinkInner<C, A>>);
 
 /// A wrapped mutable borrow of an inner node guaranteed to contain a compound
 /// node
 #[derive(Debug)]
-pub struct LinkCompoundMut<'a, C, A>(RefMut<'a, LinkInner<C, A>>);
+pub struct LinkCompoundMut<'a, C, A>(RwLockWriteGuard<'a, LinkInner<C, A>>);
 
 impl<'a, C, A> Deref for LinkAnnotation<'a, C, A> {
     type Target = A;
@@ -358,7 +363,7 @@ where
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
         match *self.0 {
-            LinkInner::C(ref mut c) => Rc::make_mut(c),
+            LinkInner::C(ref mut c) => Arc::make_mut(c),
             _ => unreachable!(),
         }
     }
