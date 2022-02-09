@@ -7,7 +7,7 @@
 use alloc::sync::Arc;
 use core::mem;
 use core::ops::{Deref, DerefMut};
-use spin::{RwLock, RwLockReadGuard, RwLockUpgradableGuard, RwLockWriteGuard};
+use spin::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use canonical::{Canon, CanonError, Id, Sink, Source};
 
@@ -23,6 +23,7 @@ enum LinkInner<C, A> {
     C(Arc<C>),
     Ca(Arc<C>, A),
     Ia(Id, A),
+    Ic(Id, Arc<C>),
     #[allow(unused)]
     Ica(Id, Arc<C>, A),
 }
@@ -97,19 +98,20 @@ where
             LinkInner::Ca(_, _)
             | LinkInner::Ica(_, _, _)
             | LinkInner::Ia(_, _) => return LinkAnnotation(borrow.downgrade()),
-            LinkInner::C(ref c) => A::combine(c.annotations()),
+            LinkInner::C(ref c) | LinkInner::Ic(_, ref c) => {
+                A::combine(c.annotations())
+            }
             LinkInner::Placeholder => unreachable!(),
         };
 
-        let mut borrow = RwLockUpgradableGuard::upgrade(borrow);
+        let mut borrow = borrow.upgrade();
 
-        if let LinkInner::C(c) =
-            mem::replace(&mut *borrow, LinkInner::Placeholder)
-        {
-            *borrow = LinkInner::Ca(c, a)
-        } else {
-            unreachable!()
+        match mem::replace(&mut *borrow, LinkInner::Placeholder) {
+            LinkInner::C(c) => *borrow = LinkInner::Ca(c, a),
+            LinkInner::Ic(i, c) => *borrow = LinkInner::Ica(i, c, a),
+            _ => unreachable!(),
         }
+
         let borrow = borrow.downgrade();
         LinkAnnotation(borrow)
     }
@@ -128,11 +130,11 @@ where
         match inner {
             LinkInner::C(rc)
             | LinkInner::Ca(rc, _)
+            | LinkInner::Ic(_, rc)
             | LinkInner::Ica(_, rc, _) => match Arc::try_unwrap(rc) {
                 Ok(c) => Ok(c),
                 Err(rc) => Ok((&*rc).clone()),
             },
-
             _ => unreachable!(),
         }
     }
@@ -143,14 +145,24 @@ where
         C::Leaf: Canon,
         A: Annotation<C::Leaf>,
     {
-        let borrow = self.inner.read();
+        let borrow = self.inner.upgradeable_read();
         match &*borrow {
             LinkInner::Placeholder => unreachable!(),
             LinkInner::C(c) | LinkInner::Ca(c, _) => {
                 let gen = c.generic();
-                Id::new(&gen)
+                let id = Id::new(&gen);
+                let mut borrow = borrow.upgrade();
+
+                match mem::replace(&mut *borrow, LinkInner::Placeholder) {
+                    LinkInner::C(c) => *borrow = LinkInner::Ic(id, c),
+                    LinkInner::Ca(c, a) => *borrow = LinkInner::Ica(id, c, a),
+                    _ => unreachable!(),
+                };
+                id
             }
-            LinkInner::Ia(id, _) | LinkInner::Ica(id, _, _) => *id,
+            LinkInner::Ia(id, _)
+            | LinkInner::Ic(id, _)
+            | LinkInner::Ica(id, _, _) => *id,
         }
     }
 
@@ -168,7 +180,10 @@ where
 
         match *borrow {
             LinkInner::Placeholder => unreachable!(),
-            LinkInner::C(_) | LinkInner::Ca(_, _) | LinkInner::Ica(_, _, _) => {
+            LinkInner::C(_)
+            | LinkInner::Ca(_, _)
+            | LinkInner::Ic(_, _)
+            | LinkInner::Ica(_, _, _) => {
                 return Ok(LinkCompound(borrow.downgrade()))
             }
             LinkInner::Ia(id, _) => {
@@ -272,7 +287,10 @@ where
         let mut borrow: RwLockWriteGuard<LinkInner<C, A>> = self.inner.write();
 
         match mem::replace(&mut *borrow, LinkInner::Placeholder) {
-            LinkInner::C(c) | LinkInner::Ca(c, _) | LinkInner::Ica(_, c, _) => {
+            LinkInner::C(c)
+            | LinkInner::Ca(c, _)
+            | LinkInner::Ic(_, c)
+            | LinkInner::Ica(_, c, _) => {
                 // clear all cached data
                 *borrow = LinkInner::C(c);
             }
@@ -340,6 +358,7 @@ impl<'a, C, A> Deref for LinkCompound<'a, C, A> {
         match *self.0 {
             LinkInner::C(ref c)
             | LinkInner::Ca(ref c, _)
+            | LinkInner::Ic(_, ref c)
             | LinkInner::Ica(_, ref c, _) => c,
             _ => unreachable!(),
         }
