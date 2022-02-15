@@ -110,9 +110,22 @@ impl TokenBuffer {
         self.buffer = buffer;
         self.written = 0;
     }
+
+    /// Reset buffer without changing the written count (e.g. after resize)
+    pub fn reset_buffer(&mut self, buffer: &mut [u8]) {
+        self.buffer = buffer;
+    }
 }
 
-pub struct BufferOverflow;
+pub struct BufferOverflow {
+    pub size_needed: usize,
+}
+
+impl BufferOverflow {
+    pub fn new(size_needed: usize) -> Self {
+        BufferOverflow { size_needed }
+    }
+}
 
 impl Serializer for TokenBuffer {
     fn pos(&self) -> usize {
@@ -120,14 +133,15 @@ impl Serializer for TokenBuffer {
     }
 
     fn write(&mut self, bytes: &[u8]) -> Result<(), Self::Error> {
-        let remaining_buffer = unsafe { self.unwritten_bytes() };
+        let remaining_buffer_len = unsafe { self.unwritten_bytes() }.len();
         let bytes_length = bytes.len();
-        if remaining_buffer.len() >= bytes_length {
+        if remaining_buffer_len >= bytes_length {
+            let remaining_buffer = unsafe { self.unwritten_bytes() };
             remaining_buffer[..bytes_length].copy_from_slice(bytes);
             self.written += bytes_length;
             Ok(())
         } else {
-            Err(BufferOverflow)
+            Err(BufferOverflow::new(bytes_length))
         }
     }
 }

@@ -236,7 +236,11 @@ impl Store for HostStore {
         TokenBuffer::new(token, bytes)
     }
 
-    fn extend(&self, buffer: &mut TokenBuffer) -> Result<(), ()> {
+    fn extend(
+        &self,
+        buffer: &mut TokenBuffer,
+        _size_needed: usize,
+    ) -> Result<(), ()> {
         self.inner.write().extend(buffer)
     }
 
