@@ -27,6 +27,7 @@ pub use store_serializer::*;
 mod token_buffer;
 pub use token_buffer::*;
 
+use crate::tower::{WellArchived, WellFormed};
 use crate::{
     Annotation, ArchivedCompound, Branch, Compound, MaybeArchived, Walker,
 };
@@ -37,6 +38,18 @@ use crate::{
 )]
 #[archive(as = "Self")]
 pub struct OffsetLen(LittleEndian<u64>, LittleEndian<u16>);
+
+impl From<Identifier> for OffsetLen {
+    fn from(_: Identifier) -> Self {
+        todo!()
+    }
+}
+
+impl Into<Identifier> for OffsetLen {
+    fn into(self) -> Identifier {
+        todo!()
+    }
+}
 
 impl OffsetLen {
     /// Creates an offset with a given value
@@ -65,24 +78,18 @@ impl OffsetLen {
 
 /// An identifier representing a value stored somewhere else
 #[derive(CheckBytes)]
-pub struct Ident<T, I> {
-    id: I,
+pub struct Ident<T> {
+    id: Identifier,
     _marker: PhantomData<T>,
 }
 
-impl<T, I> core::fmt::Debug for Ident<T, I>
-where
-    I: core::fmt::Debug,
-{
+impl<T> core::fmt::Debug for Ident<T> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("Ident").field("id", &self.id).finish()
     }
 }
 
-impl<T, I> Clone for Ident<T, I>
-where
-    I: Clone,
-{
+impl<T> Clone for Ident<T> {
     fn clone(&self) -> Self {
         Self {
             id: self.id.clone(),
@@ -91,11 +98,11 @@ where
     }
 }
 
-impl<T, I> Copy for Ident<T, I> where I: Copy {}
+impl<T> Copy for Ident<T> {}
 
-impl<T, I> Ident<T, I> {
+impl<T> Ident<T> {
     /// Creates a typed identifier
-    pub fn new(id: I) -> Self {
+    pub fn new(id: Identifier) -> Self {
         Ident {
             id,
             _marker: PhantomData,
@@ -103,34 +110,34 @@ impl<T, I> Ident<T, I> {
     }
 
     /// Returns an untyped identifier
-    pub fn erase(&self) -> &I {
+    pub fn erase(&self) -> &Identifier {
         &self.id
     }
 }
 
 /// Stored is a reference to a value stored, along with the backing store
 #[derive(Clone)]
-pub struct Stored<T, I> {
-    store: StoreRef<I>,
-    ident: Ident<T, I>,
+pub struct Stored<T> {
+    store: StoreRef,
+    ident: Ident<T>,
 }
 
-unsafe impl<T, I> Send for Stored<T, I> where I: Send {}
-unsafe impl<T, I> Sync for Stored<T, I> where I: Sync {}
+unsafe impl<T> Send for Stored<T> {}
+unsafe impl<T> Sync for Stored<T> {}
 
-impl<T, I> Stored<T, I> {
+impl<T> Stored<T> {
     /// Create a new `Stored` wrapper from an identifier and a store
-    pub fn new(store: StoreRef<I>, ident: Ident<T, I>) -> Self {
+    pub fn new(store: StoreRef, ident: Ident<T>) -> Self {
         Stored { store, ident }
     }
 
     /// Get a reference to the backing Store
-    pub fn store(&self) -> &StoreRef<I> {
+    pub fn store(&self) -> &StoreRef {
         &self.store
     }
 
     /// Get a reference to the Identifier of the stored value
-    pub fn ident(&self) -> &Ident<T, I> {
+    pub fn ident(&self) -> &Ident<T> {
         &self.ident
     }
 
@@ -142,16 +149,18 @@ impl<T, I> Stored<T, I> {
     {
         self.store.get(&self.ident)
     }
+}
 
-    /// Start a branch walk using the stored `T` as the root.  
-    pub fn walk<W, A>(&self, walker: W) -> Option<Branch<T, A, I>>
+impl<C> Stored<C> {
+    /// Start a branch walk using the stored `C` as the root.
+    pub fn walk<A, W>(&self, walker: W) -> Option<Branch<C, A>>
     where
-        T: Compound<A, I>,
-        T::Archived: ArchivedCompound<T, A, I>
-            + for<'any> CheckBytes<DefaultValidator<'any>>,
-        T::Leaf: 'static + Archive,
-        A: Annotation<T::Leaf>,
-        W: Walker<T, A, I>,
+        C: Compound<A> + WellFormed,
+        C::Archived: ArchivedCompound<C, A> + WellArchived<C>,
+        C::Leaf: 'static + WellFormed,
+        <C::Leaf as Archive>::Archived: WellArchived<C::Leaf>,
+        A: Annotation<C::Leaf>,
+        W: Walker<C, A>,
     {
         let inner = self.inner();
         Branch::walk_with_store(
@@ -163,18 +172,19 @@ impl<T, I> Stored<T, I> {
 }
 
 /// Trait that ensures the value has access to a store backend
-pub trait StoreProvider<I>: Sized + Fallible {
+pub trait StoreProvider: Sized + Fallible {
     /// Get a `StoreRef` associated with `Self`
-    fn store(&self) -> &StoreRef<I>;
+    fn store(&self) -> &StoreRef;
 }
+
+#[derive(Copy, Clone, Archive, Serialize, Deserialize, CheckBytes, Debug)]
+#[archive(as = "Self")]
+pub struct Identifier([u8; 32]);
 
 /// A type that works as a handle to a `Storage` backend.
 pub trait Store {
-    /// The identifier used for refering to stored values
-    type Identifier;
-
     /// Gets a reference to an archived value
-    fn get(&self, ident: &Self::Identifier) -> &[u8];
+    fn get(&self, ident: &Identifier) -> &[u8];
 
     /// Request a buffer to write data
     fn request_buffer(&self) -> TokenBuffer;
@@ -186,7 +196,7 @@ pub trait Store {
     fn persist(&self) -> Result<(), ()>;
 
     /// Commit written bytes to the
-    fn commit(&self, buffer: &mut TokenBuffer) -> Self::Identifier;
+    fn commit(&self, buffer: &mut TokenBuffer) -> Identifier;
 
     /// Request additional bytes for writing    
     fn extend(&self, buffer: &mut TokenBuffer) -> Result<(), ()>;

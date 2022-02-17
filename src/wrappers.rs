@@ -11,17 +11,12 @@ use rkyv::Archive;
 use crate::storage::Stored;
 use crate::Keyed;
 
-/// Marker trait for types that have themselves as archived type
-pub trait Primitive: Archive<Archived = Self> + Sized {}
-
-impl<T> Primitive for T where T: Archive<Archived = T> + Sized {}
-
 /// Wrapper around a value either in memory or in a store
-pub enum MaybeStored<'a, T, I> {
+pub enum MaybeStored<'a, T> {
     /// The value is memory
     Memory(&'a T),
     /// The value is in a store
-    Stored(&'a Stored<T, I>),
+    Stored(&'a Stored<T>),
 }
 
 #[derive(Debug)]

@@ -15,15 +15,15 @@ use rend::LittleEndian;
 use rkyv::{Archive, Deserialize, Serialize};
 
 use microkelvin::{
-    Annotation, Cardinality, Combine, Compound, FindMaxKey, Keyed, MaxKey,
-    OffsetLen, Primitive,
+    Annotation, Cardinality, Combine, Compound, FindMaxKey, Fundamental, Keyed,
+    MaxKey,
 };
 
 #[derive(Clone, Archive, Serialize, Debug, Deserialize, CheckBytes)]
 #[archive(as = "Self")]
 #[archive(bound(archive = "
-  K: Primitive,
-  MaxKey<K>: Primitive,
+  K: Fundamental,
+  MaxKey<K>: Fundamental,
 "))]
 struct Anno<K> {
     max: MaxKey<K>,
@@ -54,7 +54,7 @@ impl<K> Borrow<Cardinality> for Anno<K> {
 impl<Leaf, K> Annotation<Leaf> for Anno<K>
 where
     Leaf: Keyed<K>,
-    K: Primitive + Ord + Clone,
+    K: Fundamental + Ord,
 {
     fn from_leaf(leaf: &Leaf) -> Self {
         Anno {
@@ -102,7 +102,7 @@ fn maximum_multiple() {
 
     keys.shuffle(&mut thread_rng());
 
-    let mut list = LinkedList::<_, Anno<LittleEndian<u64>>, OffsetLen>::new();
+    let mut list = LinkedList::<_, Anno<LittleEndian<u64>>>::new();
 
     for key in keys {
         let key: LittleEndian<u64> = key.into();

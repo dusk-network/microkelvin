@@ -8,54 +8,51 @@ use core::borrow::{Borrow, BorrowMut};
 use core::cmp::Ordering;
 
 use bytecheck::CheckBytes;
-use rkyv::{
-    validation::validators::DefaultValidator, Archive, Deserialize, Serialize,
-};
+use rkyv::{Archive, Deserialize, Serialize};
 
 use microkelvin::{
     Annotation, ArchivedChild, ArchivedCompound, BranchRef, BranchRefMut,
-    Child, ChildMut, Compound, Discriminant, Keyed, Link, MaxKey,
+    Child, ChildMut, Compound, Discriminant, Fundamental, Keyed, Link, MaxKey,
     MaybeArchived, Step, StoreProvider, StoreRef, StoreSerializer, Walkable,
-    Walker,
+    Walker, WellArchived, WellFormed,
 };
 
 #[derive(Clone, Archive, Serialize, Deserialize)]
 #[archive_attr(derive(CheckBytes))]
 #[archive(bound(serialize = "
-  T: Clone + Serialize<StoreSerializer<I>>, 
-  A: Clone + Annotation<T>,
-  I: Clone,
-  __S: Sized + BorrowMut<StoreSerializer<I>>"))]
+  T: WellFormed, 
+  T::Archived: WellArchived<T>,
+  A: Fundamental + Annotation<T>,
+  __S: Sized + BorrowMut<StoreSerializer>"))]
 #[archive(bound(deserialize = "
-  T: Archive + Clone,
-  T::Archived: Deserialize<T, StoreRef<I>>,
-  A: Clone + Annotation<T>,
-  I: Clone, 
-  __D: StoreProvider<I>"))]
-pub enum NaiveTree<T, A, I> {
+  T: WellFormed,
+  T::Archived: WellArchived<T>,
+  A: Fundamental + Annotation<T>,
+  __D: StoreProvider"))]
+pub enum NaiveTree<T, A> {
     Empty,
     Single(T),
     Double(T, T),
     Middle(
-        #[omit_bounds] Link<NaiveTree<T, A, I>, A, I>,
+        #[omit_bounds] Link<NaiveTree<T, A>, A>,
         T,
-        #[omit_bounds] Link<NaiveTree<T, A, I>, A, I>,
+        #[omit_bounds] Link<NaiveTree<T, A>, A>,
     ),
 }
 
-impl<T, A, I> Default for NaiveTree<T, A, I> {
+impl<T, A> Default for NaiveTree<T, A> {
     fn default() -> Self {
         NaiveTree::Empty
     }
 }
 
-impl<T, A, I> Compound<A, I> for NaiveTree<T, A, I>
+impl<T, A> Compound<A> for NaiveTree<T, A>
 where
     T: Archive,
 {
     type Leaf = T;
 
-    fn child(&self, ofs: usize) -> Child<Self, A, I> {
+    fn child(&self, ofs: usize) -> Child<Self, A> {
         match (ofs, self) {
             (0, NaiveTree::Single(a)) => Child::Leaf(a),
 
@@ -70,7 +67,7 @@ where
         }
     }
 
-    fn child_mut(&mut self, ofs: usize) -> ChildMut<Self, A, I> {
+    fn child_mut(&mut self, ofs: usize) -> ChildMut<Self, A> {
         match (ofs, self) {
             (0, NaiveTree::Single(a)) => ChildMut::Leaf(a),
 
@@ -86,12 +83,11 @@ where
     }
 }
 
-impl<T, A, I> ArchivedCompound<NaiveTree<T, A, I>, A, I>
-    for ArchivedNaiveTree<T, A, I>
+impl<T, A> ArchivedCompound<NaiveTree<T, A>, A> for ArchivedNaiveTree<T, A>
 where
     T: Archive,
 {
-    fn child(&self, ofs: usize) -> ArchivedChild<NaiveTree<T, A, I>, A, I> {
+    fn child(&self, ofs: usize) -> ArchivedChild<NaiveTree<T, A>, A> {
         match (ofs, self) {
             (0, ArchivedNaiveTree::Single(t)) => ArchivedChild::Leaf(t),
 
@@ -107,15 +103,11 @@ where
     }
 }
 
-impl<T, A, I> NaiveTree<T, A, I>
+impl<T, A> NaiveTree<T, A>
 where
-    T: Archive + Ord + Clone,
-    T::Archived: Deserialize<T, StoreRef<I>>
-        + for<'any> CheckBytes<DefaultValidator<'any>>,
-    A: Annotation<T> + Clone,
-    A::Archived: Deserialize<A, StoreRef<I>>
-        + for<'any> CheckBytes<DefaultValidator<'any>>,
-    I: Clone + for<'any> CheckBytes<DefaultValidator<'any>>,
+    T: Ord + WellFormed,
+    T::Archived: WellArchived<T>,
+    A: Annotation<T> + Fundamental,
 {
     pub fn new() -> Self {
         Default::default()
@@ -260,19 +252,19 @@ impl<K, V> KvPair<K, V> {
     }
 }
 
-pub struct NaiveMap<K, V, A, I>(NaiveTree<KvPair<K, V>, A, I>);
+pub struct NaiveMap<K, V, A>(NaiveTree<KvPair<K, V>, A>);
 
 struct Lookup<'k, K>(&'k K);
 
-impl<'k, C, A, I, K> Walker<C, A, I> for Lookup<'k, K>
+impl<'k, C, A, K> Walker<C, A> for Lookup<'k, K>
 where
-    C: Compound<A, I>,
-    C::Leaf: Keyed<K>,
-    <C::Leaf as Archive>::Archived: Keyed<K>,
-    K: Ord,
+    C: Compound<A>,
+    C::Leaf: Keyed<K> + WellFormed,
+    <C::Leaf as Archive>::Archived: Keyed<K> + WellArchived<C::Leaf>,
+    K: Fundamental + Ord,
     A: Borrow<MaxKey<K>>,
 {
-    fn walk(&mut self, walk: impl Walkable<C, A, I>) -> Step {
+    fn walk(&mut self, walk: impl Walkable<C, A>) -> Step {
         for i in 0.. {
             match walk.probe(i) {
                 Discriminant::Leaf(kv) => match self.0.cmp(kv.key()) {
@@ -297,22 +289,13 @@ where
     }
 }
 
-impl<K, V, A, I> NaiveMap<K, V, A, I>
+impl<K, V, A> NaiveMap<K, V, A>
 where
-    K: Archive<Archived = K>
-        + Ord
-        + Clone
-        + Deserialize<K, StoreRef<I>>
-        + for<'a> CheckBytes<DefaultValidator<'a>>,
-    V: Archive + Clone,
-    V::Archived:
-        Deserialize<V, StoreRef<I>> + for<'a> CheckBytes<DefaultValidator<'a>>,
-    A: Annotation<KvPair<K, V>>
-        + Deserialize<A, StoreRef<I>>
-        + Borrow<MaxKey<K>>
-        + for<'a> CheckBytes<DefaultValidator<'a>>,
+    K: Fundamental + Ord,
+    V: WellFormed,
+    V::Archived: WellArchived<V>,
+    A: Fundamental + Annotation<KvPair<K, V>> + Borrow<MaxKey<K>>,
     KvPair<K, V>: Keyed<K>,
-    I: Clone + for<'a> CheckBytes<DefaultValidator<'a>>,
 {
     pub fn new() -> Self {
         NaiveMap(NaiveTree::new())
@@ -396,7 +379,7 @@ mod test {
         let ordered = numbers.clone();
         numbers.shuffle(&mut rng);
 
-        let mut tree = NaiveTree::<_, MaxKey<LittleEndian<u16>>, _>::new();
+        let mut tree = NaiveTree::<_, MaxKey<LittleEndian<u16>>>::new();
 
         for n in &numbers {
             let leaf = TestLeaf::new(*n);

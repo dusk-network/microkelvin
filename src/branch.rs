@@ -13,25 +13,26 @@ use rkyv::Archive;
 
 use crate::compound::{ArchivedChild, ArchivedCompound, Child, Compound};
 use crate::storage::StoreRef;
+use crate::tower::{WellArchived, WellFormed};
 use crate::walk::{All, Discriminant, Step, Walkable, Walker};
 use crate::wrappers::{MaybeArchived, MaybeStored};
 use crate::{ARef, Annotation};
 
-pub struct Level<'a, C, A, I>
+pub struct Level<'a, C, A>
 where
     C: Archive,
 {
     offset: usize,
     // pub to be accesible from `walk.rs`
     pub(crate) node: MaybeArchived<'a, C>,
-    _marker: PhantomData<(A, I)>,
+    _marker: PhantomData<A>,
 }
 
-impl<'a, C, A, I> Level<'a, C, A, I>
+impl<'a, C, A> Level<'a, C, A>
 where
-    C: Archive + Compound<A, I>,
+    C: Archive + Compound<A>,
 {
-    pub fn new(root: MaybeArchived<'a, C>) -> Level<'a, C, A, I> {
+    pub fn new(root: MaybeArchived<'a, C>) -> Level<'a, C, A> {
         Level {
             offset: 0,
             node: root,
@@ -49,10 +50,11 @@ where
     }
 }
 
-impl<'a, C, A, I> Walkable<C, A, I> for &'a Level<'a, C, A, I>
+impl<'a, C, A> Walkable<C, A> for &'a Level<'a, C, A>
 where
-    C: Compound<A, I>,
-    C::Archived: ArchivedCompound<C, A, I>,
+    C: Compound<A> + WellFormed,
+    C::Leaf: WellFormed,
+    C::Archived: ArchivedCompound<C, A> + WellArchived<C>,
     A: Annotation<C::Leaf>,
 {
     fn probe(&self, ofs: usize) -> Discriminant<C::Leaf, A> {
@@ -81,18 +83,18 @@ where
     }
 }
 
-pub struct PartialBranch<'a, C, A, I>
+pub struct PartialBranch<'a, C, A>
 where
     C: Archive,
 {
-    levels: Vec<Level<'a, C, A, I>>,
-    store: Option<StoreRef<I>>,
+    levels: Vec<Level<'a, C, A>>,
+    store: Option<StoreRef>,
 }
 
-impl<'a, C, A, I> PartialBranch<'a, C, A, I>
+impl<'a, C, A> PartialBranch<'a, C, A>
 where
-    C: Archive + Compound<A, I>,
-    C::Archived: ArchivedCompound<C, A, I>,
+    C: Archive + Compound<A>,
+    C::Archived: ArchivedCompound<C, A>,
     C::Leaf: Archive,
 {
     fn new(root: MaybeArchived<'a, C>) -> Self {
@@ -102,7 +104,7 @@ where
         }
     }
 
-    fn new_with_store(root: MaybeArchived<'a, C>, store: StoreRef<I>) -> Self {
+    fn new_with_store(root: MaybeArchived<'a, C>, store: StoreRef) -> Self {
         PartialBranch {
             levels: vec![Level::new(root)],
             store: Some(store),
@@ -113,13 +115,13 @@ where
         self.levels.len()
     }
 
-    pub fn levels(&self) -> &[Level<C, A, I>] {
+    pub fn levels(&self) -> &[Level<C, A>] {
         &self.levels
     }
 
     fn leaf(&self) -> Option<MaybeArchived<C::Leaf>>
     where
-        C: Compound<A, I>,
+        C: Compound<A>,
         C::Leaf: Archive,
     {
         let top = self.top();
@@ -137,11 +139,11 @@ where
         }
     }
 
-    fn top(&self) -> &Level<C, A, I> {
+    fn top(&self) -> &Level<C, A> {
         self.levels.last().expect("Never empty")
     }
 
-    fn top_mut(&mut self) -> &mut Level<'a, C, A, I> {
+    fn top_mut(&mut self) -> &mut Level<'a, C, A> {
         self.levels.last_mut().expect("Never empty")
     }
 
@@ -149,7 +151,7 @@ where
         *self.top_mut().offset_mut() += 1;
     }
 
-    fn pop(&mut self) -> Option<Level<'a, C, A, I>> {
+    fn pop(&mut self) -> Option<Level<'a, C, A>> {
         // We never pop the root
         if self.levels.len() > 1 {
             self.levels.pop()
@@ -160,22 +162,20 @@ where
 
     fn walk<W>(&mut self, walker: &mut W) -> Option<()>
     where
-        C: Compound<A, I>,
-        C::Archived: ArchivedCompound<C, A, I>
-            + for<'any> CheckBytes<DefaultValidator<'any>>,
-        C::Leaf: 'a + Archive,
+        C: Compound<A> + WellFormed,
+        C::Archived: ArchivedCompound<C, A> + WellArchived<C>,
+        C::Leaf: WellFormed,
         A: Annotation<C::Leaf>,
-        W: Walker<C, A, I>,
+        W: Walker<C, A>,
     {
-        enum State<'a, C, A, I>
+        enum State<'a, C, A>
         where
-            C: Compound<A, I>,
-            C::Archived: for<'any> CheckBytes<DefaultValidator<'any>>,
-            C::Leaf: Archive,
+            C: Compound<A> + WellFormed,
+            C::Archived: WellArchived<C>,
             A: Annotation<C::Leaf>,
         {
             Init,
-            Push(Level<'a, C, A, I>),
+            Push(Level<'a, C, A>),
             Pop,
         }
 
@@ -204,10 +204,10 @@ where
                             Child::Leaf(_) => return Some(()),
                             Child::Link(link) => match link.inner() {
                                 MaybeStored::Memory(c) => {
-                                    let level = Level::<C, A, I>::new(
+                                    let level = Level::<C, A>::new(
                                         MaybeArchived::Memory(c),
                                     );
-                                    let extended: Level<'a, C, A, I> =
+                                    let extended: Level<'a, C, A> =
                                         unsafe { core::mem::transmute(level) };
                                     state = State::Push(extended);
                                     continue;
@@ -240,9 +240,9 @@ where
 
                     // continued archived branch
 
-                    let level: Level<C, A, I> =
+                    let level: Level<C, A> =
                         Level::new(MaybeArchived::Archived(archived));
-                    let extended: Level<'a, C, A, I> =
+                    let extended: Level<'a, C, A> =
                         unsafe { core::mem::transmute(level) };
                     state = State::Push(extended);
                 }
@@ -255,11 +255,12 @@ where
     }
 }
 
-impl<'a, C, A, I> Branch<'a, C, A, I>
+impl<'a, C, A> Branch<'a, C, A>
 where
-    C: Archive + Compound<A, I>,
-    C::Archived: ArchivedCompound<C, A, I>,
-    C::Leaf: Archive,
+    C: Compound<A> + WellFormed,
+    C::Archived: ArchivedCompound<C, A> + WellArchived<C>,
+    C::Leaf: WellFormed,
+    <C::Leaf as Archive>::Archived: WellArchived<C::Leaf>,
 {
     /// Returns the depth of the branch
     pub fn depth(&self) -> usize {
@@ -267,7 +268,7 @@ where
     }
 
     /// Returns a slice into the levels of the tree.
-    pub fn levels(&self) -> &[Level<C, A, I>] {
+    pub fn levels(&self) -> &[Level<C, A>] {
         self.0.levels()
     }
 
@@ -276,9 +277,8 @@ where
     pub fn map_leaf<M>(
         self,
         closure: fn(MaybeArchived<'a, C::Leaf>) -> M,
-    ) -> MappedBranch<'a, C, A, I, M>
+    ) -> MappedBranch<'a, C, A, M>
     where
-        C: Compound<A, I>,
         M: 'a,
     {
         MappedBranch {
@@ -296,12 +296,12 @@ where
     /// walk failed.
     pub fn walk<W>(root: MaybeArchived<'a, C>, mut walker: W) -> Option<Self>
     where
-        C: Compound<A, I>,
-        C::Archived: ArchivedCompound<C, A, I>
+        C: Compound<A>,
+        C::Archived: ArchivedCompound<C, A>
             + for<'any> CheckBytes<DefaultValidator<'any>>,
         C::Leaf: 'a + Archive,
         A: Annotation<C::Leaf>,
-        W: Walker<C, A, I>,
+        W: Walker<C, A>,
     {
         let mut partial = PartialBranch::new(root);
         partial.walk(&mut walker).map(|()| Branch(partial))
@@ -312,15 +312,15 @@ where
     pub fn walk_with_store<W>(
         root: MaybeArchived<'a, C>,
         mut walker: W,
-        store: StoreRef<I>,
+        store: StoreRef,
     ) -> Option<Self>
     where
-        C: Compound<A, I>,
-        C::Archived: ArchivedCompound<C, A, I>
+        C: Compound<A>,
+        C::Archived: ArchivedCompound<C, A>
             + for<'any> CheckBytes<DefaultValidator<'any>>,
         C::Leaf: 'a + Archive,
         A: Annotation<C::Leaf>,
-        W: Walker<C, A, I>,
+        W: Walker<C, A>,
     {
         let mut partial = PartialBranch::new_with_store(root, store);
         partial.walk(&mut walker).map(|()| Branch(partial))
@@ -331,28 +331,29 @@ where
 ///
 /// Branche are always guaranteed to point at a leaf, and can be dereferenced
 /// to the pointed-at leaf.
-pub struct Branch<'a, C, A, I>(PartialBranch<'a, C, A, I>)
+pub struct Branch<'a, C, A>(PartialBranch<'a, C, A>)
 where
     C: Archive;
 
 /// A branch that applies a map to its leaf
-pub struct MappedBranch<'a, C, A, I, M>
+pub struct MappedBranch<'a, C, A, M>
 where
-    C: Compound<A, I>,
+    C: Compound<A> + Archive,
     C::Leaf: Archive,
     M: 'a,
 {
-    inner: Branch<'a, C, A, I>,
+    inner: Branch<'a, C, A>,
     closure: MapClosure<'a, C::Leaf, M>,
 }
 
 type MapClosure<'a, L, M> = fn(MaybeArchived<'a, L>) -> M;
 
-impl<'a, C, A, I, M> MappedBranch<'a, C, A, I, M>
+impl<'a, C, A, M> MappedBranch<'a, C, A, M>
 where
-    C: Compound<A, I>,
-    C::Archived: ArchivedCompound<C, A, I>,
-    C::Leaf: Archive,
+    C: Compound<A> + WellFormed,
+    C::Archived: ArchivedCompound<C, A> + WellArchived<C>,
+    C::Leaf: WellFormed,
+    <C::Leaf as Archive>::Archived: WellArchived<C::Leaf>,
 {
     /// Get the mapped leaf of the branch
     pub fn leaf(&'a self) -> M {
@@ -360,41 +361,41 @@ where
     }
 }
 
-pub enum BranchIterator<'a, C, A, I, W>
+pub enum BranchIterator<'a, C, A, W>
 where
     C: Archive,
 {
-    Initial(Branch<'a, C, A, I>, W),
-    Intermediate(Branch<'a, C, A, I>, W),
+    Initial(Branch<'a, C, A>, W),
+    Intermediate(Branch<'a, C, A>, W),
     Exhausted,
 }
 
 // iterators
-impl<'a, C, A, I> IntoIterator for Branch<'a, C, A, I>
+impl<'a, C, A> IntoIterator for Branch<'a, C, A>
 where
-    C: Compound<A, I>,
-    C::Archived: ArchivedCompound<C, A, I>
-        + for<'any> CheckBytes<DefaultValidator<'any>>,
-    C::Leaf: 'a + Archive,
+    C: Compound<A> + WellFormed,
+    C::Archived: ArchivedCompound<C, A> + WellArchived<C>,
+    C::Leaf: 'a + WellFormed,
+    <C::Leaf as Archive>::Archived: 'a + WellArchived<C::Leaf>,
     A: Annotation<C::Leaf>,
 {
     type Item = MaybeArchived<'a, C::Leaf>;
 
-    type IntoIter = BranchIterator<'a, C, A, I, All>;
+    type IntoIter = BranchIterator<'a, C, A, All>;
 
     fn into_iter(self) -> Self::IntoIter {
         BranchIterator::Initial(self, All)
     }
 }
 
-impl<'a, C, A, I, W> Iterator for BranchIterator<'a, C, A, I, W>
+impl<'a, C, A, W> Iterator for BranchIterator<'a, C, A, W>
 where
-    C: Compound<A, I>,
-    C::Archived: ArchivedCompound<C, A, I>
-        + for<'any> CheckBytes<DefaultValidator<'any>>,
-    C::Leaf: 'a + Archive,
+    C: Compound<A> + WellFormed,
+    C::Archived: ArchivedCompound<C, A> + WellArchived<C>,
+    C::Leaf: 'a + WellFormed,
+    <C::Leaf as Archive>::Archived: 'a + WellArchived<C::Leaf>,
     A: Annotation<C::Leaf>,
-    W: Walker<C, A, I>,
+    W: Walker<C, A>,
 {
     type Item = MaybeArchived<'a, C::Leaf>;
 
@@ -433,28 +434,28 @@ where
     }
 }
 
-pub enum MappedBranchIterator<'a, C, A, I, R, W>
+pub enum MappedBranchIterator<'a, C, A, R, W>
 where
-    C: Archive + Compound<A, I>,
+    C: Archive + Compound<A>,
     C::Leaf: Archive,
 {
-    Initial(Branch<'a, C, A, I>, MapClosure<'a, C::Leaf, R>, W),
-    Intermediate(Branch<'a, C, A, I>, MapClosure<'a, C::Leaf, R>, W),
+    Initial(Branch<'a, C, A>, MapClosure<'a, C::Leaf, R>, W),
+    Intermediate(Branch<'a, C, A>, MapClosure<'a, C::Leaf, R>, W),
     Exhausted,
 }
 
-impl<'a, C, A, I, M> IntoIterator for MappedBranch<'a, C, A, I, M>
+impl<'a, C, A, M> IntoIterator for MappedBranch<'a, C, A, M>
 where
-    C: Compound<A, I>,
-    C::Archived: ArchivedCompound<C, A, I>
-        + for<'any> CheckBytes<DefaultValidator<'any>>,
-    C::Leaf: 'a + Archive,
+    C: Compound<A> + WellFormed,
+    C::Archived: ArchivedCompound<C, A> + WellArchived<C>,
+    C::Leaf: 'a + WellFormed,
+    <C::Leaf as Archive>::Archived: WellArchived<C::Leaf>,
     A: Annotation<C::Leaf>,
     M: 'a + Archive,
 {
     type Item = M;
 
-    type IntoIter = MappedBranchIterator<'a, C, A, I, M, All>;
+    type IntoIter = MappedBranchIterator<'a, C, A, M, All>;
 
     fn into_iter(self) -> Self::IntoIter {
         let MappedBranch { inner, closure } = self;
@@ -462,14 +463,14 @@ where
     }
 }
 
-impl<'a, C, A, I, M, W> Iterator for MappedBranchIterator<'a, C, A, I, M, W>
+impl<'a, C, A, M, W> Iterator for MappedBranchIterator<'a, C, A, M, W>
 where
-    C: Compound<A, I>,
-    C::Archived: ArchivedCompound<C, A, I>
-        + for<'any> CheckBytes<DefaultValidator<'any>>,
-    C::Leaf: 'a + Archive,
+    C: Compound<A> + WellFormed,
+    C::Archived: ArchivedCompound<C, A> + WellArchived<C>,
+    C::Leaf: 'a + WellFormed,
+    <C::Leaf as Archive>::Archived: WellArchived<C::Leaf>,
     A: Annotation<C::Leaf>,
-    W: Walker<C, A, I>,
+    W: Walker<C, A>,
 {
     type Item = M;
 
@@ -518,12 +519,14 @@ where
     fn leaf(&self) -> MaybeArchived<T>;
 }
 
-impl<'a, C, A, T, I> BranchRef<'a, T>
-    for MappedBranch<'a, C, A, I, MaybeArchived<'a, T>>
+impl<'a, C, A, T> BranchRef<'a, T>
+    for MappedBranch<'a, C, A, MaybeArchived<'a, T>>
 where
-    C: Compound<A, I>,
-    C::Archived: ArchivedCompound<C, A, I>,
-    T: Archive,
+    C: Compound<A> + WellFormed,
+    C::Archived: ArchivedCompound<C, A> + WellArchived<C>,
+    C::Leaf: WellFormed,
+    <C::Leaf as Archive>::Archived: WellArchived<C::Leaf>,
+    T: WellFormed,
 {
     fn leaf(&self) -> MaybeArchived<T> {
         let leaf: MaybeArchived<'_, C::Leaf> = self.inner.leaf();

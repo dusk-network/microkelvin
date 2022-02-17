@@ -7,9 +7,7 @@
 use core::cell::Ref;
 use core::ops::Deref;
 
-use rkyv::Archive;
-
-use crate::{Compound, Primitive};
+use crate::{tower::WellFormed, Compound};
 
 mod cardinality;
 mod max_key;
@@ -20,17 +18,15 @@ pub use cardinality::{Cardinality, Nth};
 pub use max_key::{FindMaxKey, Keyed, MaxKey, Member};
 
 /// The trait defining an annotation type over a leaf
-pub trait Annotation<Leaf>:
-    Default + Clone + Combine<Self> + Primitive
-{
+pub trait Annotation<Leaf>: Default + Clone + Combine<Self> {
     /// Creates an annotation from the leaf type
     fn from_leaf(leaf: &Leaf) -> Self;
 
     /// Create an annotation from a node
-    fn from_node<C, S>(node: &C) -> Self
+    fn from_node<C>(node: &C) -> Self
     where
-        C: Compound<Self, S, Leaf = Leaf>,
-        C::Leaf: Archive,
+        C: Compound<Self, Leaf = Leaf> + WellFormed,
+        C::Leaf: WellFormed,
     {
         let mut a = Self::default();
         for i in 0.. {

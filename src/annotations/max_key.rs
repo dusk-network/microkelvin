@@ -14,8 +14,7 @@ use rkyv::{Archive, Deserialize, Serialize};
 
 use crate::annotations::{Annotation, Combine};
 use crate::walk::{Discriminant, Step, Walkable, Walker};
-use crate::wrappers::Primitive;
-use crate::Compound;
+use crate::{Compound, Fundamental};
 
 /// The maximum value of a collection
 #[derive(
@@ -24,7 +23,7 @@ use crate::Compound;
 #[repr(u8)]
 #[archive(as = "Self")]
 #[archive(bound(archive = "
-  K: Primitive"))]
+  K: Fundamental"))]
 pub enum MaxKey<K> {
     /// Identity of max, everything else is larger
     NegativeInfinity,
@@ -104,7 +103,7 @@ where
 impl<K, L> Annotation<L> for MaxKey<K>
 where
     L: Keyed<K>,
-    K: Primitive + Clone + Ord,
+    K: Fundamental + Ord,
 {
     fn from_leaf(leaf: &L) -> Self {
         MaxKey::Maximum(leaf.key().clone())
@@ -114,7 +113,7 @@ where
 impl<K, A> Combine<A> for MaxKey<K>
 where
     K: Ord + Clone,
-    A: Primitive + Borrow<Self>,
+    A: Borrow<Self>,
 {
     fn combine(&mut self, other: &A) {
         let b = other.borrow();
@@ -133,15 +132,15 @@ impl<K> Default for FindMaxKey<K> {
     }
 }
 
-impl<C, A, S, K> Walker<C, A, S> for FindMaxKey<K>
+impl<C, A, K> Walker<C, A> for FindMaxKey<K>
 where
-    C: Compound<A, S>,
+    C: Compound<A>,
     C::Leaf: Archive + Keyed<K>,
     <C::Leaf as Archive>::Archived: Keyed<K>,
     A: Borrow<MaxKey<K>>,
     K: Ord + Clone,
 {
-    fn walk(&mut self, walk: impl Walkable<C, A, S>) -> Step {
+    fn walk(&mut self, walk: impl Walkable<C, A>) -> Step {
         let mut current_max: MaxKey<K> = MaxKey::NegativeInfinity;
         let mut current_step = Step::Abort;
 
@@ -173,15 +172,15 @@ where
 /// Find a specific value in a sorted tree
 pub struct Member<'a, K>(pub &'a K);
 
-impl<'a, C, A, S, K> Walker<C, A, S> for Member<'a, K>
+impl<'a, C, A, K> Walker<C, A> for Member<'a, K>
 where
-    C: Compound<A, S>,
+    C: Compound<A>,
     C::Leaf: Clone + Archive + Ord + Keyed<K>,
     <C::Leaf as Archive>::Archived: Keyed<K>,
     K: PartialEq + PartialOrd,
     A: Borrow<MaxKey<K>>,
 {
-    fn walk(&mut self, walk: impl Walkable<C, A, S>) -> Step {
+    fn walk(&mut self, walk: impl Walkable<C, A>) -> Step {
         for i in 0.. {
             match walk.probe(i) {
                 Discriminant::Empty => (),

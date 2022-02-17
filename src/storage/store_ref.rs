@@ -14,36 +14,36 @@ use rkyv::{check_archived_root, Archive, Fallible, Serialize};
 
 use crate::{Ident, Store, StoreProvider, StoreSerializer, Stored};
 
-use super::{Token, TokenBuffer};
+use super::{Identifier, Token, TokenBuffer};
 
 /// A clonable reference to a store
-pub struct StoreRef<I> {
-    inner: Arc<dyn Store<Identifier = I>>,
+pub struct StoreRef {
+    inner: Arc<dyn Store>,
 }
 
-impl<I> StoreRef<I> {
+impl StoreRef {
     /// Creates a new StoreReference
-    pub fn new<S: 'static + Store<Identifier = I>>(store: S) -> StoreRef<I> {
+    pub fn new<S: 'static + Store>(store: S) -> StoreRef {
         StoreRef {
             inner: Arc::new(store),
         }
     }
 }
 
-impl<I> StoreRef<I> {
+impl StoreRef {
     /// Store a value, returning a `Stored` fat pointer that also carries a
     /// reference to the underlying storage with it    
-    pub fn store<T>(&self, t: &T) -> Stored<T, I>
+    pub fn store<T>(&self, t: &T) -> Stored<T>
     where
-        T: Serialize<StoreSerializer<I>>,
+        T: Serialize<StoreSerializer>,
     {
         Stored::new(self.clone(), self.put(t))
     }
 
     /// Put a value into the store, returning an Ident.
-    pub fn put<T>(&self, t: &T) -> Ident<T, I>
+    pub fn put<T>(&self, t: &T) -> Ident<T>
     where
-        T: Serialize<StoreSerializer<I>>,
+        T: Serialize<StoreSerializer>,
     {
         let mut ser = self.serializer();
         ser.serialize(t);
@@ -51,8 +51,8 @@ impl<I> StoreRef<I> {
         Ident::new(id)
     }
 
-    /// Put raw bytes into the store, returning an Ident.
-    pub fn put_raw(&self, bytes: &[u8]) -> I {
+    /// Put raw bytes into the store, returning an Identifier.
+    pub fn put_raw(&self, bytes: &[u8]) -> Identifier {
         let mut ser = self.serializer();
         // write the bytes using the `Serializer` directly.
         ser.write(bytes).unwrap();
@@ -60,12 +60,12 @@ impl<I> StoreRef<I> {
     }
 
     /// Return a serializer associated with this store
-    pub fn serializer(&self) -> StoreSerializer<I> {
+    pub fn serializer(&self) -> StoreSerializer {
         StoreSerializer::new(self.clone(), self.inner.request_buffer())
     }
 
     /// Gets a reference to an archived value
-    pub fn get<T>(&self, ident: &Ident<T, I>) -> &T::Archived
+    pub fn get<T>(&self, ident: &Ident<T>) -> &T::Archived
     where
         T: Archive,
         T::Archived: for<'a> CheckBytes<DefaultValidator<'a>>,
@@ -77,7 +77,7 @@ impl<I> StoreRef<I> {
     }
 
     /// Gets a reference to the backing bytes of an archived value
-    pub fn get_raw(&self, i: &I) -> &[u8] {
+    pub fn get_raw(&self, i: &Identifier) -> &[u8] {
         self.inner.get(i)
     }
 
@@ -87,7 +87,7 @@ impl<I> StoreRef<I> {
     }
 
     /// Commit written data, returns an identifier
-    pub fn commit(&self, buffer: &mut TokenBuffer) -> I {
+    pub fn commit(&self, buffer: &mut TokenBuffer) -> Identifier {
         self.inner.commit(buffer)
     }
 
@@ -102,13 +102,13 @@ impl<I> StoreRef<I> {
     }
 }
 
-impl<I> StoreProvider<I> for StoreRef<I> {
-    fn store(&self) -> &StoreRef<I> {
+impl StoreProvider for StoreRef {
+    fn store(&self) -> &StoreRef {
         self
     }
 }
 
-impl<I> Clone for StoreRef<I> {
+impl Clone for StoreRef {
     fn clone(&self) -> Self {
         Self {
             inner: self.inner.clone(),
@@ -116,6 +116,6 @@ impl<I> Clone for StoreRef<I> {
     }
 }
 
-impl<I> Fallible for StoreRef<I> {
+impl Fallible for StoreRef {
     type Error = Infallible;
 }

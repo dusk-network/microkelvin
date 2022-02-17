@@ -37,32 +37,35 @@ where
 }
 
 /// Wrapper trait provided to Walkers
-pub trait Walkable<C, A, S>
+pub trait Walkable<C, A>
 where
-    C: Compound<A, S>,
+    C: Compound<A>,
+    C::Leaf: Archive,
 {
     /// Probe the location of the tree being walked
     fn probe(&self, ofs: usize) -> Discriminant<C::Leaf, A>;
 }
 
 /// The trait used to construct a `Branch` or to iterate through a tree.
-pub trait Walker<C, A, S>
+pub trait Walker<C, A>
 where
-    C: Compound<A, S>,
+    C: Compound<A>,
+    C::Leaf: Archive,
 {
     /// Walk the tree node, returning the appropriate `Step`
-    fn walk(&mut self, walk: impl Walkable<C, A, S>) -> Step;
+    fn walk(&mut self, walk: impl Walkable<C, A>) -> Step;
 }
 
 /// Walker that visits all leaves
 #[derive(Debug)]
 pub struct All;
 
-impl<C, A, S> Walker<C, A, S> for All
+impl<C, A> Walker<C, A> for All
 where
-    C: Compound<A, S>,
+    C: Compound<A>,
+    C::Leaf: Archive,
 {
-    fn walk(&mut self, walk: impl Walkable<C, A, S>) -> Step {
+    fn walk(&mut self, walk: impl Walkable<C, A>) -> Step {
         for i in 0.. {
             match walk.probe(i) {
                 Discriminant::End => return Step::Advance,

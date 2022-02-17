@@ -13,7 +13,7 @@ use rkyv::{
 
 use crate::{StoreProvider, StoreRef};
 
-use super::TokenBuffer;
+use super::{Identifier, TokenBuffer};
 
 struct Buffer<B>(B);
 
@@ -32,22 +32,22 @@ impl<B> DerefMut for Buffer<B> {
 }
 
 /// A buffered serializer wrapping a `StoreRef`
-pub struct StoreSerializer<I> {
+pub struct StoreSerializer {
     #[allow(unused)]
-    store: StoreRef<I>,
+    store: StoreRef,
     buffer: TokenBuffer,
     scratch: BufferScratch<Buffer<[u8; 1024]>>,
 }
 
-impl<I> StoreProvider<I> for StoreSerializer<I> {
-    fn store(&self) -> &StoreRef<I> {
+impl StoreProvider for StoreSerializer {
+    fn store(&self) -> &StoreRef {
         &self.store
     }
 }
 
-impl<I> StoreSerializer<I> {
+impl StoreSerializer {
     /// Creates a new serializer from a buffer
-    pub fn new(store: StoreRef<I>, buffer: TokenBuffer) -> Self {
+    pub fn new(store: StoreRef, buffer: TokenBuffer) -> Self {
         StoreSerializer {
             store,
             buffer,
@@ -65,7 +65,7 @@ impl<I> StoreSerializer<I> {
     }
 
     /// Commit the bytes written
-    pub fn commit(&mut self) -> I {
+    pub fn commit(&mut self) -> Identifier {
         self.store.commit(&mut self.buffer)
     }
 
@@ -79,11 +79,11 @@ impl<I> StoreSerializer<I> {
     }
 }
 
-impl<I> Fallible for StoreSerializer<I> {
+impl Fallible for StoreSerializer {
     type Error = Infallible;
 }
 
-impl<I> Serializer for StoreSerializer<I> {
+impl Serializer for StoreSerializer {
     fn pos(&self) -> usize {
         self.buffer.pos()
     }
@@ -98,7 +98,7 @@ impl<I> Serializer for StoreSerializer<I> {
     }
 }
 
-impl<I> ScratchSpace for StoreSerializer<I> {
+impl ScratchSpace for StoreSerializer {
     unsafe fn push_scratch(
         &mut self,
         layout: core::alloc::Layout,
@@ -118,7 +118,7 @@ impl<I> ScratchSpace for StoreSerializer<I> {
     }
 }
 
-impl<I> Drop for StoreSerializer<I> {
+impl Drop for StoreSerializer {
     fn drop(&mut self) {
         let buf =
             core::mem::replace(&mut self.buffer, TokenBuffer::placeholder());

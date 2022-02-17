@@ -10,11 +10,10 @@ use core::cell::RefCell;
 use alloc::rc::Rc;
 
 use bytecheck::CheckBytes;
-use rkyv::validation::validators::DefaultValidator;
 use rkyv::{Archive, Deserialize, Fallible, Serialize};
 
-use crate::storage::StoreRef;
 use crate::storage::{Ident, StoreProvider, Stored, UnwrapInfallible};
+use crate::tower::{WellArchived, WellFormed};
 use crate::wrappers::MaybeStored;
 use crate::{ARef, Annotation, Compound, StoreSerializer};
 
@@ -23,7 +22,7 @@ use crate::{ARef, Annotation, Compound, StoreSerializer};
 ///
 /// The link takes care of lazily evaluating the annotation of the inner type,
 /// and to load it from memory or backend when needed.
-pub enum Link<C, A, I> {
+pub enum Link<C, A> {
     /// A Link to a node in memory
     Memory {
         /// the underlying rc
@@ -34,7 +33,7 @@ pub enum Link<C, A, I> {
     /// A Link to a stored node
     Stored {
         /// archived at offset
-        stored: Stored<C, I>,
+        stored: Stored<C>,
         /// the final annotation
         a: A,
     },
@@ -42,23 +41,23 @@ pub enum Link<C, A, I> {
 
 #[derive(CheckBytes)]
 /// The archived version of a link, contains an identifier and an annotation
-pub struct ArchivedLink<C, A, I>(Ident<C, I>, A);
+pub struct ArchivedLink<C, A>(Ident<C>, A);
 
-impl<C, A, I> ArchivedLink<C, A, I> {
+impl<C, A> ArchivedLink<C, A> {
     /// Get a reference to the link annotation
     pub fn annotation(&self) -> &A {
         &self.1
     }
 
     /// Get a reference to the link id     
-    pub fn ident<'a>(&self) -> &Ident<C, I> {
+    pub fn ident<'a>(&self) -> &Ident<C> {
         &self.0
     }
 }
 
-impl<C, A, I> Archive for Link<C, A, I> {
-    type Archived = ArchivedLink<C, A, I>;
-    type Resolver = (Ident<C, I>, A);
+impl<C, A> Archive for Link<C, A> {
+    type Archived = ArchivedLink<C, A>;
+    type Resolver = (Ident<C>, A);
 
     unsafe fn resolve(
         &self,
@@ -70,13 +69,12 @@ impl<C, A, I> Archive for Link<C, A, I> {
     }
 }
 
-impl<C, A, I, D> Deserialize<Link<C, A, I>, D> for ArchivedLink<C, A, I>
+impl<C, A, D> Deserialize<Link<C, A>, D> for ArchivedLink<C, A>
 where
     A: Clone,
-    I: Clone,
-    D: StoreProvider<I>,
+    D: StoreProvider,
 {
-    fn deserialize(&self, de: &mut D) -> Result<Link<C, A, I>, D::Error> {
+    fn deserialize(&self, de: &mut D) -> Result<Link<C, A>, D::Error> {
         Ok(Link::Stored {
             stored: Stored::new(de.store().clone(), self.0.clone()),
             a: self.1.clone(),
@@ -84,12 +82,12 @@ where
     }
 }
 
-impl<C, A, I, S> Serialize<S> for Link<C, A, I>
+impl<C, A, S> Serialize<S> for Link<C, A>
 where
-    C: Compound<A, I> + Serialize<S> + Serialize<StoreSerializer<I>>,
-    A: Clone + Annotation<C::Leaf>,
-    I: Clone,
-    S: BorrowMut<StoreSerializer<I>> + Fallible,
+    C: Compound<A> + WellFormed,
+    C::Leaf: WellFormed,
+    A: Annotation<C::Leaf>,
+    S: BorrowMut<StoreSerializer> + Fallible,
 {
     fn serialize(
         &self,
@@ -120,7 +118,7 @@ where
     }
 }
 
-impl<C, A, I> Default for Link<C, A, I>
+impl<C, A> Default for Link<C, A>
 where
     C: Default,
 {
@@ -132,7 +130,7 @@ where
     }
 }
 
-impl<C, A, I> Link<C, A, I> {
+impl<C, A> Link<C, A> {
     /// Create a new link
     pub fn new(compound: C) -> Self {
         Link::Memory {
@@ -144,8 +142,8 @@ impl<C, A, I> Link<C, A, I> {
     /// Returns a reference to to the annotation stored
     pub fn annotation(&self) -> ARef<A>
     where
-        C: Compound<A, I>,
-        C::Leaf: Archive,
+        C: Compound<A> + WellFormed,
+        C::Leaf: WellFormed,
         A: Annotation<C::Leaf>,
     {
         match self {
@@ -166,9 +164,8 @@ impl<C, A, I> Link<C, A, I> {
     /// Unwraps the underlying value, clones or deserializes it
     pub fn unlink(self) -> C
     where
-        C: Compound<A, I> + Clone,
-        C::Archived: Deserialize<C, StoreRef<I>>
-            + for<'a> CheckBytes<DefaultValidator<'a>>,
+        C: Compound<A> + WellFormed,
+        C::Archived: WellArchived<C>,
     {
         match self {
             Link::Memory { rc, .. } => match Rc::try_unwrap(rc) {
@@ -186,7 +183,7 @@ impl<C, A, I> Link<C, A, I> {
     }
 
     /// Returns a reference to the inner node, possibly in its stored form
-    pub fn inner<'a>(&'a self) -> MaybeStored<'a, C, I>
+    pub fn inner<'a>(&'a self) -> MaybeStored<'a, C>
     where
         C: Archive,
     {
@@ -201,9 +198,8 @@ impl<C, A, I> Link<C, A, I> {
     /// Drops cached annotations and ids
     pub fn inner_mut(&mut self) -> &mut C
     where
-        C: Archive + Clone,
-        C::Archived: Deserialize<C, StoreRef<I>>
-            + for<'a> CheckBytes<DefaultValidator<'a>>,
+        C: WellFormed,
+        C::Archived: WellArchived<C>,
     {
         match self {
             Link::Memory { rc, annotation } => {

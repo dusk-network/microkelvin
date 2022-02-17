@@ -4,24 +4,22 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use bytecheck::CheckBytes;
-use rkyv::validation::validators::DefaultValidator;
 use rkyv::{Archive, Deserialize};
 
 use crate::link::{ArchivedLink, Link};
 use crate::storage::StoreRef;
+use crate::tower::{WellArchived, WellFormed};
 use crate::{Annotation, Branch, BranchMut, MaybeArchived, Walker};
 
 /// The response of the `child` method on a `Compound` node.
-pub enum Child<'a, C, A, I>
+pub enum Child<'a, C, A>
 where
-    C: Compound<A, I>,
-    C::Leaf: Archive,
+    C: Compound<A>,
 {
     /// Child is a leaf
     Leaf(&'a C::Leaf),
     /// Child is an annotated subtree node
-    Link(&'a Link<C, A, I>),
+    Link(&'a Link<C, A>),
     /// Empty slot
     Empty,
     /// No more children
@@ -29,14 +27,15 @@ where
 }
 
 /// The response of the `child` method on a `Compound` node.
-pub enum ArchivedChild<'a, C, A, I>
+pub enum ArchivedChild<'a, C, A>
 where
-    C: Compound<A, I>,
+    C: Compound<A>,
+    C::Leaf: Archive,
 {
     /// Child is a leaf
     Leaf(&'a <C::Leaf as Archive>::Archived),
     /// Child is an annotated subtree node
-    Link(&'a ArchivedLink<C, A, I>),
+    Link(&'a ArchivedLink<C, A>),
     /// Empty slot
     Empty,
     /// No more children
@@ -44,14 +43,14 @@ where
 }
 
 /// The response of the `child_mut` method on a `Compound` node.
-pub enum ChildMut<'a, C, A, I>
+pub enum ChildMut<'a, C, A>
 where
-    C: Compound<A, I>,
+    C: Compound<A>,
 {
     /// Child is a leaf
     Leaf(&'a mut C::Leaf),
     /// Child is an annotated node
-    Link(&'a mut Link<C, A, I>),
+    Link(&'a mut Link<C, A>),
     /// Empty slot
     Empty,
     /// No more children
@@ -59,32 +58,34 @@ where
 }
 
 /// Trait to support branch traversal in archived nodes
-pub trait ArchivedCompound<C, A, I>
+pub trait ArchivedCompound<C, A>
 where
-    C: Compound<A, I>,
+    C: Compound<A>,
+    C::Leaf: Archive,
 {
     /// Returns an archived child
-    fn child(&self, ofs: usize) -> ArchivedChild<C, A, I>;
+    fn child(&self, ofs: usize) -> ArchivedChild<C, A>;
 }
 
 /// A type that can recursively contain itself and leaves.
-pub trait Compound<A, I>: Sized + Archive {
+pub trait Compound<A>: Sized {
     /// The leaf type of the Compound collection
-    type Leaf: Archive;
+    type Leaf;
 
     /// Get a reference to a child    
-    fn child(&self, ofs: usize) -> Child<Self, A, I>;
+    fn child(&self, ofs: usize) -> Child<Self, A>;
 
     /// Get a mutable reference to a child
-    fn child_mut(&mut self, ofs: usize) -> ChildMut<Self, A, I>;
+    fn child_mut(&mut self, ofs: usize) -> ChildMut<Self, A>;
 
     /// Constructs a branch from this root compound
-    fn walk<'a, W>(&'a self, walker: W) -> Option<Branch<'a, Self, A, I>>
+    fn walk<'a, W>(&'a self, walker: W) -> Option<Branch<'a, Self, A>>
     where
-        W: Walker<Self, A, I>,
-        Self::Archived: ArchivedCompound<Self, A, I>
-            + for<'any> CheckBytes<DefaultValidator<'any>>,
-        Self::Leaf: 'a + Archive,
+        W: Walker<Self, A>,
+        Self: WellFormed,
+        Self::Archived: ArchivedCompound<Self, A> + WellArchived<Self>,
+        Self::Leaf: 'a + WellFormed,
+        <Self::Leaf as Archive>::Archived: WellArchived<Self::Leaf>,
         A: Annotation<Self::Leaf>,
     {
         Branch::walk(MaybeArchived::Memory(self), walker)
@@ -94,14 +95,14 @@ pub trait Compound<A, I>: Sized + Archive {
     fn walk_mut<'a, W>(
         &'a mut self,
         walker: W,
-    ) -> Option<BranchMut<'a, Self, A, I>>
+    ) -> Option<BranchMut<'a, Self, A>>
     where
-        Self: Clone,
-        Self::Archived: Deserialize<Self, StoreRef<I>>
-            + for<'any> CheckBytes<DefaultValidator<'any>>,
-        Self::Leaf: Archive,
+        Self: WellFormed,
+        Self::Archived: Deserialize<Self, StoreRef> + WellArchived<Self>,
+        Self::Leaf: WellFormed,
+        <Self::Leaf as Archive>::Archived: WellArchived<Self::Leaf>,
         A: Annotation<Self::Leaf>,
-        W: Walker<Self, A, I>,
+        W: Walker<Self, A>,
     {
         BranchMut::walk(self, walker)
     }

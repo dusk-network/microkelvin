@@ -62,12 +62,13 @@ where
 #[derive(Debug)]
 pub struct Nth(pub u64);
 
-impl<C, A, S> Walker<C, A, S> for Nth
+impl<C, A> Walker<C, A> for Nth
 where
-    C: Compound<A, S>,
+    C: Compound<A>,
+    C::Leaf: Archive,
     A: Borrow<Cardinality>,
 {
-    fn walk(&mut self, walk: impl Walkable<C, A, S>) -> Step {
+    fn walk(&mut self, walk: impl Walkable<C, A>) -> Step {
         for i in 0.. {
             match walk.probe(i) {
                 Discriminant::Leaf(_) => {

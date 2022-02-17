@@ -9,23 +9,21 @@ use core::mem;
 use core::ops::{Deref, DerefMut};
 
 use alloc::vec::Vec;
-use bytecheck::CheckBytes;
-use rkyv::validation::validators::DefaultValidator;
-use rkyv::{Archive, Deserialize};
+use rkyv::Archive;
 
 use crate::compound::{ChildMut, Compound};
-use crate::storage::StoreRef;
+use crate::tower::{WellArchived, WellFormed};
 use crate::walk::{All, Discriminant, Step, Walkable, Walker};
 use crate::{Annotation, Child, MaybeArchived};
 
 #[derive(Debug)]
-pub struct LevelMut<'a, C, A, I> {
+pub struct LevelMut<'a, C, A> {
     offset: usize,
     node: &'a mut C,
-    _marker: PhantomData<(A, I)>,
+    _marker: PhantomData<A>,
 }
 
-impl<'a, C, A, I> Deref for LevelMut<'a, C, A, I> {
+impl<'a, C, A> Deref for LevelMut<'a, C, A> {
     type Target = C;
 
     fn deref(&self) -> &Self::Target {
@@ -33,7 +31,7 @@ impl<'a, C, A, I> Deref for LevelMut<'a, C, A, I> {
     }
 }
 
-impl<'a, C, A, I> DerefMut for LevelMut<'a, C, A, I>
+impl<'a, C, A> DerefMut for LevelMut<'a, C, A>
 where
     C: Clone,
 {
@@ -42,8 +40,8 @@ where
     }
 }
 
-impl<'a, C, A, I> LevelMut<'a, C, A, I> {
-    fn new(root: &'a mut C) -> LevelMut<'a, C, A, I> {
+impl<'a, C, A> LevelMut<'a, C, A> {
+    fn new(root: &'a mut C) -> LevelMut<'a, C, A> {
         LevelMut {
             offset: 0,
             node: root,
@@ -61,9 +59,10 @@ impl<'a, C, A, I> LevelMut<'a, C, A, I> {
     }
 }
 
-impl<'a, C, A, I> Walkable<C, A, I> for &'a LevelMut<'a, C, A, I>
+impl<'a, C, A> Walkable<C, A> for &'a LevelMut<'a, C, A>
 where
-    C: Compound<A, I>,
+    C: Compound<A> + WellFormed,
+    C::Leaf: WellFormed,
     A: Annotation<C::Leaf>,
 {
     fn probe(&self, ofs: usize) -> Discriminant<C::Leaf, A> {
@@ -79,11 +78,11 @@ where
 }
 
 #[derive(Debug)]
-pub struct PartialBranchMut<'a, C, A, I> {
-    levels: Vec<LevelMut<'a, C, A, I>>,
+pub struct PartialBranchMut<'a, C, A> {
+    levels: Vec<LevelMut<'a, C, A>>,
 }
 
-impl<'a, C, A, I> PartialBranchMut<'a, C, A, I> {
+impl<'a, C, A> PartialBranchMut<'a, C, A> {
     fn new(root: &'a mut C) -> Self {
         PartialBranchMut {
             levels: vec![LevelMut::new(root)],
@@ -94,13 +93,13 @@ impl<'a, C, A, I> PartialBranchMut<'a, C, A, I> {
         self.levels.len()
     }
 
-    fn top_mut(&mut self) -> &mut LevelMut<'a, C, A, I> {
+    fn top_mut(&mut self) -> &mut LevelMut<'a, C, A> {
         self.levels.last_mut().expect("Never empty")
     }
 
     pub fn leaf_mut(&mut self) -> Option<&mut C::Leaf>
     where
-        C: Compound<A, I> + Clone,
+        C: Compound<A> + WellFormed,
     {
         let top = self.top_mut();
         let ofs = top.offset();
@@ -115,7 +114,7 @@ impl<'a, C, A, I> PartialBranchMut<'a, C, A, I> {
         *self.top_mut().offset_mut() += 1
     }
 
-    fn pop(&mut self) -> Option<LevelMut<'a, C, A, I>> {
+    fn pop(&mut self) -> Option<LevelMut<'a, C, A>> {
         // We never pop the root
         if self.levels.len() > 1 {
             self.levels.pop()
@@ -126,12 +125,11 @@ impl<'a, C, A, I> PartialBranchMut<'a, C, A, I> {
 
     fn walk<W>(&mut self, walker: &mut W) -> Option<()>
     where
-        C: Compound<A, I> + Clone,
-        C::Archived: for<'any> bytecheck::CheckBytes<DefaultValidator<'any>>,
+        C: Compound<A> + WellFormed,
+        C::Archived: WellArchived<C>,
         A: Annotation<C::Leaf>,
-        C::Archived: Deserialize<C, StoreRef<I>>,
-        C::Leaf: Archive,
-        W: Walker<C, A, I>,
+        C::Leaf: WellFormed,
+        W: Walker<C, A>,
     {
         enum State<Level> {
             Init,
@@ -178,7 +176,7 @@ impl<'a, C, A, I> PartialBranchMut<'a, C, A, I> {
     }
 }
 
-impl<'a, C, A, I> BranchMut<'a, C, A, I> {
+impl<'a, C, A> BranchMut<'a, C, A> {
     /// Returns the depth of the branch
     pub fn depth(&self) -> usize {
         self.0.depth()
@@ -189,9 +187,9 @@ impl<'a, C, A, I> BranchMut<'a, C, A, I> {
     pub fn map_leaf<M>(
         self,
         closure: for<'b> fn(&'b mut C::Leaf) -> &'b mut M,
-    ) -> MappedBranchMut<'a, C, A, I, M>
+    ) -> MappedBranchMut<'a, C, A, M>
     where
-        C: Compound<A, I>,
+        C: Compound<A>,
         C::Leaf: Archive,
     {
         MappedBranchMut {
@@ -203,7 +201,7 @@ impl<'a, C, A, I> BranchMut<'a, C, A, I> {
     /// Returns a mutable reference to the leaf pointet to by the branch
     pub fn leaf_mut(&mut self) -> &mut C::Leaf
     where
-        C: Compound<A, I> + Clone,
+        C: Compound<A> + WellFormed,
     {
         self.0.leaf_mut().expect("invalid branch")
     }
@@ -212,13 +210,11 @@ impl<'a, C, A, I> BranchMut<'a, C, A, I> {
     /// walk failed.
     pub fn walk<W>(root: &'a mut C, mut walker: W) -> Option<Self>
     where
-        C: Compound<A, I> + Clone,
-        C::Archived: for<'any> CheckBytes<DefaultValidator<'any>>,
-        C::Archived: Deserialize<C, StoreRef<I>>
-            + for<'any> CheckBytes<DefaultValidator<'any>>,
-        C::Leaf: Archive,
+        C: Compound<A> + WellFormed,
+        C::Archived: WellArchived<C>,
+        C::Leaf: WellFormed,
         A: Annotation<C::Leaf>,
-        W: Walker<C, A, I>,
+        W: Walker<C, A>,
     {
         let mut partial = PartialBranchMut::new(root);
         partial.walk(&mut walker).map(|()| BranchMut(partial))
@@ -234,20 +230,20 @@ impl<'a, C, A, I> BranchMut<'a, C, A, I> {
 /// Branches are always guaranteed to point at a leaf, and can be dereferenced
 /// to the pointed-at leaf.
 #[derive(Debug)]
-pub struct BranchMut<'a, C, A, I>(PartialBranchMut<'a, C, A, I>);
+pub struct BranchMut<'a, C, A>(PartialBranchMut<'a, C, A>);
 
 /// A `BranchMut` with a mapped leaf
-pub struct MappedBranchMut<'a, C, A, I, M>
+pub struct MappedBranchMut<'a, C, A, M>
 where
-    C: Compound<A, I>,
+    C: Compound<A>,
 {
-    inner: BranchMut<'a, C, A, I>,
+    inner: BranchMut<'a, C, A>,
     closure: for<'b> fn(&'b mut C::Leaf) -> &'b mut M,
 }
 
-impl<'a, C, A, I, M> MappedBranchMut<'a, C, A, I, M>
+impl<'a, C, A, M> MappedBranchMut<'a, C, A, M>
 where
-    C: Compound<A, I> + Clone,
+    C: Compound<A> + WellFormed,
 {
     /// Returns a mutable reference to the mapped value
     pub fn leaf_mut(&mut self) -> &mut M {
@@ -258,37 +254,35 @@ where
 // iterators
 
 #[derive(Debug)]
-pub enum BranchMutIterator<'a, C, A, I, W> {
-    Initial(BranchMut<'a, C, A, I>, W),
-    Intermediate(BranchMut<'a, C, A, I>, W),
+pub enum BranchMutIterator<'a, C, A, W> {
+    Initial(BranchMut<'a, C, A>, W),
+    Intermediate(BranchMut<'a, C, A>, W),
     Exhausted,
 }
 
-impl<'a, C, A, I> IntoIterator for BranchMut<'a, C, A, I>
+impl<'a, C, A> IntoIterator for BranchMut<'a, C, A>
 where
-    C: Compound<A, I> + Clone,
-    C::Leaf: 'a + Archive,
-    C::Archived: Deserialize<C, StoreRef<I>>
-        + for<'any> CheckBytes<DefaultValidator<'any>>,
+    C: Compound<A> + WellFormed,
+    C::Leaf: 'a + WellFormed,
+    C::Archived: WellArchived<C>,
     A: Annotation<C::Leaf>,
 {
     type Item = &'a mut C::Leaf;
 
-    type IntoIter = BranchMutIterator<'a, C, A, I, All>;
+    type IntoIter = BranchMutIterator<'a, C, A, All>;
 
     fn into_iter(self) -> Self::IntoIter {
         BranchMutIterator::Initial(self, All)
     }
 }
 
-impl<'a, C, A, I, W> Iterator for BranchMutIterator<'a, C, A, I, W>
+impl<'a, C, A, W> Iterator for BranchMutIterator<'a, C, A, W>
 where
-    C: Compound<A, I> + Clone,
-    C::Leaf: 'a + Archive,
-    C::Archived: Deserialize<C, StoreRef<I>>
-        + for<'any> CheckBytes<DefaultValidator<'any>>,
+    C: Compound<A> + WellFormed,
+    C::Leaf: 'a + WellFormed,
+    C::Archived: WellArchived<C>,
     A: Annotation<C::Leaf>,
-    W: Walker<C, A, I>,
+    W: Walker<C, A>,
 {
     type Item = &'a mut C::Leaf;
 
@@ -327,41 +321,41 @@ where
     }
 }
 
-pub enum MappedBranchMutIterator<'a, C, A, I, M, W>
+pub enum MappedBranchMutIterator<'a, C, A, M, W>
 where
-    C: Compound<A, I>,
+    C: Compound<A>,
 {
-    Initial(MappedBranchMut<'a, C, A, I, M>, W),
-    Intermediate(MappedBranchMut<'a, C, A, I, M>, W),
+    Initial(MappedBranchMut<'a, C, A, M>, W),
+    Intermediate(MappedBranchMut<'a, C, A, M>, W),
     Exhausted,
 }
 
-impl<'a, C, A, I, M> IntoIterator for MappedBranchMut<'a, C, A, I, M>
+impl<'a, C, A, M> IntoIterator for MappedBranchMut<'a, C, A, M>
 where
-    C: Compound<A, I> + Clone,
-    C::Archived: Deserialize<C, StoreRef<I>>
-        + for<'any> CheckBytes<DefaultValidator<'any>>,
-    C::Leaf: Archive,
+    C: Compound<A> + WellFormed,
+    C::Archived: WellArchived<C>,
+    C::Leaf: WellFormed,
+    <C::Leaf as Archive>::Archived: WellArchived<C::Leaf>,
     A: Annotation<C::Leaf>,
     M: 'a,
 {
     type Item = &'a mut M;
 
-    type IntoIter = MappedBranchMutIterator<'a, C, A, I, M, All>;
+    type IntoIter = MappedBranchMutIterator<'a, C, A, M, All>;
 
     fn into_iter(self) -> Self::IntoIter {
         MappedBranchMutIterator::Initial(self, All)
     }
 }
 
-impl<'a, C, A, I, M, W> Iterator for MappedBranchMutIterator<'a, C, A, I, M, W>
+impl<'a, C, A, M, W> Iterator for MappedBranchMutIterator<'a, C, A, M, W>
 where
-    C: Compound<A, I> + Clone,
-    C::Archived: Deserialize<C, StoreRef<I>>
-        + for<'any> CheckBytes<DefaultValidator<'any>>,
-    C::Leaf: Archive,
+    C: Compound<A> + WellFormed,
+    C::Archived: WellArchived<C>,
+    C::Leaf: WellFormed,
+    <C::Leaf as Archive>::Archived: WellArchived<C::Leaf>,
     A: Annotation<C::Leaf>,
-    W: Walker<C, A, I>,
+    W: Walker<C, A>,
     M: 'a,
 {
     type Item = &'a mut M;
@@ -410,10 +404,10 @@ where
     fn leaf_mut(&mut self) -> &mut T;
 }
 
-impl<'a, C, A, I, T> BranchRefMut<'a, T> for MappedBranchMut<'a, C, A, I, T>
+impl<'a, C, A, T> BranchRefMut<'a, T> for MappedBranchMut<'a, C, A, T>
 where
-    C: Compound<A, I> + Clone,
-    T: Archive,
+    C: Compound<A> + WellFormed,
+    T: WellFormed,
 {
     fn leaf_mut(&mut self) -> &mut T {
         MappedBranchMut::leaf_mut(self)

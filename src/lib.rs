@@ -23,8 +23,12 @@ mod branch;
 mod branch_mut;
 mod compound;
 mod link;
+mod tower;
 mod walk;
 mod wrappers;
+
+/// Collections implemented using microkelvin
+pub mod collections;
 
 pub use annotations::{
     ARef, Annotation, Cardinality, Combine, FindMaxKey, Keyed, MaxKey, Member,
@@ -36,8 +40,9 @@ pub use compound::{
     ArchivedChild, ArchivedCompound, Child, ChildMut, Compound, MutableLeaves,
 };
 pub use link::{ArchivedLink, Link};
+pub use tower::{Fundamental, WellArchived, WellFormed};
 pub use walk::{All, Discriminant, Step, Walkable, Walker};
-pub use wrappers::{MaybeArchived, MaybeStored, Primitive};
+pub use wrappers::{MaybeArchived, MaybeStored};
 
 mod storage;
 pub use storage::{

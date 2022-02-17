@@ -17,7 +17,7 @@ use std::sync::Arc;
 
 use crate::Store;
 
-use super::{OffsetLen, Token, TokenBuffer};
+use super::{Identifier, OffsetLen, Token, TokenBuffer};
 
 const PAGE_SIZE: usize = 1024 * 64;
 
@@ -210,11 +210,12 @@ impl HostStore {
 }
 
 impl Store for HostStore {
-    type Identifier = OffsetLen;
-
-    fn get<'a>(&'a self, id: &Self::Identifier) -> &'a [u8] {
+    fn get<'a>(&'a self, id: &Identifier) -> &'a [u8] {
         let guard = self.inner.read();
-        let bytes = guard.get(&id);
+
+        let ofslen = (*id).into();
+
+        let bytes = guard.get(&ofslen);
 
         let bytes_a: &'a [u8] = unsafe { core::mem::transmute(bytes) };
         bytes_a
@@ -244,8 +245,8 @@ impl Store for HostStore {
         self.inner.write().persist().map_err(|_| ())
     }
 
-    fn commit(&self, buf: &mut TokenBuffer) -> Self::Identifier {
-        self.inner.write().commit(buf)
+    fn commit(&self, buf: &mut TokenBuffer) -> Identifier {
+        self.inner.write().commit(buf).into()
     }
 
     fn return_token(&self, token: Token) {
