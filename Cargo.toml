@@ -16,7 +16,7 @@ tempfile = { version = "3.2.0", optional = true }
 
 canonical = "0.6"
 canonical_derive = "0.6"
-arbitrary = { version = "1.0.1", features = ["derive"], optional = true }
+arbitrary = { version = "1.0", features = ["derive"], optional = true }
 spin = { version = "0.9.2" }
 
 [dev-dependencies]

@@ -20,23 +20,26 @@ use canonical::{Canon, CanonError, Id};
 use canonical_derive::Canon;
 
 use lazy_static::lazy_static;
-use parking_lot::{RwLock, RwLockWriteGuard};
+use parking_lot::RwLock;
 
 pub use disk::DiskBackend;
 
 use crate::{Annotation, Compound, GenericTree};
-pub struct WrappedBackend(Arc<RwLock<dyn Backend>>);
+
+#[derive(Clone)]
+pub struct WrappedBackend(Arc<dyn Backend>);
 
 impl WrappedBackend {
     fn new<B: 'static + Backend>(backend: B) -> Self {
-        WrappedBackend(Arc::new(RwLock::new(backend)))
+        WrappedBackend(Arc::new(backend))
     }
 
     pub fn get(&self, id: &Id) -> Result<GenericTree, PersistError> {
-        self.0.read().get(id)
+        let res = self.0.get(id);
+        res
     }
 
-    fn persist<C: Compound<A>, A>(
+    pub fn persist<C: Compound<A>, A>(
         &self,
         tree: &C,
     ) -> Result<PersistedId, PersistError>
@@ -44,28 +47,18 @@ impl WrappedBackend {
         C::Leaf: Canon,
         A: Annotation<C::Leaf>,
     {
-        Self::persist_inner(&mut self.0.write(), tree)
-    }
-
-    pub fn persist_inner<C: Compound<A>, A>(
-        backend: &mut RwLockWriteGuard<dyn Backend>,
-        tree: &C,
-    ) -> Result<PersistedId, PersistError>
-    where
-        C::Leaf: Canon,
-        A: Annotation<C::Leaf>,
-    {
         let generic = tree.generic();
+
         let id = Id::new(&generic);
 
         if let Some(bytes) = id.take_bytes()? {
-            match backend.put(&id, &bytes[..])? {
+            match self.0.put(&id, &bytes[..])? {
                 PutResult::Written => {
                     // Recursively store the children if not already in backend
                     for i in 0.. {
                         match tree.child(i) {
                             Child::Node(node) => {
-                                Self::persist_inner(backend, &*node.inner()?)?;
+                                self.persist(&*node.inner()?)?;
                             }
                             Child::EndOfNode => break,
                             _ => (),
@@ -110,6 +103,11 @@ impl PersistedId {
     pub fn restore(&self) -> Result<GenericTree, PersistError> {
         Persistence::get(&self.0)
     }
+
+    /// Returns the wrapped Id
+    pub fn into_inner(self) -> Id {
+        self.0
+    }
 }
 
 /// The singleton interface to the persistence layer
@@ -130,6 +128,24 @@ impl Persistence {
         Self::with_backend(ctor, |backend| backend.persist(c))
     }
 
+    /// Persist the given Compound to the default backend
+    pub fn persist_default<C, A>(c: &C) -> Result<PersistedId, PersistError>
+    where
+        C: Compound<A>,
+        C::Leaf: Canon,
+        A: Annotation<C::Leaf>,
+    {
+        let bref = {
+            let backends = BACKENDS.read();
+            match (*backends).iter().next() {
+                Some((_, backend)) => backend.clone(),
+                None => return Err(PersistError::BackendUnavailable),
+            }
+        };
+
+        bref.persist(c)
+    }
+
     /// Performs an operation with reference to a backend
     ///
     /// Also used for initializing backends on startup.
@@ -141,16 +157,17 @@ impl Persistence {
         F: Fn(&mut WrappedBackend) -> Result<R, PersistError>,
         B: 'static + Backend,
     {
-        let mut backends = BACKENDS.write();
-        let entry = backends.entry(ctor.id);
-
-        match entry {
-            Entry::Occupied(mut occupied) => closure(occupied.get_mut()),
-            Entry::Vacant(vacant) => {
-                let backend = (ctor.ctor)()?;
-                closure(vacant.insert(WrappedBackend::new(backend)))
+        let mut backend = {
+            let mut backends = BACKENDS.write();
+            match backends.entry(ctor.id) {
+                Entry::Occupied(mut occupied) => occupied.get_mut().clone(),
+                Entry::Vacant(vacant) => {
+                    let backend = (ctor.ctor)()?;
+                    vacant.insert(WrappedBackend::new(backend)).clone()
+                }
             }
-        }
+        };
+        closure(&mut backend)
     }
 
     /// Get a generic tree from the backend.
@@ -177,8 +194,7 @@ pub trait Backend: Send + Sync {
     fn get(&self, id: &Id) -> Result<GenericTree, PersistError>;
 
     /// Write encoded bytes with a corresponding `Id` into the backend
-    fn put(&mut self, id: &Id, bytes: &[u8])
-        -> Result<PutResult, PersistError>;
+    fn put(&self, id: &Id, bytes: &[u8]) -> Result<PutResult, PersistError>;
 }
 
 /// An error that can happen when persisting structures to disk
@@ -186,6 +202,8 @@ pub trait Backend: Send + Sync {
 pub enum PersistError {
     /// An io-error occured while persisting
     Io(io::Error),
+    /// No backend found
+    BackendUnavailable,
     /// A CanonError occured while persisting
     Canon(CanonError),
     /// Other backend specific error

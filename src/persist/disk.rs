@@ -10,6 +10,7 @@ use std::path::PathBuf;
 
 use appendix::Index;
 use canonical::{Canon, CanonError, Id, Source};
+use parking_lot::Mutex;
 use tempfile::{tempdir, TempDir};
 
 use crate::generic::GenericTree;
@@ -19,7 +20,7 @@ use crate::persist::{Backend, PersistError, PutResult};
 pub struct DiskBackend {
     index: Index<Id, u64>,
     data_path: PathBuf,
-    data_ofs: u64,
+    data_ofs: Mutex<u64>,
     // in the case of an ephemeral store, we need to extend the lifetime of the
     // `TempDir` by storing it in the struct
     #[allow(unused)]
@@ -63,7 +64,7 @@ impl DiskBackend {
         Ok(DiskBackend {
             data_path,
             index,
-            data_ofs,
+            data_ofs: Mutex::new(data_ofs),
             temp_dir: None,
         })
     }
@@ -103,11 +104,7 @@ impl Backend for DiskBackend {
         }
     }
 
-    fn put(
-        &mut self,
-        id: &Id,
-        bytes: &[u8],
-    ) -> Result<PutResult, PersistError> {
+    fn put(&self, id: &Id, bytes: &[u8]) -> Result<PutResult, PersistError> {
         if self.index.get(id)?.is_some() {
             return Ok(PutResult::AlreadyPresent);
         } else {
@@ -122,9 +119,12 @@ impl Backend for DiskBackend {
 
             data.write_all(bytes)?;
 
-            self.index.insert(*id, self.data_ofs)?;
-            self.index.flush()?;
-            self.data_ofs += data_len as u64;
+            let mut data_ofs = self.data_ofs.lock();
+
+            self.index.insert(*id, *data_ofs)?;
+            // TODO make sure to flush
+            // self.index.flush()?;
+            *data_ofs += data_len as u64;
 
             Ok(PutResult::Written)
         }
