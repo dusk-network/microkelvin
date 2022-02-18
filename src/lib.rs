@@ -15,7 +15,6 @@
 
 #![cfg_attr(not(feature = "persistence"), no_std)]
 #![deny(missing_docs)]
-#![feature(control_flow_enum)]
 
 #[macro_use]
 extern crate alloc;
