@@ -146,11 +146,18 @@ where
         A: Annotation<C::Leaf>,
     {
         let borrow = self.inner.upgradeable_read();
+
         match &*borrow {
             LinkInner::Placeholder => unreachable!(),
             LinkInner::C(c) | LinkInner::Ca(c, _) => {
-                let gen = c.generic();
-                let id = Id::new(&gen);
+                #[cfg(not(feature = "persistence"))]
+                let id = Id::new(&c.generic());
+
+                #[cfg(feature = "persistence")]
+                let id = Persistence::persist_default(&**c)
+                    .expect("TODO, handle error")
+                    .into_inner();
+
                 let mut borrow = borrow.upgrade();
 
                 match mem::replace(&mut *borrow, LinkInner::Placeholder) {
@@ -238,12 +245,7 @@ where
                                         Ok(LinkCompound(borrow))
                                     }
                                     Err(PersistError::Canon(e)) => Err(e),
-                                    err
-                                    @
-                                    Err(
-                                        PersistError::Io(_)
-                                        | PersistError::Other(_),
-                                    ) => {
+                                    _err @ Err(_) => {
                                         // TODO: log errors to the backend
                                         Err(CanonError::NotFound)
                                     }

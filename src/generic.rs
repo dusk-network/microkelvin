@@ -31,7 +31,9 @@ pub struct GenericLeaf(Vec<u8>);
 
 impl GenericLeaf {
     pub(crate) fn new<C: Canon>(c: &C) -> Self {
-        GenericLeaf(c.encode_to_vec())
+        let vec = c.encode_to_vec();
+        let res = GenericLeaf(vec);
+        res
     }
 
     /// Cast the generic leaf to a concrete type
@@ -123,7 +125,9 @@ impl GenericTree {
     }
 
     pub(crate) fn push_leaf<L: Canon>(&mut self, leaf: &L) {
-        self.0.push(GenericChild::Leaf(GenericLeaf::new(leaf)))
+        let leaf = GenericLeaf::new(leaf);
+        let child = GenericChild::Leaf(leaf);
+        self.0.push(child)
     }
 
     pub(crate) fn push_link<C, A>(&mut self, link: &Link<C, A>)
