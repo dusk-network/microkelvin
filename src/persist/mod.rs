@@ -16,7 +16,7 @@ use std::{
 mod disk;
 
 use crate::Child;
-use canonical::{Canon, CanonError, Id};
+use canonical::{Canon, CanonError, EncodeToVec, Id, IdHash};
 use canonical_derive::Canon;
 
 use lazy_static::lazy_static;
@@ -35,41 +35,43 @@ impl WrappedBackend {
     }
 
     pub fn get(&self, id: &Id) -> Result<GenericTree, PersistError> {
-        let res = self.0.get(id);
-        res
+        self.0.get(&id.hash())
     }
 
-    pub fn persist<C: Compound<A>, A>(
-        &self,
-        tree: &C,
-    ) -> Result<PersistedId, PersistError>
+    pub fn put(&self, bytes: &[u8]) -> Result<IdHash, PersistError> {
+        self.0.put(bytes)
+    }
+
+    pub fn persist<C, A>(&self, tree: &C) -> Result<PersistedId, PersistError>
     where
+        C: Compound<A>,
         C::Leaf: Canon,
         A: Annotation<C::Leaf>,
     {
         let generic = tree.generic();
 
-        let id = Id::new(&generic);
-
-        if let Some(bytes) = id.take_bytes()? {
-            match self.0.put(&id, &bytes[..])? {
-                PutResult::Written => {
-                    // Recursively store the children if not already in backend
-                    for i in 0.. {
-                        match tree.child(i) {
-                            Child::Node(node) => {
-                                self.persist(&*node.inner()?)?;
-                            }
-                            Child::EndOfNode => break,
-                            _ => (),
-                        }
-                    }
+        // first persist all children
+        for i in 0.. {
+            match tree.child(i) {
+                Child::Node(node) => {
+                    self.persist(&*node.inner()?)?;
                 }
-                PutResult::AlreadyPresent => (),
+                Child::EndOfNode => break,
+                _ => (),
             }
         }
 
-        Ok(PersistedId(id))
+        let buf = generic.encode_to_vec();
+        let data_len = buf.len();
+
+        if data_len > 32 {
+            let hash = self.put(&buf).map(Into::into)?;
+            Ok(PersistedId(Id::raw(hash, data_len as u32)))
+        } else {
+            let mut payload = [0u8; 32];
+            payload[..data_len].copy_from_slice(&buf);
+            Ok(PersistedId(Id::raw(payload, data_len as u32)))
+        }
     }
 }
 
@@ -126,6 +128,15 @@ impl Persistence {
         B: 'static + Backend,
     {
         Self::with_backend(ctor, |backend| backend.persist(c))
+    }
+
+    /// Puts raw bytes in the backend
+    pub fn put(bytes: &[u8]) -> Result<IdHash, PersistError> {
+        let backends = BACKENDS.read();
+        match (*backends).iter().next() {
+            Some((_, backend)) => backend.put(bytes),
+            None => return Err(PersistError::BackendUnavailable),
+        }
     }
 
     /// Persist the given Compound to the default backend
@@ -191,10 +202,10 @@ impl Persistence {
 /// The trait defining a disk or network backend for microkelvin structures.
 pub trait Backend: Send + Sync {
     /// Get get a generic tree stored in the backend from an `Id`
-    fn get(&self, id: &Id) -> Result<GenericTree, PersistError>;
+    fn get(&self, id: &IdHash) -> Result<GenericTree, PersistError>;
 
     /// Write encoded bytes with a corresponding `Id` into the backend
-    fn put(&self, id: &Id, bytes: &[u8]) -> Result<PutResult, PersistError>;
+    fn put(&self, bytes: &[u8]) -> Result<IdHash, PersistError>;
 }
 
 /// An error that can happen when persisting structures to disk
