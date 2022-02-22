@@ -35,11 +35,17 @@ impl WrappedBackend {
     }
 
     pub fn get(&self, id: &Id) -> Result<GenericTree, PersistError> {
-        self.0.get(&id.hash())
+        println!("get ID {:?}", id);
+        let res = self.0.get(&id.hash())?;
+        println!("got tree {:?}", res);
+        Ok(res)
     }
 
-    pub fn put(&self, bytes: &[u8]) -> Result<IdHash, PersistError> {
-        self.0.put(bytes)
+    pub fn put(&self, bytes: &[u8]) -> Result<Id, PersistError> {
+        println!("put bytes {:?}", bytes);
+        let res = self.0.put(bytes)?;
+        println!("got id {:?}", res);
+        Ok(res)
     }
 
     pub fn persist<C, A>(&self, tree: &C) -> Result<PersistedId, PersistError>
@@ -50,28 +56,9 @@ impl WrappedBackend {
     {
         let generic = tree.generic();
 
-        // first persist all children
-        for i in 0.. {
-            match tree.child(i) {
-                Child::Node(node) => {
-                    self.persist(&*node.inner()?)?;
-                }
-                Child::EndOfNode => break,
-                _ => (),
-            }
-        }
-
         let buf = generic.encode_to_vec();
-        let data_len = buf.len();
 
-        if data_len > 32 {
-            let hash = self.put(&buf).map(Into::into)?;
-            Ok(PersistedId(Id::raw(hash, data_len as u32)))
-        } else {
-            let mut payload = [0u8; 32];
-            payload[..data_len].copy_from_slice(&buf);
-            Ok(PersistedId(Id::raw(payload, data_len as u32)))
-        }
+        Ok(PersistedId(self.put(&buf)?))
     }
 }
 
@@ -131,7 +118,7 @@ impl Persistence {
     }
 
     /// Puts raw bytes in the backend
-    pub fn put(bytes: &[u8]) -> Result<IdHash, PersistError> {
+    pub fn put(bytes: &[u8]) -> Result<Id, PersistError> {
         let backends = BACKENDS.read();
         match (*backends).iter().next() {
             Some((_, backend)) => backend.put(bytes),
@@ -205,7 +192,7 @@ pub trait Backend: Send + Sync {
     fn get(&self, id: &IdHash) -> Result<GenericTree, PersistError>;
 
     /// Write encoded bytes with a corresponding `Id` into the backend
-    fn put(&self, bytes: &[u8]) -> Result<IdHash, PersistError>;
+    fn put(&self, bytes: &[u8]) -> Result<Id, PersistError>;
 }
 
 /// An error that can happen when persisting structures to disk

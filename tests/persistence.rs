@@ -43,7 +43,7 @@ mod persist_tests {
     }
 
     fn persist() -> Result<(), PersistError> {
-        let n: u64 = 16;
+        let n: u64 = 1;
 
         let mut list = LinkedList::<_, ()>::new();
 
@@ -67,6 +67,7 @@ mod persist_tests {
         // then the restored copy
 
         for i in 0..n {
+            println!("poppin {:?}", n - i - 1);
             assert_eq!(restored.pop()?, Some(n - i - 1));
         }
 
@@ -74,7 +75,7 @@ mod persist_tests {
     }
 
     #[test]
-    fn persist_a() -> Result<(), PersistError> {
+    fn persist_a_simple() -> Result<(), PersistError> {
         persist()
     }
 

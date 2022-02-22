@@ -105,31 +105,45 @@ impl Backend for DiskBackend {
         }
     }
 
-    fn put(&self, bytes: &[u8]) -> Result<IdHash, PersistError> {
+    fn put(&self, bytes: &[u8]) -> Result<Id, PersistError> {
         let data_len = bytes.len();
-        let mut state = Params::new().hash_length(32).to_state();
-        let mut hash = [0u8; 32];
-        hash.copy_from_slice(state.finalize().as_ref());
 
-        if self.index.get(&hash)?.is_some() {
-            return Ok(hash);
+        if (data_len <= 32 && false) {
+            let mut payload = [0u8; 32];
+            payload[..data_len].copy_from_slice(bytes);
+
+            Ok(Id::raw(payload, data_len as u32))
         } else {
-            let mut data = OpenOptions::new()
-                .create(true)
-                .write(true)
-                .append(true)
-                .open(&self.data_path)?;
+            let mut state = Params::new().hash_length(32).to_state();
+            let mut hash = [0u8; 32];
+            hash.copy_from_slice(state.finalize().as_ref());
 
-            data.write_all(bytes)?;
+            let hash = if self.index.get(&hash)?.is_some() {
+                // already written
+                hash
+            } else {
+                let mut data = OpenOptions::new()
+                    .create(true)
+                    .write(true)
+                    .append(true)
+                    .open(&self.data_path)?;
 
-            let mut data_ofs = self.data_ofs.lock();
+                println!("actually writing to file");
 
-            self.index.insert(hash, (*data_ofs, data_len as u32))?;
-            // TODO make sure to flush
-            // self.index.flush()?;
-            *data_ofs += data_len as u64;
+                data.write_all(bytes)?;
 
-            Ok(hash)
+                let mut data_ofs = self.data_ofs.lock();
+
+                self.index.insert(hash, (*data_ofs, data_len as u32))?;
+                // TODO make sure to flush
+                // self.index.flush()?;
+                *data_ofs += data_len as u64;
+
+                hash
+            };
+
+            let id = Id::raw(hash, data_len as u32);
+            Ok(id)
         }
     }
 }
