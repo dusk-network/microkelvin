@@ -9,14 +9,13 @@ use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::PathBuf;
 
 use appendix::Index;
-use canonical::{Canon, CanonError, Id, IdHash, Source};
+use canonical::{CanonError, Id, IdHash};
 use parking_lot::Mutex;
 use tempfile::{tempdir, TempDir};
 
 use blake2b_simd::Params;
 
-use crate::generic::GenericTree;
-use crate::persist::{Backend, PersistError, PutResult};
+use crate::persist::{Backend, PersistError};
 
 /// A disk-store for persisting microkelvin compound structures
 pub struct DiskBackend {
@@ -87,19 +86,16 @@ impl DiskBackend {
 }
 
 impl Backend for DiskBackend {
-    fn get(&self, hash: &IdHash) -> Result<GenericTree, PersistError> {
+    fn get(&self, hash: &IdHash) -> Result<Vec<u8>, PersistError> {
         if let Some((ofs, len)) = self.index.get(hash)? {
             let mut data = File::open(&self.data_path)?;
 
             data.seek(SeekFrom::Start(*ofs))?;
 
             let mut buf = vec![0u8; *len as usize];
-            let read_res = data.read_exact(&mut buf[..]);
+            data.read_exact(&mut buf[..])?;
 
-            read_res?;
-
-            let mut source = Source::new(&buf);
-            Ok(GenericTree::decode(&mut source)?)
+            Ok(buf)
         } else {
             Err(CanonError::NotFound.into())
         }
@@ -108,42 +104,29 @@ impl Backend for DiskBackend {
     fn put(&self, bytes: &[u8]) -> Result<Id, PersistError> {
         let data_len = bytes.len();
 
-        if (data_len <= 32 && false) {
-            let mut payload = [0u8; 32];
-            payload[..data_len].copy_from_slice(bytes);
+        let mut state = Params::new().hash_length(32).to_state();
+        state.update(bytes);
+        let mut hash = [0u8; 32];
+        hash.copy_from_slice(state.finalize().as_ref());
 
-            Ok(Id::raw(payload, data_len as u32))
-        } else {
-            let mut state = Params::new().hash_length(32).to_state();
-            let mut hash = [0u8; 32];
-            hash.copy_from_slice(state.finalize().as_ref());
+        if self.index.get(&hash)?.is_none() {
+            let mut data = OpenOptions::new()
+                .create(true)
+                .write(true)
+                .append(true)
+                .open(&self.data_path)?;
 
-            let hash = if self.index.get(&hash)?.is_some() {
-                // already written
-                hash
-            } else {
-                let mut data = OpenOptions::new()
-                    .create(true)
-                    .write(true)
-                    .append(true)
-                    .open(&self.data_path)?;
+            data.write_all(bytes)?;
 
-                println!("actually writing to file");
+            let mut data_ofs = self.data_ofs.lock();
 
-                data.write_all(bytes)?;
+            self.index.insert(hash, (*data_ofs, data_len as u32))?;
+            // TODO make sure to flush
+            // self.index.flush()?;
+            *data_ofs += data_len as u64;
+        };
 
-                let mut data_ofs = self.data_ofs.lock();
-
-                self.index.insert(hash, (*data_ofs, data_len as u32))?;
-                // TODO make sure to flush
-                // self.index.flush()?;
-                *data_ofs += data_len as u64;
-
-                hash
-            };
-
-            let id = Id::raw(hash, data_len as u32);
-            Ok(id)
-        }
+        let id = Id::raw(hash, data_len as u32);
+        Ok(id)
     }
 }

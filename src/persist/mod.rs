@@ -15,8 +15,7 @@ use std::{
 
 mod disk;
 
-use crate::Child;
-use canonical::{Canon, CanonError, EncodeToVec, Id, IdHash};
+use canonical::{Canon, CanonError, EncodeToVec, Id, IdHash, Source};
 use canonical_derive::Canon;
 
 use lazy_static::lazy_static;
@@ -24,7 +23,7 @@ use parking_lot::RwLock;
 
 pub use disk::DiskBackend;
 
-use crate::{Annotation, Compound, GenericTree};
+use crate::{Annotation, Compound};
 
 #[derive(Clone)]
 pub struct WrappedBackend(Arc<dyn Backend>);
@@ -34,18 +33,14 @@ impl WrappedBackend {
         WrappedBackend(Arc::new(backend))
     }
 
-    pub fn get(&self, id: &Id) -> Result<GenericTree, PersistError> {
-        println!("get ID {:?}", id);
+    pub fn get<C: Canon>(&self, id: &Id) -> Result<C, PersistError> {
         let res = self.0.get(&id.hash())?;
-        println!("got tree {:?}", res);
-        Ok(res)
+        let mut source = Source::new(&res);
+        C::decode(&mut source).map_err(|e| PersistError::from(e))
     }
 
     pub fn put(&self, bytes: &[u8]) -> Result<Id, PersistError> {
-        println!("put bytes {:?}", bytes);
-        let res = self.0.put(bytes)?;
-        println!("got id {:?}", res);
-        Ok(res)
+        self.0.put(bytes)
     }
 
     pub fn persist<C, A>(&self, tree: &C) -> Result<PersistedId, PersistError>
@@ -54,10 +49,7 @@ impl WrappedBackend {
         C::Leaf: Canon,
         A: Annotation<C::Leaf>,
     {
-        let generic = tree.generic();
-
-        let buf = generic.encode_to_vec();
-
+        let buf = tree.encode_to_vec();
         Ok(PersistedId(self.put(&buf)?))
     }
 }
@@ -89,7 +81,10 @@ pub struct PersistedId(Id);
 
 impl PersistedId {
     /// Restore a GenericTree from a persistence backend.
-    pub fn restore(&self) -> Result<GenericTree, PersistError> {
+    pub fn restore<C>(&self) -> Result<C, PersistError>
+    where
+        C: Canon,
+    {
         Persistence::get(&self.0)
     }
 
@@ -133,15 +128,29 @@ impl Persistence {
         C::Leaf: Canon,
         A: Annotation<C::Leaf>,
     {
-        let bref = {
-            let backends = BACKENDS.read();
-            match (*backends).iter().next() {
-                Some((_, backend)) => backend.clone(),
-                None => return Err(PersistError::BackendUnavailable),
+        let mut all = vec![];
+
+        {
+            let read = BACKENDS.read();
+            for (_, b) in read.iter() {
+                all.push(b.clone())
             }
+        }
+
+        let mut iter = all.iter();
+
+        let id;
+
+        match iter.next() {
+            Some(b) => id = b.persist(c)?,
+            None => return Err(PersistError::BackendUnavailable),
         };
 
-        bref.persist(c)
+        for b in iter {
+            b.persist(c)?;
+        }
+
+        Ok(id)
     }
 
     /// Performs an operation with reference to a backend
@@ -169,7 +178,10 @@ impl Persistence {
     }
 
     /// Get a generic tree from the backend.
-    pub fn get(id: &Id) -> Result<GenericTree, PersistError> {
+    pub fn get<C>(id: &Id) -> Result<C, PersistError>
+    where
+        C: Canon,
+    {
         // First try reifying from local store/inlined data
         if let Ok(tree) = id.reify() {
             return Ok(tree);
@@ -189,7 +201,7 @@ impl Persistence {
 /// The trait defining a disk or network backend for microkelvin structures.
 pub trait Backend: Send + Sync {
     /// Get get a generic tree stored in the backend from an `Id`
-    fn get(&self, id: &IdHash) -> Result<GenericTree, PersistError>;
+    fn get(&self, id: &IdHash) -> Result<Vec<u8>, PersistError>;
 
     /// Write encoded bytes with a corresponding `Id` into the backend
     fn put(&self, bytes: &[u8]) -> Result<Id, PersistError>;

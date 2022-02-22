@@ -8,8 +8,7 @@ use canonical::{Canon, CanonError};
 use canonical_derive::Canon;
 
 use microkelvin::{
-    Annotation, Child, ChildMut, Compound, First, GenericChild, GenericTree,
-    Link, MutableLeaves,
+    Annotation, Child, ChildMut, Compound, First, Link, MutableLeaves,
 };
 
 #[derive(Clone, Debug, Canon)]
@@ -58,32 +57,6 @@ where
             (LinkedList::Node { next, .. }, 1) => ChildMut::Node(next),
             (LinkedList::Node { .. }, _) => ChildMut::EndOfNode,
             (LinkedList::Empty, _) => ChildMut::EndOfNode,
-        }
-    }
-
-    fn from_generic(tree: &GenericTree) -> Result<Self, CanonError>
-    where
-        Self::Leaf: Canon,
-        A: Canon,
-    {
-        let mut children = tree.children().iter();
-
-        let val: Self::Leaf = match children.next() {
-            Some(GenericChild::Leaf(leaf)) => leaf.cast()?,
-            None => return Ok(LinkedList::Empty),
-            _ => return Err(CanonError::InvalidEncoding),
-        };
-
-        match children.next() {
-            Some(GenericChild::Empty) => Ok(LinkedList::Node {
-                val,
-                next: Link::new(LinkedList::Empty),
-            }),
-            Some(GenericChild::Link(id, annotation)) => Ok(LinkedList::Node {
-                val,
-                next: Link::new_persisted(*id, annotation.cast()?),
-            }),
-            _ => Err(CanonError::InvalidEncoding),
         }
     }
 }

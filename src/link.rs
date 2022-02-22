@@ -14,7 +14,6 @@ use canonical::{Canon, CanonError, Id, Sink, Source};
 #[cfg(feature = "persistence")]
 use crate::persist::{PersistError, Persistence};
 
-use crate::generic::GenericTree;
 use crate::{Annotation, Compound};
 
 #[derive(Debug, Clone)]
@@ -151,7 +150,7 @@ where
             LinkInner::Placeholder => unreachable!(),
             LinkInner::C(c) | LinkInner::Ca(c, _) => {
                 #[cfg(not(feature = "persistence"))]
-                let id = Id::new(&c.generic());
+                let id = Id::new(&*c);
 
                 #[cfg(feature = "persistence")]
                 let id = Persistence::persist_default(&**c)
@@ -196,14 +195,13 @@ where
             LinkInner::Ia(id, _) => {
                 // First we check if the value is available to be reified
                 // directly
-                match id.reify::<GenericTree>() {
-                    Ok(generic) => {
+                match id.reify::<C>() {
+                    Ok(value) => {
                         // re-borrow mutable
                         let mut borrow = borrow.upgrade();
                         if let LinkInner::Ia(id, anno) =
                             mem::replace(&mut *borrow, LinkInner::Placeholder)
                         {
-                            let value = C::from_generic(&generic)?;
                             *borrow = LinkInner::Ica(id, Arc::new(value), anno);
 
                             // re-borrow immutable
@@ -230,9 +228,7 @@ where
                                 LinkInner::Placeholder,
                             ) {
                                 match Persistence::get(&id) {
-                                    Ok(generic) => {
-                                        let compound =
-                                            C::from_generic(&generic)?;
+                                    Ok(compound) => {
                                         *borrow = LinkInner::Ica(
                                             id,
                                             Arc::new(compound),

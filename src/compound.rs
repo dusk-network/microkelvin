@@ -9,7 +9,6 @@ use canonical::{Canon, CanonError};
 use core::marker::PhantomData;
 
 use crate::annotations::{Annotation, WrappedAnnotation};
-use crate::generic::GenericTree;
 use crate::link::Link;
 
 /// The response of the `child` method on a `Compound` node.
@@ -67,32 +66,16 @@ pub trait Compound<A>: Canon {
         }
     }
 
-    /// Returns a generic version of this compound tree, erasing the specific
-    /// annotation and leaf types, to provide a universal tree encoding.
-    fn generic(&self) -> GenericTree
-    where
-        Self::Leaf: Canon,
-        A: Annotation<Self::Leaf>,
-    {
-        let mut generic = GenericTree::new();
-
-        for i in 0.. {
-            match self.child(i) {
-                Child::Empty => generic.push_empty(),
-                Child::Leaf(leaf) => generic.push_leaf(leaf),
-                Child::Node(link) => generic.push_link(link),
-                Child::EndOfNode => break,
-            }
-        }
-
-        generic
-    }
-
     /// Construct a specific compound tree from a generic tree
-    fn from_generic(tree: &GenericTree) -> Result<Self, CanonError>
+    fn from_generic(
+        _tree: &crate::generic::GenericTree,
+    ) -> Result<Self, CanonError>
     where
         Self::Leaf: Canon,
-        A: Canon;
+        A: Canon,
+    {
+        unimplemented!("deprecated");
+    }
 }
 
 /// An iterator over the sub-annotations of a Compound collection

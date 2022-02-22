@@ -18,7 +18,7 @@ use microkelvin::{
     MaxKey,
 };
 
-#[derive(Default, Clone, Canon)]
+#[derive(Default, Clone, Canon, Debug)]
 struct Anno<K> {
     max: MaxKey<K>,
     card: Cardinality,

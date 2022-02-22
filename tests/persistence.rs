@@ -14,7 +14,7 @@ mod persist_tests {
 
     use canonical_derive::Canon;
     use microkelvin::{
-        BackendCtor, Compound, DiskBackend, Keyed, PersistError, Persistence,
+        BackendCtor, DiskBackend, Keyed, PersistError, Persistence,
     };
 
     use std::sync::atomic::{AtomicUsize, Ordering};
@@ -43,7 +43,7 @@ mod persist_tests {
     }
 
     fn persist() -> Result<(), PersistError> {
-        let n: u64 = 1;
+        let n: u64 = 64;
 
         let mut list = LinkedList::<_, ()>::new();
 
@@ -53,10 +53,7 @@ mod persist_tests {
 
         let persisted = Persistence::persist(&testbackend(), &list)?;
 
-        let restored_generic = persisted.restore()?;
-
-        let mut restored: LinkedList<u64, ()> =
-            LinkedList::from_generic(&restored_generic)?;
+        let mut restored: LinkedList<u64, ()> = persisted.restore()?;
 
         // first empty the original
 
@@ -67,7 +64,6 @@ mod persist_tests {
         // then the restored copy
 
         for i in 0..n {
-            println!("poppin {:?}", n - i - 1);
             assert_eq!(restored.pop()?, Some(n - i - 1));
         }
 
@@ -75,7 +71,7 @@ mod persist_tests {
     }
 
     #[test]
-    fn persist_a_simple() -> Result<(), PersistError> {
+    fn persist_a() -> Result<(), PersistError> {
         persist()
     }
 
@@ -108,10 +104,7 @@ mod persist_tests {
         // it should now be available from other threads
 
         std::thread::spawn(move || {
-            let restored_generic = persisted.restore()?;
-
-            let mut restored: LinkedList<u64, ()> =
-                LinkedList::from_generic(&restored_generic)?;
+            let mut restored: LinkedList<u64, ()> = persisted.restore()?;
 
             for i in 0..n {
                 assert_eq!(restored.pop()?, Some(n - i - 1));

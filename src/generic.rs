@@ -9,11 +9,8 @@ use alloc::vec::Vec;
 #[cfg(feature = "persistence")]
 use arbitrary::Arbitrary;
 
-use canonical::{Canon, CanonError, EncodeToVec, Id, Source};
+use canonical::{Canon, CanonError, Id, Source};
 use canonical_derive::Canon;
-
-use crate::link::Link;
-use crate::{Annotation, Compound};
 
 const TAG_EMPTY: u8 = 0;
 const TAG_LEAF: u8 = 1;
@@ -30,12 +27,6 @@ pub struct GenericAnnotation(Vec<u8>);
 pub struct GenericLeaf(Vec<u8>);
 
 impl GenericLeaf {
-    pub(crate) fn new<C: Canon>(c: &C) -> Self {
-        let vec = c.encode_to_vec();
-        let res = GenericLeaf(vec);
-        res
-    }
-
     /// Cast the generic leaf to a concrete type
     pub fn cast<T: Canon>(&self) -> Result<T, CanonError> {
         T::decode(&mut Source::new(&self.0))
@@ -43,10 +34,6 @@ impl GenericLeaf {
 }
 
 impl GenericAnnotation {
-    pub(crate) fn new<A: Canon>(a: &A) -> Self {
-        GenericAnnotation(a.encode_to_vec())
-    }
-
     /// Cast the generic leaf to a concrete type
     pub fn cast<A: Canon>(&self) -> Result<A, CanonError> {
         A::decode(&mut Source::new(&self.0))
@@ -116,31 +103,6 @@ impl Canon for GenericChild {
 pub struct GenericTree(Vec<GenericChild>);
 
 impl GenericTree {
-    pub(crate) fn new() -> Self {
-        GenericTree(vec![])
-    }
-
-    pub(crate) fn push_empty(&mut self) {
-        self.0.push(GenericChild::Empty)
-    }
-
-    pub(crate) fn push_leaf<L: Canon>(&mut self, leaf: &L) {
-        let leaf = GenericLeaf::new(leaf);
-        let child = GenericChild::Leaf(leaf);
-        self.0.push(child)
-    }
-
-    pub(crate) fn push_link<C, A>(&mut self, link: &Link<C, A>)
-    where
-        C: Compound<A>,
-        C::Leaf: Canon,
-        A: Annotation<C::Leaf>,
-    {
-        let id = link.id();
-        let anno = GenericAnnotation::new(&*link.annotation());
-        self.0.push(GenericChild::Link(id, anno));
-    }
-
     /// Provides an iterator over the generic children of the node
     pub fn children(&self) -> &[GenericChild] {
         &self.0

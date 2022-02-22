@@ -124,7 +124,7 @@ where
     C: Compound<A>,
     C::Leaf: Keyed<K>,
     A: Annotation<C::Leaf> + Borrow<MaxKey<K>>,
-    K: Ord + Clone + core::fmt::Debug,
+    K: Ord + Clone,
 {
     fn walk(&mut self, walk: Walk<C, A>) -> Step {
         let mut current_max: MaxKey<K> = MaxKey::NegativeInfinity;
@@ -181,7 +181,7 @@ where
     C: Compound<A> + Clone,
     C::Leaf: Keyed<K>,
     A: Annotation<C::Leaf> + Borrow<MaxKey<K>>,
-    K: Ord + Clone + core::fmt::Debug,
+    K: Ord + Clone,
 {
     fn max_key(&'a self) -> Result<Option<Branch<'a, Self, A>>, CanonError> {
         // Return the first that satisfies the walk
