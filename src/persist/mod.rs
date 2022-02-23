@@ -33,10 +33,8 @@ impl WrappedBackend {
         WrappedBackend(Arc::new(backend))
     }
 
-    pub fn get<C: Canon>(&self, id: &Id) -> Result<C, PersistError> {
-        let res = self.0.get(&id.hash())?;
-        let mut source = Source::new(&res);
-        C::decode(&mut source).map_err(|e| PersistError::from(e))
+    pub fn get(&self, id: &Id) -> Result<Vec<u8>, PersistError> {
+        self.0.get(&id.hash())
     }
 
     pub fn put(&self, bytes: &[u8]) -> Result<Id, PersistError> {
@@ -177,11 +175,18 @@ impl Persistence {
         closure(&mut backend)
     }
 
-    /// Get a generic tree from the backend.
+    /// Get Canon value represented by id
     pub fn get<C>(id: &Id) -> Result<C, PersistError>
     where
         C: Canon,
     {
+        let raw = Self::get_raw(id)?;
+        let mut source = Source::new(&raw);
+        C::decode(&mut source).map_err(|e| PersistError::from(e))
+    }
+
+    /// Get bytes represented by id
+    pub fn get_raw(id: &Id) -> Result<Vec<u8>, PersistError> {
         // First try reifying from local store/inlined data
         if let Ok(tree) = id.reify() {
             return Ok(tree);

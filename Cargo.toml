@@ -1,6 +1,6 @@
 [package]
 name = "microkelvin"
-version = "0.14.0"
+version = "0.14.1"
 authors = ["Kristoffer Ström <kristoffer@dusk.network>"]
 edition = "2018"
 keywords = ["datastructures"]
@@ -25,6 +25,3 @@ canonical_fuzz = "0.6.2"
 
 [features]
 persistence = ["appendix",  "lazy_static", "tempfile", "arbitrary", "parking_lot", "blake2b_simd"]
-
-[patch.crates-io]
-canonical = { path = "../canonical/canon" }
