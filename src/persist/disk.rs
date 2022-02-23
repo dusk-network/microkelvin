@@ -110,15 +110,15 @@ impl Backend for DiskBackend {
         hash.copy_from_slice(state.finalize().as_ref());
 
         if self.index.get(&hash)?.is_none() {
+            let mut data_ofs = self.data_ofs.lock();
+
             let mut data = OpenOptions::new()
                 .create(true)
                 .write(true)
-                .append(true)
                 .open(&self.data_path)?;
 
+            data.seek(SeekFrom::Start(*data_ofs))?;
             data.write_all(bytes)?;
-
-            let mut data_ofs = self.data_ofs.lock();
 
             self.index.insert(hash, (*data_ofs, data_len as u32))?;
             // TODO make sure to flush
