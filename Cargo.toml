@@ -1,6 +1,6 @@
 [package]
 name = "microkelvin"
-version = "0.14.1"
+version = "0.15.0-rc.0"
 authors = ["Kristoffer Ström <kristoffer@dusk.network>"]
 edition = "2018"
 keywords = ["datastructures"]
@@ -14,14 +14,14 @@ parking_lot = { version = "0.12.0", optional = true }
 lazy_static = { version = "1.4.0", optional = true }
 tempfile = { version = "3.2.0", optional = true }
 blake2b_simd = { version = "0.3", optional = true }
-canonical = "0.6"
-canonical_derive = "0.6"
+canonical = "0.7"
+canonical_derive = "0.7"
 arbitrary = { version = "1.0", features = ["derive"], optional = true }
 spin = { version = "0.9.2" }
 
 [dev-dependencies]
 rand = "0.8.3"
-canonical_fuzz = "0.6.2"
+canonical_fuzz = "0.7"
 
 [features]
 persistence = ["appendix",  "lazy_static", "tempfile", "arbitrary", "parking_lot", "blake2b_simd"]
