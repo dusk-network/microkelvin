@@ -4,7 +4,6 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use std::error::Error;
 use std::hash::Hasher;
 use std::io;
 use std::sync::Arc;
@@ -12,6 +11,7 @@ use std::{
     collections::hash_map::{DefaultHasher, Entry, HashMap},
     hash::Hash,
 };
+use thiserror::Error;
 
 mod disk;
 
@@ -213,22 +213,20 @@ pub trait Backend: Send + Sync {
 }
 
 /// An error that can happen when persisting structures to disk
-#[derive(Debug)]
+#[derive(Error, Debug)]
 pub enum PersistError {
     /// An io-error occured while persisting
-    Io(io::Error),
+    #[error(transparent)]
+    Io(#[from] io::Error),
     /// No backend found
+    #[error("Backend not found")]
     BackendUnavailable,
     /// A CanonError occured while persisting
+    #[error("Canon error: {0:?}")]
     Canon(CanonError),
     /// Other backend specific error
-    Other(Box<dyn Error + Send>),
-}
-
-impl From<io::Error> for PersistError {
-    fn from(e: io::Error) -> Self {
-        PersistError::Io(e)
-    }
+    #[error(transparent)]
+    Other(#[from] anyhow::Error),
 }
 
 impl From<CanonError> for PersistError {
