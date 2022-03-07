@@ -7,10 +7,9 @@
 use core::convert::Infallible;
 use core::hint::unreachable_unchecked;
 use core::marker::PhantomData;
+use std::ops::{Deref, DerefMut};
 
 use bytecheck::CheckBytes;
-use rkyv::rend::LittleEndian;
-use rkyv::validation::validators::DefaultValidator;
 use rkyv::{Archive, Deserialize, Fallible, Serialize};
 
 #[cfg(feature = "host")]
@@ -31,50 +30,6 @@ use crate::tower::{WellArchived, WellFormed};
 use crate::{
     Annotation, ArchivedCompound, Branch, Compound, MaybeArchived, Walker,
 };
-
-/// Offset based identifier
-#[derive(
-    Debug, Clone, Copy, Archive, Serialize, Deserialize, CheckBytes, Default,
-)]
-#[archive(as = "Self")]
-pub struct OffsetLen(LittleEndian<u64>, LittleEndian<u16>);
-
-impl From<Identifier> for OffsetLen {
-    fn from(_: Identifier) -> Self {
-        todo!()
-    }
-}
-
-impl Into<Identifier> for OffsetLen {
-    fn into(self) -> Identifier {
-        todo!()
-    }
-}
-
-impl OffsetLen {
-    /// Creates an offset with a given value
-    pub fn new<O: Into<LittleEndian<u64>>, L: Into<LittleEndian<u16>>>(
-        offset: O,
-        len: L,
-    ) -> OffsetLen {
-        OffsetLen(offset.into(), len.into())
-    }
-
-    /// Return the numerical offset
-    pub fn inner(&self) -> u64 {
-        self.0.into()
-    }
-
-    /// The offset in storage
-    pub fn offset(&self) -> u64 {
-        u64::from(self.0)
-    }
-
-    /// The length of the byte representation
-    pub fn len(&self) -> u16 {
-        u16::from(self.1)
-    }
-}
 
 /// An identifier representing a value stored somewhere else
 #[derive(CheckBytes)]
@@ -144,8 +99,8 @@ impl<T> Stored<T> {
     /// Get a reference to the inner value being stored
     pub fn inner(&self) -> &T::Archived
     where
-        T: Archive,
-        T::Archived: for<'a> CheckBytes<DefaultValidator<'a>>,
+        T: WellFormed,
+        T::Archived: WellArchived<T>,
     {
         self.store.get(&self.ident)
     }
@@ -177,9 +132,25 @@ pub trait StoreProvider: Sized + Fallible {
     fn store(&self) -> &StoreRef;
 }
 
-#[derive(Copy, Clone, Archive, Serialize, Deserialize, CheckBytes, Debug)]
+#[derive(
+    Copy, Clone, Archive, Serialize, Deserialize, CheckBytes, Debug, Default,
+)]
 #[archive(as = "Self")]
 pub struct Identifier([u8; 32]);
+
+impl Deref for Identifier {
+    type Target = [u8];
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for Identifier {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
 
 /// A type that works as a handle to a `Storage` backend.
 pub trait Store {

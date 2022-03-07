@@ -8,10 +8,9 @@ use core::borrow::BorrowMut;
 
 use bytecheck::CheckBytes;
 use microkelvin::{
-    All, Annotation, ArchivedChild, ArchivedCompound, ArchivedLink,
-    Cardinality, Child, ChildMut, Compound, Fundamental, HostStore, Link,
-    MutableLeaves, Nth, StoreProvider, StoreRef, StoreSerializer, WellArchived,
-    WellFormed,
+    All, Annotation, ArchivedChild, ArchivedCompound, Cardinality, Child,
+    ChildMut, Compound, Fundamental, HostStore, Link, MutableLeaves, Nth,
+    StoreProvider, StoreRef, StoreSerializer, WellArchived, WellFormed,
 };
 use rend::LittleEndian;
 use rkyv::{Archive, Deserialize, Serialize};
@@ -24,9 +23,7 @@ use rkyv::{Archive, Deserialize, Serialize};
   A: Fundamental + Annotation<T>,
   __S: Sized + BorrowMut<StoreSerializer>"))]
 #[archive(bound(deserialize = "
-  T::Archived: WellArchived<T>,
-  ArchivedLink<Self, A>: Deserialize<Link<Self, A>, __D>,
-  A: Clone + Annotation<T>,
+  A: Fundamental,
   __D: StoreProvider,"))]
 pub enum LinkedList<T, A> {
     Empty,

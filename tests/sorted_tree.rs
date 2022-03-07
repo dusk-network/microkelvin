@@ -25,9 +25,7 @@ use microkelvin::{
   A: Fundamental + Annotation<T>,
   __S: Sized + BorrowMut<StoreSerializer>"))]
 #[archive(bound(deserialize = "
-  T: WellFormed,
-  T::Archived: WellArchived<T>,
-  A: Fundamental + Annotation<T>,
+  A: Fundamental,
   __D: StoreProvider"))]
 pub enum NaiveTree<T, A> {
     Empty,

@@ -13,7 +13,7 @@
 //! `Branch` and `BranchMut`, types for representing branches in tree-formed
 //! data as well as methods of search.
 #![cfg_attr(not(feature = "host"), no_std)]
-#![deny(missing_docs)]
+// #![deny(missing_docs)]
 
 #[macro_use]
 extern crate alloc;
@@ -46,8 +46,8 @@ pub use wrappers::{MaybeArchived, MaybeStored};
 
 mod storage;
 pub use storage::{
-    Ident, OffsetLen, Store, StoreProvider, StoreRef, StoreSerializer, Stored,
-    Token, TokenBuffer,
+    Ident, Store, StoreProvider, StoreRef, StoreSerializer, Stored, Token,
+    TokenBuffer,
 };
 
 #[cfg(feature = "host")]

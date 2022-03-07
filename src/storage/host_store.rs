@@ -6,9 +6,13 @@
 
 use core::convert::Infallible;
 
+use bytecheck::CheckBytes;
 use memmap::Mmap;
 use parking_lot::RwLock;
-use rkyv::Fallible;
+use rkyv::rend::LittleEndian;
+use rkyv::ser::serializers::BufferSerializer;
+use rkyv::ser::Serializer;
+use rkyv::{archived_root, Archive, Deserialize, Fallible, Serialize};
 
 use std::fs::{File, OpenOptions};
 use std::io::{self, Write};
@@ -17,7 +21,59 @@ use std::sync::Arc;
 
 use crate::Store;
 
-use super::{Identifier, OffsetLen, Token, TokenBuffer};
+use super::{Identifier, Token, TokenBuffer};
+
+/// Offset based identifier
+#[derive(
+    Debug, Clone, Copy, Archive, Serialize, Deserialize, CheckBytes, Default,
+)]
+#[archive(as = "Self")]
+pub struct OffsetLen(LittleEndian<u64>, LittleEndian<u16>);
+
+const OFSLEN_SIZE: usize =
+    core::mem::size_of::<<OffsetLen as Archive>::Archived>();
+
+impl From<Identifier> for OffsetLen {
+    fn from(id: Identifier) -> Self {
+        debug_assert!(id.len() >= OFSLEN_SIZE);
+        // Safe, since all possible values of integers are valid
+        unsafe { archived_root::<OffsetLen>(&id[0..OFSLEN_SIZE]).clone() }
+    }
+}
+
+impl Into<Identifier> for OffsetLen {
+    fn into(self) -> Identifier {
+        let mut id = Identifier::default();
+        let mut ser = BufferSerializer::new(&mut id[0..OFSLEN_SIZE]);
+        ser.serialize_value(&self).expect("Infallible");
+        id
+    }
+}
+
+impl OffsetLen {
+    /// Creates an offset with a given value
+    pub fn new<O: Into<LittleEndian<u64>>, L: Into<LittleEndian<u16>>>(
+        offset: O,
+        len: L,
+    ) -> OffsetLen {
+        OffsetLen(offset.into(), len.into())
+    }
+
+    /// Return the numerical offset
+    pub fn inner(&self) -> u64 {
+        self.0.into()
+    }
+
+    /// The offset in storage
+    pub fn offset(&self) -> u64 {
+        u64::from(self.0)
+    }
+
+    /// The length of the byte representation
+    pub fn len(&self) -> u16 {
+        u16::from(self.1)
+    }
+}
 
 const PAGE_SIZE: usize = 1024 * 64;
 
