@@ -133,7 +133,7 @@ impl PageStorage {
         let slice = match &self.mmap {
             Some(mmap) if (ofs + len) <= mmap.len() => &mmap[ofs..][..len],
             _ => {
-                let pages_ofs = ofs - self.mmap_len();
+                let pages_ofs = if ofs > self.mmap_len() { ofs - self.mmap_len() } else { 0 };
                 let cur_page_ofs = pages_ofs % PAGE_SIZE;
                 let cur_page = pages_ofs / PAGE_SIZE;
 
