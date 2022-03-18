@@ -159,7 +159,7 @@ impl PageStorage {
 
     fn extend(&mut self, buffer: &mut TokenBuffer) -> Result<(), ()> {
         self.pages.push(Page::new());
-        buffer.remap(self.unwritten_tail());
+        buffer.reset_buffer(self.unwritten_tail());
         Ok(())
     }
 
