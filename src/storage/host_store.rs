@@ -131,7 +131,7 @@ impl PageStorage {
         let (ofs, len) = (u64::from(ofs) as usize, u16::from(len) as usize);
 
         let slice = match &self.mmap {
-            Some(mmap) if ofs <= mmap.len() - len => &mmap[ofs..][..len],
+            Some(mmap) if (ofs + len) <= mmap.len() => &mmap[ofs..][..len],
             _ => {
                 let pages_ofs = ofs - self.mmap_len();
                 let cur_page_ofs = pages_ofs % PAGE_SIZE;
