@@ -133,7 +133,7 @@ impl PageStorage {
         let slice = match &self.mmap {
             Some(mmap) if (ofs + len) <= mmap.len() => &mmap[ofs..][..len],
             _ => {
-                let pages_ofs = if ofs > self.mmap_len() { ofs - self.mmap_len() } else { 0 };
+                let pages_ofs = ofs - self.mmap_len();
                 let cur_page_ofs = pages_ofs % PAGE_SIZE;
                 let cur_page = pages_ofs / PAGE_SIZE;
 
@@ -169,8 +169,12 @@ impl PageStorage {
 
     fn persist(&mut self) -> Result<(), std::io::Error> {
         fn write_pages(pages: &Vec<Page>, file: &mut File) -> io::Result<()> {
-            for page in pages {
-                file.write(&page.bytes[..page.written])?;
+            for (i, page) in pages.iter().enumerate() {
+                if (i + 1) == pages.len() {
+                    file.write(&page.bytes[..page.written])?;
+                } else {
+                    file.write(page.bytes.as_ref())?;
+                }
             }
             file.flush()
         }
