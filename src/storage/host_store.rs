@@ -6,7 +6,7 @@
 
 use core::convert::Infallible;
 
-use memmap::Mmap;
+use memmap2::Mmap;
 use parking_lot::RwLock;
 use rkyv::Fallible;
 
@@ -14,12 +14,13 @@ use std::fs::{File, OpenOptions};
 use std::io::{self, Write};
 use std::path::Path;
 use std::sync::Arc;
+use rkyv::ser::Serializer;
 
 use crate::Store;
 
 use super::{OffsetLen, Token, TokenBuffer};
 
-const PAGE_SIZE: usize = 1024 * 64;
+const PAGE_SIZE: usize = 1024 * 128;
 
 #[derive(Debug)]
 struct Page {
@@ -101,13 +102,11 @@ impl PageStorage {
     }
 
     fn pages_data_len(&self) -> usize {
-        match self.pages.len() {
-            0 => 0,
-            n => {
-                (n - 1) * PAGE_SIZE
-                    + self.pages.last().map(|p| p.slice().len()).unwrap_or(0)
-            }
+        let mut size_sum = 0;
+        for p in &self.pages {
+            size_sum += p.written;
         }
+        size_sum
     }
 
     fn offset(&self) -> usize {
@@ -128,7 +127,7 @@ impl PageStorage {
 
     fn get(&self, ofs: &OffsetLen) -> &[u8] {
         let OffsetLen(ofs, len) = *ofs;
-        let (ofs, len) = (u64::from(ofs) as usize, u16::from(len) as usize);
+        let (ofs, len) = (u64::from(ofs) as usize, u32::from(len) as usize);
 
         let slice = match &self.mmap {
             Some(mmap) if (ofs + len) <= mmap.len() => &mmap[ofs..][..len],
@@ -154,11 +153,13 @@ impl PageStorage {
             // unless a write-buffer was already allocated
             unreachable!()
         }
-        OffsetLen::new(offset as u64, len as u16)
+        OffsetLen::new(offset as u64, len as u32)
     }
 
     fn extend(&mut self, buffer: &mut TokenBuffer) -> Result<(), ()> {
-        self.pages.push(Page::new());
+        let mut new_page = Page::new();
+        new_page.unwritten_tail()[..buffer.pos()].copy_from_slice(&buffer.written_bytes()[..buffer.pos()]);
+        self.pages.push(new_page);
         buffer.reset_buffer(self.unwritten_tail());
         Ok(())
     }
@@ -169,12 +170,8 @@ impl PageStorage {
 
     fn persist(&mut self) -> Result<(), std::io::Error> {
         fn write_pages(pages: &Vec<Page>, file: &mut File) -> io::Result<()> {
-            for (i, page) in pages.iter().enumerate() {
-                if (i + 1) == pages.len() {
-                    file.write(&page.bytes[..page.written])?;
-                } else {
-                    file.write(page.bytes.as_ref())?;
-                }
+            for page in pages {
+                file.write(&page.bytes[..page.written])?;
             }
             file.flush()
         }
@@ -183,7 +180,7 @@ impl PageStorage {
                 write_pages(&self.pages, file)?;
                 self.pages.clear();
                 if self.mmap.is_none() {
-                    self.mmap = Some(unsafe { Mmap::map(&file)? })
+                    self.mmap = Some(unsafe { Mmap::map(&*file)? })
                 }
             }
         }
