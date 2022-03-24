@@ -127,6 +127,31 @@ impl PageStorage {
     }
 
     fn get(&self, ofs: &OffsetLen) -> &[u8] {
+        // generalized integer division
+        fn page_for_ofs(pages_ofs: usize, pages: &Vec<Page>) -> usize {
+            assert_ne!(pages.len(), 0);
+            let mut sum = 0;
+            for (i, p) in pages.iter().enumerate() {
+                sum += p.written;
+                if pages_ofs <= sum {
+                    return i
+                }
+            }
+            unreachable!()
+        }
+        // generalized mod
+        fn page_ofs_for_ofs(pages_ofs: usize, pages: &Vec<Page>, cur_page: usize) -> usize {
+            assert!(cur_page < pages.len());
+            if cur_page == 0 {
+                pages_ofs
+            } else {
+                let mut sum = 0;
+                for i in 0..cur_page {
+                    sum += pages[i].written;
+                }
+                pages_ofs - sum
+            }
+        }
         println!("get ofs={} len={} number of pages={}", ofs.offset(), ofs.len(), &self.pages.len());
         let OffsetLen(ofs, len) = *ofs;
         let (ofs, len) = (u64::from(ofs) as usize, u16::from(len) as usize);
@@ -135,14 +160,14 @@ impl PageStorage {
             Some(mmap) if (ofs + len) <= mmap.len() => &mmap[ofs..][..len],
             _ => {
                 let pages_ofs = ofs - self.mmap_len();
-                let mut cur_page_ofs = pages_ofs % PAGE_SIZE;
-                let mut cur_page = pages_ofs / PAGE_SIZE;
-                if ((pages_ofs / PAGE_SIZE) < ((pages_ofs + len) / PAGE_SIZE)) && (pages_ofs + len) % PAGE_SIZE != 0 {
+                let mut cur_page = page_for_ofs(pages_ofs, &self.pages);
+                let mut cur_page_ofs = page_ofs_for_ofs(pages_ofs, &self.pages, cur_page);
+                if page_for_ofs(pages_ofs, &self.pages) < page_for_ofs(pages_ofs + len, &self.pages) {
                     cur_page_ofs = 0;
                     cur_page += 1;
                 }
-                println!("got here {} {}", pages_ofs / PAGE_SIZE, (pages_ofs + len) / PAGE_SIZE);
-                println!("got here - pages ofs={} cur page ofs={} cur page={}", pages_ofs, cur_page_ofs, cur_page);
+                println!("get - page no={} page no including len={}", pages_ofs / PAGE_SIZE, (pages_ofs + len) / PAGE_SIZE);
+                println!("get - getting at pages ofs={} cur page ofs={} cur page={} len={}", pages_ofs, cur_page_ofs, cur_page, len);
 
                 &self.pages[cur_page].slice()[cur_page_ofs..][..len]
             }
@@ -153,14 +178,18 @@ impl PageStorage {
     fn commit(&mut self, buffer: &mut TokenBuffer) -> OffsetLen {
         let offset = self.offset();
         let len = buffer.advance();
+        let cur_page = self.pages.len()-1;
 
         if let Some(page) = self.pages.last_mut() {
-            println!("commit returning offs={} len={}", offset, len);
+            println!("commit returning offs={} len={} at page={}", offset, len, cur_page);
             page.commit(len)
         } else {
             // the token could not have been provided
             // unless a write-buffer was already allocated
             unreachable!()
+        }
+        if cur_page == 1 {
+            println!("written of page 0 is {}", self.pages[0].written);
         }
         OffsetLen::new(offset as u64, len as u16)
     }
