@@ -208,13 +208,14 @@ impl PageStorage {
         let mut clear_written = false;
         if let Some(current_page) = self.pages.last() {
             if (current_page.written + buffer.pos() + by) > PAGE_SIZE {
-                println!("extend buffer pos={} by={} s={}", buffer.pos(), by, current_page.written + buffer.pos() + by);
+                println!("extend buffer pos={} by={} s={}", buffer.pos(), by, current_page.written);
                 clear_written = true;
             }
         }
         let mut new_page = Page::new();
         if buffer.pos() > 0 {
             new_page.unwritten_tail()[..buffer.pos()].copy_from_slice(buffer.written_bytes());
+            new_page.written = buffer.pos();
         }
         self.pages.push(new_page);
         buffer.reset_buffer(self.unwritten_tail());
@@ -233,6 +234,7 @@ impl PageStorage {
     fn persist(&mut self) -> Result<(), std::io::Error> {
         fn write_pages(pages: &Vec<Page>, file: &mut File) -> io::Result<()> {
             for page in pages {
+                println!("persisting page {}", page.written);
                 file.write(&page.bytes[..page.written])?;
             }
             file.flush()
