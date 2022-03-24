@@ -52,7 +52,8 @@ impl Token {
 pub struct TokenBuffer {
     token: Token,
     buffer: *mut [u8],
-    written: usize,
+    /// temp
+    pub written: usize,
 }
 
 impl TokenBuffer {

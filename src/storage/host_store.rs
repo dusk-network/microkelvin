@@ -20,7 +20,7 @@ use crate::Store;
 
 use super::{OffsetLen, Token, TokenBuffer};
 
-const PAGE_SIZE: usize = 1024 * 128;
+const PAGE_SIZE: usize = 1024 * 64;
 
 #[derive(Debug)]
 struct Page {
@@ -58,6 +58,7 @@ impl Page {
     }
 
     fn commit(&mut self, len: usize) {
+        println!("page commit written={} len={}", self.written, len);
         self.written += len;
     }
 }
@@ -126,15 +127,22 @@ impl PageStorage {
     }
 
     fn get(&self, ofs: &OffsetLen) -> &[u8] {
+        println!("get ofs={} len={} number of pages={}", ofs.offset(), ofs.len(), &self.pages.len());
         let OffsetLen(ofs, len) = *ofs;
-        let (ofs, len) = (u64::from(ofs) as usize, u32::from(len) as usize);
+        let (ofs, len) = (u64::from(ofs) as usize, u16::from(len) as usize);
 
         let slice = match &self.mmap {
             Some(mmap) if (ofs + len) <= mmap.len() => &mmap[ofs..][..len],
             _ => {
                 let pages_ofs = ofs - self.mmap_len();
-                let cur_page_ofs = pages_ofs % PAGE_SIZE;
-                let cur_page = pages_ofs / PAGE_SIZE;
+                let mut cur_page_ofs = pages_ofs % PAGE_SIZE;
+                let mut cur_page = pages_ofs / PAGE_SIZE;
+                if ((pages_ofs / PAGE_SIZE) < ((pages_ofs + len) / PAGE_SIZE)) && (pages_ofs + len) % PAGE_SIZE != 0 {
+                    cur_page_ofs = 0;
+                    cur_page += 1;
+                }
+                println!("got here {} {}", pages_ofs / PAGE_SIZE, (pages_ofs + len) / PAGE_SIZE);
+                println!("got here - pages ofs={} cur page ofs={} cur page={}", pages_ofs, cur_page_ofs, cur_page);
 
                 &self.pages[cur_page].slice()[cur_page_ofs..][..len]
             }
@@ -147,18 +155,27 @@ impl PageStorage {
         let len = buffer.advance();
 
         if let Some(page) = self.pages.last_mut() {
+            println!("commit returning offs={} len={}", offset, len);
             page.commit(len)
         } else {
             // the token could not have been provided
             // unless a write-buffer was already allocated
             unreachable!()
         }
-        OffsetLen::new(offset as u64, len as u32)
+        OffsetLen::new(offset as u64, len as u16)
     }
 
-    fn extend(&mut self, buffer: &mut TokenBuffer) -> Result<(), ()> {
+    fn extend(&mut self, buffer: &mut TokenBuffer, by: usize) -> Result<(), ()> {
+        if let Some(current_page) = self.pages.last() {
+            if (current_page.written + buffer.pos() + by) > PAGE_SIZE {
+                println!("extend buffer pos={} by={} s={}", buffer.pos(), by, current_page.written + buffer.pos() + by);
+                buffer.written = 0;
+            }
+        }
         let mut new_page = Page::new();
-        new_page.unwritten_tail()[..buffer.pos()].copy_from_slice(&buffer.written_bytes()[..buffer.pos()]);
+        if buffer.pos() > 0 {
+            new_page.unwritten_tail()[..buffer.pos()].copy_from_slice(&buffer.written_bytes()[..buffer.pos()]);
+        }
         self.pages.push(new_page);
         buffer.reset_buffer(self.unwritten_tail());
         Ok(())
@@ -216,8 +233,9 @@ impl Store for HostStore {
     fn get<'a>(&'a self, id: &Self::Identifier) -> &'a [u8] {
         let guard = self.inner.read();
         let bytes = guard.get(&id);
-
+        println!("before transmute");
         let bytes_a: &'a [u8] = unsafe { core::mem::transmute(bytes) };
+        println!("after transmute");
         bytes_a
     }
 
@@ -240,9 +258,9 @@ impl Store for HostStore {
     fn extend(
         &self,
         buffer: &mut TokenBuffer,
-        _size_needed: usize,
+        size_needed: usize,
     ) -> Result<(), ()> {
-        self.inner.write().extend(buffer)
+        self.inner.write().extend(buffer, size_needed)
     }
 
     fn persist(&self) -> Result<(), ()> {
