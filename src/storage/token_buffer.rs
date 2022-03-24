@@ -54,6 +54,8 @@ pub struct TokenBuffer {
     buffer: *mut [u8],
     /// temp
     pub written: usize,
+    /// temp
+    pub extra: usize,
 }
 
 impl TokenBuffer {
@@ -63,6 +65,7 @@ impl TokenBuffer {
             token,
             buffer,
             written: 0,
+            extra: 0,
         }
     }
 
@@ -71,6 +74,7 @@ impl TokenBuffer {
             token: Token::new(),
             buffer: &mut [],
             written: 0,
+            extra: 0,
         }
     }
 

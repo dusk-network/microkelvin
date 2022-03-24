@@ -157,7 +157,10 @@ impl PageStorage {
         let (ofs, len) = (u64::from(ofs) as usize, u16::from(len) as usize);
 
         let slice = match &self.mmap {
-            Some(mmap) if (ofs + len) <= mmap.len() => &mmap[ofs..][..len],
+            Some(mmap) if (ofs + len) <= mmap.len() => {
+                println!("get from mmap ofs={} len={} .... mmaplen={}", ofs, len, mmap.len());
+                &mmap[ofs..][..len]
+            },
             _ => {
                 let pages_ofs = ofs - self.mmap_len();
                 let mut cur_page = page_for_ofs(pages_ofs, &self.pages);
@@ -177,12 +180,19 @@ impl PageStorage {
 
     fn commit(&mut self, buffer: &mut TokenBuffer) -> OffsetLen {
         let offset = self.offset();
-        let len = buffer.advance();
+        let advance_len = buffer.advance();
+        let len = advance_len + buffer.extra;
+        let commit_len = if len < PAGE_SIZE {
+            len
+        } else {
+            advance_len
+        };
+        buffer.extra = 0;
         let cur_page = self.pages.len()-1;
 
         if let Some(page) = self.pages.last_mut() {
-            println!("commit returning offs={} len={} at page={}", offset, len, cur_page);
-            page.commit(len)
+            println!("commit returning offs={} len={} at page={} advance_len={}", offset, len, cur_page, advance_len);
+            page.commit(commit_len)
         } else {
             // the token could not have been provided
             // unless a write-buffer was already allocated
@@ -195,18 +205,24 @@ impl PageStorage {
     }
 
     fn extend(&mut self, buffer: &mut TokenBuffer, by: usize) -> Result<(), ()> {
+        let mut clear_written = false;
         if let Some(current_page) = self.pages.last() {
             if (current_page.written + buffer.pos() + by) > PAGE_SIZE {
                 println!("extend buffer pos={} by={} s={}", buffer.pos(), by, current_page.written + buffer.pos() + by);
-                buffer.written = 0;
+                clear_written = true;
             }
         }
         let mut new_page = Page::new();
         if buffer.pos() > 0 {
-            new_page.unwritten_tail()[..buffer.pos()].copy_from_slice(&buffer.written_bytes()[..buffer.pos()]);
+            new_page.unwritten_tail()[..buffer.pos()].copy_from_slice(buffer.written_bytes());
         }
         self.pages.push(new_page);
         buffer.reset_buffer(self.unwritten_tail());
+        if clear_written {
+            println!("abcd zeroing {}", buffer.pos());
+            buffer.extra += buffer.pos();
+            buffer.written = 0;
+        }
         Ok(())
     }
 
