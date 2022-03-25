@@ -144,6 +144,7 @@ impl Serializer for TokenBuffer {
             let remaining_buffer = unsafe { self.unwritten_bytes() };
             remaining_buffer[..bytes_length].copy_from_slice(bytes);
             self.written += bytes_length;
+            self.extra += bytes_length;
             Ok(())
         } else {
             Err(BufferOverflow::new(bytes_length))

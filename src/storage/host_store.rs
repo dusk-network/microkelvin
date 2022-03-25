@@ -58,7 +58,6 @@ impl Page {
     }
 
     fn commit(&mut self, len: usize) {
-        println!("page commit written={} len={}", self.written, len);
         self.written += len;
     }
 }
@@ -154,7 +153,7 @@ impl PageStorage {
         }
         println!("get ofs={} len={} number of pages={}", ofs.offset(), ofs.len(), &self.pages.len());
         let OffsetLen(ofs, len) = *ofs;
-        let (ofs, len) = (u64::from(ofs) as usize, u16::from(len) as usize);
+        let (ofs, len) = (u64::from(ofs) as usize, u32::from(len) as usize);
 
         let slice = match &self.mmap {
             Some(mmap) if (ofs + len) <= mmap.len() => {
@@ -181,49 +180,49 @@ impl PageStorage {
     fn commit(&mut self, buffer: &mut TokenBuffer) -> OffsetLen {
         let offset = self.offset();
         let advance_len = buffer.advance();
-        let len = advance_len + buffer.extra;
-        let commit_len = if len < PAGE_SIZE {
-            len
-        } else {
-            advance_len
-        };
+        let len = buffer.extra;
         buffer.extra = 0;
-        let cur_page = self.pages.len()-1;
 
         if let Some(page) = self.pages.last_mut() {
-            println!("commit returning offs={} len={} at page={} advance_len={}", offset, len, cur_page, advance_len);
-            page.commit(commit_len)
+            page.commit(advance_len)
         } else {
             // the token could not have been provided
             // unless a write-buffer was already allocated
             unreachable!()
         }
-        if cur_page == 1 {
-            println!("written of page 0 is {}", self.pages[0].written);
-        }
-        OffsetLen::new(offset as u64, len as u16)
+        let adjusted_offset = offset + advance_len - len;
+        println!("commit returning offs={} len={} advance_len={}", adjusted_offset, len, advance_len);
+        OffsetLen::new(adjusted_offset as u64, len as u32)
     }
 
     fn extend(&mut self, buffer: &mut TokenBuffer, by: usize) -> Result<(), ()> {
         let mut clear_written = false;
-        if let Some(current_page) = self.pages.last() {
-            if (current_page.written + buffer.pos() + by) > PAGE_SIZE {
-                println!("extend buffer pos={} by={} s={}", buffer.pos(), by, current_page.written);
-                clear_written = true;
-            }
-        }
+        // if let Some(current_page) = self.pages.last() {
+        //     if (current_page.written + buffer.pos() + by) > PAGE_SIZE {
+        //         println!("extend buffer pos={} by={} s={}", buffer.pos(), by, current_page.written);
+        //         clear_written = true;
+        //     }
+        // }
         let mut new_page = Page::new();
         if buffer.pos() > 0 {
             new_page.unwritten_tail()[..buffer.pos()].copy_from_slice(buffer.written_bytes());
             new_page.written = buffer.pos();
+            self.pages.push(new_page);
+            println!("quasi commit of {}", buffer.pos());
+            self.persist();
+            self.pages.push(Page::new());
+            buffer.remap(self.unwritten_tail());
         }
-        self.pages.push(new_page);
-        buffer.reset_buffer(self.unwritten_tail());
-        if clear_written {
-            println!("abcd zeroing {}", buffer.pos());
-            buffer.extra += buffer.pos();
-            buffer.written = 0;
+        else {
+            println!("pos0 written={} unwritten={} by={} extra={}", buffer.written_bytes().len(), unsafe { buffer.unwritten_bytes().len() }, by, buffer.extra );
+            self.pages.push(Page::new());
+            buffer.remap(self.unwritten_tail());
         }
+        // if clear_written {
+        //     println!("abcd zeroing {}", buffer.pos());
+        //     buffer.extra += buffer.pos();
+        //     buffer.written = 0;
+        // }
         Ok(())
     }
 
@@ -237,17 +236,20 @@ impl PageStorage {
                 println!("persisting page {}", page.written);
                 file.write(&page.bytes[..page.written])?;
             }
-            file.flush()
+            file.flush()?;
+            file.sync_all()
         }
+        println!("persist: data in pages={} data in mmap={}", self.pages_data_len(), self.mmap_len());
         if self.pages_data_len() > 0 {
             if let Some(file) = &mut self.file {
                 write_pages(&self.pages, file)?;
                 self.pages.clear();
-                if self.mmap.is_none() {
+                // if self.mmap.is_none() {
                     self.mmap = Some(unsafe { Mmap::map(&*file)? })
-                }
+                // }
             }
         }
+        println!("persist after: data in pages={} data in mmap={}", self.pages_data_len(), self.mmap_len());
         Ok(())
     }
 }
