@@ -11,16 +11,16 @@ use parking_lot::RwLock;
 use rkyv::Fallible;
 
 use std::fs::{File, OpenOptions};
-use std::io::{self, Write};
+use std::io::{self, SeekFrom, Write, Seek};
 use std::path::Path;
 use std::sync::Arc;
 use rkyv::ser::Serializer;
 
 use crate::Store;
 
-use super::{OffsetLen, Token, TokenBuffer};
+use super::{OffsetLen, Token, TokenBuffer, UncommittedPage};
 
-const PAGE_SIZE: usize = 1024 * 64;
+const PAGE_SIZE: usize = 1024 * 128;
 
 #[derive(Debug)]
 struct Page {
@@ -46,6 +46,13 @@ impl Page {
         Page {
             bytes: Box::new([0u8; PAGE_SIZE]),
             written: 0,
+        }
+    }
+
+    fn create(bytes: Box<[u8; PAGE_SIZE]>, written: usize) -> Self {
+        Page {
+            bytes,
+            written,
         }
     }
 
@@ -95,6 +102,11 @@ impl PageStorage {
             pages: Vec::new(),
             token: Token::new(),
         })
+    }
+
+    fn current_page(&self) -> usize {
+        assert_ne!(self.pages.len(), 0);
+        self.pages.len() - 1
     }
 
     fn mmap_len(&self) -> usize {
@@ -178,24 +190,34 @@ impl PageStorage {
     }
 
     fn commit(&mut self, buffer: &mut TokenBuffer) -> OffsetLen {
+        println!("commit num uncommitted pages={} buffer pos={}", buffer.uncomitted_pages.len(), buffer.pos());
         let offset = self.offset();
-        let advance_len = buffer.advance();
-        let len = buffer.extra;
-        buffer.extra = 0;
+        let written = buffer.pos();
+        if let Some(top_uncomitted_page) = buffer.uncomitted_pages.last_mut(){
+            top_uncomitted_page.written = written;
+        }
+        buffer.advance();
+        let mut uncommitted_len = 0;
+        for p in &buffer.uncomitted_pages {
+            self.pages.push(Page::create(p.bytes.clone(), p.written));
+            uncommitted_len += p.written;
+            println!("commit written={}", p.written);
+        }
+        buffer.uncomitted_pages = Vec::new();
 
-        if let Some(page) = self.pages.last_mut() {
-            page.commit(advance_len)
-        } else {
+        // if let Some(page) = self.pages.last_mut() {
+        //     page.written += advance_len - original_extra;
+        // } else {
             // the token could not have been provided
             // unless a write-buffer was already allocated
-            unreachable!()
-        }
-        let adjusted_offset = offset + advance_len - len;
-        println!("commit returning offs={} len={} advance_len={}", adjusted_offset, len, advance_len);
-        OffsetLen::new(adjusted_offset as u64, len as u32)
+            // unreachable!()
+        // }
+        println!("commit returning offs={} len={}", offset, uncommitted_len);
+        OffsetLen::new(offset as u64, uncommitted_len as u32)
     }
 
     fn extend(&mut self, buffer: &mut TokenBuffer, by: usize) -> Result<(), ()> {
+        println!("extend");
         let mut clear_written = false;
         // if let Some(current_page) = self.pages.last() {
         //     if (current_page.written + buffer.pos() + by) > PAGE_SIZE {
@@ -203,21 +225,19 @@ impl PageStorage {
         //         clear_written = true;
         //     }
         // }
-        let mut new_page = Page::new();
+        let mut new_uncomitted_page = UncommittedPage::new();
         if buffer.pos() > 0 {
-            new_page.unwritten_tail()[..buffer.pos()].copy_from_slice(buffer.written_bytes());
-            new_page.written = buffer.pos();
-            self.pages.push(new_page);
+            new_uncomitted_page.unwritten_tail()[..buffer.pos()].copy_from_slice(buffer.written_bytes());
+            new_uncomitted_page.written = buffer.pos();
+            buffer.reset_buffer(new_uncomitted_page.unwritten_tail());
+            buffer.uncomitted_pages.push(new_uncomitted_page);
             println!("quasi commit of {}", buffer.pos());
-            self.persist();
-            self.pages.push(Page::new());
-            buffer.remap(self.unwritten_tail());
         }
-        else {
-            println!("pos0 written={} unwritten={} by={} extra={}", buffer.written_bytes().len(), unsafe { buffer.unwritten_bytes().len() }, by, buffer.extra );
-            self.pages.push(Page::new());
-            buffer.remap(self.unwritten_tail());
-        }
+        // else {
+        //     println!("pos0 written={} unwritten={} by={} extra={}", buffer.written_bytes().len(), unsafe { buffer.unwritten_bytes().len() }, by, buffer.extra );
+        //     self.pages.push(Page::new());
+        //     buffer.remap(self.unwritten_tail());
+        // }
         // if clear_written {
         //     println!("abcd zeroing {}", buffer.pos());
         //     buffer.extra += buffer.pos();
@@ -236,13 +256,16 @@ impl PageStorage {
                 println!("persisting page {}", page.written);
                 file.write(&page.bytes[..page.written])?;
             }
-            file.flush()?;
-            file.sync_all()
+            file.flush()
         }
         println!("persist: data in pages={} data in mmap={}", self.pages_data_len(), self.mmap_len());
+        let mmap_len = self.mmap_len() as u64;
         if self.pages_data_len() > 0 {
             if let Some(file) = &mut self.file {
+                println!("seek to {}", mmap_len);
+                file.seek(SeekFrom::Start(mmap_len));
                 write_pages(&self.pages, file)?;
+                file.seek(SeekFrom::Start(0));
                 self.pages.clear();
                 // if self.mmap.is_none() {
                     self.mmap = Some(unsafe { Mmap::map(&*file)? })
@@ -300,8 +323,8 @@ impl Store for HostStore {
             }
         };
 
-        let bytes = guard.unwritten_tail();
-        TokenBuffer::new(token, bytes)
+        // let bytes = guard.unwritten_tail();
+        TokenBuffer::new_uncommitted(token)
     }
 
     fn extend(

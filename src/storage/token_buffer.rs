@@ -6,6 +6,26 @@
 
 use rkyv::{ser::Serializer, Fallible};
 
+const PAGE_SIZE: usize = 1024 * 128;
+
+#[derive(Debug)]
+pub struct UncommittedPage {
+    pub bytes: Box<[u8; PAGE_SIZE]>,
+    pub written: usize,
+}
+
+impl UncommittedPage {
+    pub fn new() -> Self {
+        UncommittedPage {
+            bytes: Box::new([0u8; PAGE_SIZE]),
+            written: 0,
+        }
+    }
+    pub fn unwritten_tail(&mut self) -> &mut [u8] {
+        &mut self.bytes[self.written..]
+    }
+}
+
 /// Marker type to be associated with write permissions to a backend
 #[derive(Debug)]
 pub enum Token {
@@ -53,9 +73,9 @@ pub struct TokenBuffer {
     token: Token,
     buffer: *mut [u8],
     /// temp
-    pub written: usize,
+    written: usize,
     /// temp
-    pub extra: usize,
+    pub uncomitted_pages: Vec<UncommittedPage>,
 }
 
 impl TokenBuffer {
@@ -65,7 +85,19 @@ impl TokenBuffer {
             token,
             buffer,
             written: 0,
-            extra: 0,
+            uncomitted_pages: vec![],
+        }
+    }
+
+    /// Construct new uncommitted
+    pub fn new_uncommitted(token: Token) -> Self {
+        let mut page = UncommittedPage::new();
+        let buffer = page.unwritten_tail();
+        TokenBuffer {
+            token,
+            buffer,
+            written: 0,
+            uncomitted_pages: vec![page],
         }
     }
 
@@ -74,7 +106,7 @@ impl TokenBuffer {
             token: Token::new(),
             buffer: &mut [],
             written: 0,
-            extra: 0,
+            uncomitted_pages: Vec::new()
         }
     }
 
@@ -141,12 +173,15 @@ impl Serializer for TokenBuffer {
         let remaining_buffer_len = unsafe { self.unwritten_bytes() }.len();
         let bytes_length = bytes.len();
         if remaining_buffer_len >= bytes_length {
+            if bytes_length != 1 {
+                println!("write ok {}", bytes_length);
+            }
             let remaining_buffer = unsafe { self.unwritten_bytes() };
             remaining_buffer[..bytes_length].copy_from_slice(bytes);
             self.written += bytes_length;
-            self.extra += bytes_length;
             Ok(())
         } else {
+            println!("write err (extend) {}", bytes_length);
             Err(BufferOverflow::new(bytes_length))
         }
     }
