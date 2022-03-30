@@ -36,11 +36,11 @@ use crate::{
     Debug, Clone, Copy, Archive, Serialize, Deserialize, CheckBytes, Default,
 )]
 #[archive(as = "Self")]
-pub struct OffsetLen(LittleEndian<u64>, LittleEndian<u16>);
+pub struct OffsetLen(LittleEndian<u64>, LittleEndian<u32>);
 
 impl OffsetLen {
     /// Creates an offset with a given value
-    pub fn new<O: Into<LittleEndian<u64>>, L: Into<LittleEndian<u16>>>(
+    pub fn new<O: Into<LittleEndian<u64>>, L: Into<LittleEndian<u32>>>(
         offset: O,
         len: L,
     ) -> OffsetLen {
@@ -58,8 +58,8 @@ impl OffsetLen {
     }
 
     /// The length of the byte representation
-    pub fn len(&self) -> u16 {
-        u16::from(self.1)
+    pub fn len(&self) -> u32 {
+        u32::from(self.1)
     }
 }
 
@@ -188,8 +188,12 @@ pub trait Store {
     /// Commit written bytes to the
     fn commit(&self, buffer: &mut TokenBuffer) -> Self::Identifier;
 
-    /// Request additional bytes for writing    
-    fn extend(&self, buffer: &mut TokenBuffer) -> Result<(), ()>;
+    /// Request additional bytes for writing
+    fn extend(
+        &self,
+        buffer: &mut TokenBuffer,
+        size_needed: usize,
+    ) -> Result<(), ()>;
 
     /// Return the token to the store
     fn return_token(&self, token: Token);
