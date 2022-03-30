@@ -92,8 +92,12 @@ impl<I> StoreRef<I> {
     }
 
     /// Request extra space n the underlying buffer
-    pub fn extend(&self, buffer: &mut TokenBuffer) -> Result<(), ()> {
-        self.inner.extend(buffer)
+    pub fn extend(
+        &self,
+        buffer: &mut TokenBuffer,
+        size_needed: usize,
+    ) -> Result<(), ()> {
+        self.inner.extend(buffer, size_needed)
     }
 
     /// Accept the token back
