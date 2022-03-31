@@ -49,9 +49,11 @@ impl Page {
         }
     }
 
-    fn create(bytes: Box<[u8; PAGE_SIZE]>, written: usize) -> Self {
+    fn create(bytes: &[u8], written: usize) -> Self {
+        let mut b = Box::new([0u8; PAGE_SIZE]);
+        b[..written].copy_from_slice(&bytes[..written]);
         Page {
-            bytes,
+            bytes: b,
             written,
         }
     }
@@ -166,7 +168,7 @@ impl PageStorage {
                 pages_ofs - sum
             }
         }
-        println!("get ofs={} len={} number of pages={}", ofs.offset(), ofs.len(), &self.pages.len());
+        // println!("get ofs={} len={} number of pages={}", ofs.offset(), ofs.len(), &self.pages.len());
         let OffsetLen(ofs, len) = *ofs;
         let (ofs, len) = (u64::from(ofs) as usize, u32::from(len) as usize);
 
@@ -191,7 +193,7 @@ impl PageStorage {
     }
 
     fn commit(&mut self, buffer: &mut TokenBuffer) -> OffsetLen {
-        println!("commit num uncommitted pages={} buffer pos={}", buffer.uncomitted_pages.len(), buffer.pos());
+        // println!("commit num uncommitted pages={} buffer pos={}", buffer.uncomitted_pages.len(), buffer.pos());
         let offset = self.offset();
         let written = buffer.pos();
         if let Some(top_uncomitted_page) = buffer.uncomitted_pages.last_mut(){
@@ -201,7 +203,7 @@ impl PageStorage {
         let mut uncommitted_len = 0;
         for p in &buffer.uncomitted_pages {
             uncommitted_len += p.written;
-            println!("commit written={}", p.written);
+            // println!("commit written={}", p.written);
         }
         if uncommitted_len <= self.unwritten_tail().len() && buffer.uncomitted_pages.len() == 1 {
             self.unwritten_tail()[..uncommitted_len].copy_from_slice(unsafe { buffer.last_uncommitted_slice(uncommitted_len) });
@@ -209,10 +211,15 @@ impl PageStorage {
                 top_page.written += written;
             }
         } else {
-            // for p in &buffer.uncomitted_pages {
-            //     self.pages.push(Page::create(p.bytes.clone(), p.written));
-            // }
-            self.persist(&buffer.uncomitted_pages);
+            let uncommitted_size = PageStorage::uncommitted_pages_data_len(&buffer.uncomitted_pages);
+            if uncommitted_size < PAGE_SIZE {
+                for p in &buffer.uncomitted_pages {
+                    self.pages.push(Page::create(p.bytes.as_slice(), p.written));
+                }
+            } else {
+                self.persist(&buffer.uncomitted_pages);
+                println!("xcommit persists as uncommitted size is {}", uncommitted_size);
+            }
         }
         buffer.reset_uncommitted();
         assert_eq!(buffer.pos(), 0);
@@ -223,7 +230,6 @@ impl PageStorage {
     }
 
     fn extend(&mut self, buffer: &mut TokenBuffer, by: usize) -> Result<(), ()> {
-        println!("new003");
         let mut new_uncomitted_page = UncommittedPage::new();
         if buffer.pos() > 0 {
             new_uncomitted_page.unwritten_tail()[..buffer.pos()].copy_from_slice(buffer.written_bytes());
@@ -256,11 +262,11 @@ impl PageStorage {
         let mmap_len = self.mmap_len() as u64;
         if self.pages_data_len() > 0 || PageStorage::uncommitted_pages_data_len(&uncommitted_pages) > 0 {
             if let Some(file) = &mut self.file {
-                println!("seek to {}", mmap_len);
+                // println!("seek to {}", mmap_len);
                 file.seek(SeekFrom::Start(mmap_len));
                 write_pages(&self.pages, file)?;
                 write_uncommitted_pages(&uncommitted_pages, file)?;
-                file.seek(SeekFrom::Start(0));
+                // file.seek(SeekFrom::Start(0));
                 file.flush()?;
                 self.pages.clear();
                 // if self.mmap.is_none() {
@@ -268,7 +274,7 @@ impl PageStorage {
                 // }
             }
         }
-        println!("persist2: data in pages={} data in uncommitted={} data in mmap={}", self.pages_data_len(), PageStorage::uncommitted_pages_data_len(&uncommitted_pages), self.mmap_len());
+        // println!("persist2: data in pages={} data in uncommitted={} data in mmap={}", self.pages_data_len(), PageStorage::uncommitted_pages_data_len(&uncommitted_pages), self.mmap_len());
         Ok(())
     }
 }

@@ -194,9 +194,6 @@ impl Serializer for TokenBuffer {
         let remaining_buffer_len = unsafe { self.unwritten_bytes() }.len();
         let bytes_length = bytes.len();
         if remaining_buffer_len >= bytes_length {
-            if bytes_length != 1 {
-                println!("write ok {}", bytes_length);
-            }
             let remaining_buffer = unsafe { self.unwritten_bytes() };
             remaining_buffer[..bytes_length].copy_from_slice(bytes);
             self.written += bytes_length;
