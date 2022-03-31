@@ -201,11 +201,15 @@ impl PageStorage {
                 top_page.written += written;
             }
         } else {
-            for p in &buffer.uncomitted_pages {
-                self.pages.push(Page::create(p.bytes.clone(), p.written));
-            }
+            // for p in &buffer.uncomitted_pages {
+            //     self.pages.push(Page::create(p.bytes.clone(), p.written));
+            // }
+            self.persist(&buffer.uncomitted_pages);
         }
         buffer.reset_uncommitted();
+        assert_eq!(buffer.pos(), 0);
+        assert_eq!(buffer.uncomitted_pages.len(), 1);
+        assert_eq!(buffer.uncomitted_pages.get(0).unwrap().written, 0);
         println!("commit returning offs={} len={}", offset, uncommitted_len);
         OffsetLen::new(offset as u64, uncommitted_len as u32)
     }
@@ -227,8 +231,14 @@ impl PageStorage {
         self.token.return_token(token)
     }
 
-    fn persist(&mut self) -> Result<(), std::io::Error> {
+    fn persist(&mut self, uncommitted_pages: &Vec<UncommittedPage>) -> Result<(), std::io::Error> {
         fn write_pages(pages: &Vec<Page>, file: &mut File) -> io::Result<()> {
+            for page in pages {
+                file.write(&page.bytes[..page.written])?;
+            }
+            file.flush()
+        }
+        fn write_uncommitted_pages(pages: &Vec<UncommittedPage>, file: &mut File) -> io::Result<()> {
             for page in pages {
                 file.write(&page.bytes[..page.written])?;
             }
@@ -241,6 +251,7 @@ impl PageStorage {
                 println!("seek to {}", mmap_len);
                 file.seek(SeekFrom::Start(mmap_len));
                 write_pages(&self.pages, file)?;
+                write_uncommitted_pages(&uncommitted_pages, file)?;
                 file.seek(SeekFrom::Start(0));
                 self.pages.clear();
                 // if self.mmap.is_none() {
@@ -306,7 +317,7 @@ impl Store for HostStore {
     }
 
     fn persist(&self) -> Result<(), ()> {
-        self.inner.write().persist().map_err(|_| ())
+        self.inner.write().persist(&vec![]).map_err(|_| ())
     }
 
     fn commit(&self, buf: &mut TokenBuffer) -> Self::Identifier {
