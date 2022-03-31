@@ -6,7 +6,7 @@
 
 use rkyv::{ser::Serializer, Fallible};
 
-const UNCOMMITTED_PAGE_SIZE: usize = 1024 * 128; // at the moment it needs to be the same as PAGE_SIZE
+const UNCOMMITTED_PAGE_SIZE: usize = 1024 * 96; // todo - needs to be elastic memory
 
 #[derive(Debug)]
 pub struct UncommittedPage {

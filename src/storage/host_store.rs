@@ -20,7 +20,7 @@ use crate::Store;
 
 use super::{OffsetLen, Token, TokenBuffer, UncommittedPage};
 
-const PAGE_SIZE: usize = 1024 * 128;
+const PAGE_SIZE: usize = 1024 * 64;
 
 #[derive(Debug)]
 struct Page {
@@ -111,6 +111,14 @@ impl PageStorage {
     fn pages_data_len(&self) -> usize {
         let mut size_sum = 0;
         for p in &self.pages {
+            size_sum += p.written;
+        }
+        size_sum
+    }
+
+    fn uncommitted_pages_data_len(pages: &Vec<UncommittedPage>) -> usize {
+        let mut size_sum = 0;
+        for p in pages {
             size_sum += p.written;
         }
         size_sum
@@ -236,29 +244,31 @@ impl PageStorage {
             for page in pages {
                 file.write(&page.bytes[..page.written])?;
             }
-            file.flush()
+            Ok(())
         }
         fn write_uncommitted_pages(pages: &Vec<UncommittedPage>, file: &mut File) -> io::Result<()> {
             for page in pages {
                 file.write(&page.bytes[..page.written])?;
             }
-            file.flush()
+            Ok(())
         }
-        println!("persist: data in pages={} data in mmap={}", self.pages_data_len(), self.mmap_len());
+        println!("persist1: data in pages={} data in uncommitted={} data in mmap={}", self.pages_data_len(), PageStorage::uncommitted_pages_data_len(&uncommitted_pages), self.mmap_len());
         let mmap_len = self.mmap_len() as u64;
-        if self.pages_data_len() > 0 {
+        if self.pages_data_len() > 0 || PageStorage::uncommitted_pages_data_len(&uncommitted_pages) > 0 {
             if let Some(file) = &mut self.file {
                 println!("seek to {}", mmap_len);
                 file.seek(SeekFrom::Start(mmap_len));
                 write_pages(&self.pages, file)?;
                 write_uncommitted_pages(&uncommitted_pages, file)?;
                 file.seek(SeekFrom::Start(0));
+                file.flush()?;
                 self.pages.clear();
                 // if self.mmap.is_none() {
                     self.mmap = Some(unsafe { Mmap::map(&*file)? })
                 // }
             }
         }
+        println!("persist2: data in pages={} data in uncommitted={} data in mmap={}", self.pages_data_len(), PageStorage::uncommitted_pages_data_len(&uncommitted_pages), self.mmap_len());
         Ok(())
     }
 }
