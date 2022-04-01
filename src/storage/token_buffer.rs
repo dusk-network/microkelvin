@@ -5,6 +5,8 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use rkyv::{ser::Serializer, Fallible};
+use alloc::boxed::Box;
+use alloc::vec::Vec;
 
 const UNCOMMITTED_PAGE_SIZE: usize = 1024 * 96; // todo - needs to be elastic memory
 
@@ -199,7 +201,6 @@ impl Serializer for TokenBuffer {
             self.written += bytes_length;
             Ok(())
         } else {
-            println!("write err (extend) {}", bytes_length);
             Err(BufferOverflow::new(bytes_length))
         }
     }
