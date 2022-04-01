@@ -225,7 +225,7 @@ impl PageStorage {
         assert_eq!(buffer.pos(), 0);
         assert_eq!(buffer.uncomitted_pages.len(), 1);
         assert_eq!(buffer.uncomitted_pages.get(0).unwrap().written, 0);
-        println!("commit returning offs={} len={}", offset, uncommitted_len);
+        // println!("commit returning offs={} len={}", offset, uncommitted_len);
         OffsetLen::new(offset as u64, uncommitted_len as u32)
     }
 
