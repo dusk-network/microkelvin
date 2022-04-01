@@ -4,14 +4,16 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use alloc::boxed::Box;
+use alloc::vec::Vec;
 use rkyv::{ser::Serializer, Fallible};
 
-const UNCOMMITTED_PAGE_SIZE: usize = 1024 * 96; // todo - needs to be elastic memory
+const UNCOMMITTED_PAGE_SIZE: usize = 1024 * 1024;
 
 #[derive(Debug)]
 pub struct UncommittedPage {
-    pub bytes: Box<[u8; UNCOMMITTED_PAGE_SIZE]>,
-    pub written: usize,
+    bytes: Box<[u8; UNCOMMITTED_PAGE_SIZE]>,
+    written: usize,
 }
 
 impl UncommittedPage {
@@ -23,6 +25,18 @@ impl UncommittedPage {
     }
     pub fn unwritten_tail(&mut self) -> &mut [u8] {
         &mut self.bytes[self.written..]
+    }
+    pub fn written_slice(&self) -> &[u8] {
+        &self.bytes[..self.written]
+    }
+    pub fn set_written(&mut self, written: usize) {
+        self.written = written;
+    }
+    pub fn add_written(&mut self, written: usize) {
+        self.written += written;
+    }
+    pub fn pos(&self) -> usize {
+        self.written
     }
 }
 
@@ -73,8 +87,7 @@ pub struct TokenBuffer {
     token: Token,
     buffer: *mut [u8],
     written: usize,
-    /// temp
-    pub uncomitted_pages: Vec<UncommittedPage>,
+    uncommitted_pages: Vec<UncommittedPage>,
 }
 
 impl TokenBuffer {
@@ -84,7 +97,7 @@ impl TokenBuffer {
             token,
             buffer,
             written: 0,
-            uncomitted_pages: vec![],
+            uncommitted_pages: vec![],
         }
     }
 
@@ -96,21 +109,21 @@ impl TokenBuffer {
             token,
             buffer,
             written: 0,
-            uncomitted_pages: vec![page],
+            uncommitted_pages: vec![page],
         }
     }
 
     /// Reset uncommitted
     pub fn reset_uncommitted(&mut self) {
-        if self.uncomitted_pages.is_empty() {
+        if self.uncommitted_pages.is_empty() {
             let mut page = UncommittedPage::new();
             self.buffer = page.unwritten_tail();
-            self.uncomitted_pages = vec![page];
+            self.uncommitted_pages = vec![page];
         } else {
-            for i in 1..self.uncomitted_pages.len(){
-                self.uncomitted_pages.remove(i);
+            for i in 1..self.uncommitted_pages.len() {
+                self.uncommitted_pages.remove(i);
             }
-            let mut page = self.uncomitted_pages.get_mut(0).unwrap();
+            let mut page = self.uncommitted_pages.get_mut(0).unwrap();
             page.written = 0;
             self.buffer = page.unwritten_tail();
         }
@@ -121,7 +134,7 @@ impl TokenBuffer {
             token: Token::new(),
             buffer: &mut [],
             written: 0,
-            uncomitted_pages: Vec::new()
+            uncommitted_pages: Vec::new(),
         }
     }
 
@@ -146,9 +159,9 @@ impl TokenBuffer {
         &mut slice[self.written..]
     }
 
-    /// Temp
+    /// Returns slice from the last uncommitted page
     pub unsafe fn last_uncommitted_slice(&self, len: usize) -> &[u8] {
-        let page = self.uncomitted_pages.last().unwrap();
+        let page = self.uncommitted_pages.last().unwrap();
         &page.bytes[page.written - len..page.written]
     }
 
@@ -172,6 +185,39 @@ impl TokenBuffer {
     /// Reset buffer without changing the written count (e.g. after resize)
     pub fn reset_buffer(&mut self, buffer: &mut [u8]) {
         self.buffer = buffer;
+    }
+
+    /// Rewind to the beginnging of the buffer
+    pub fn rewind(&mut self) {
+        self.written = 0;
+    }
+
+    /// Provide uncommitted page
+    pub fn uncommitted_page(&mut self) -> &mut UncommittedPage {
+        assert!(!self.uncommitted_pages.is_empty());
+        self.uncommitted_pages.last_mut().unwrap()
+    }
+
+    /// Provide uncommitted pages
+    pub fn uncommitted_pages(&self) -> &Vec<UncommittedPage> {
+        &self.uncommitted_pages
+    }
+
+    /// Extend uncommitted storage
+    pub fn extend_uncommitted(&mut self) {
+        self.uncommitted_page().written = self.written;
+        self.uncommitted_pages.push(UncommittedPage::new());
+        self.buffer = self.uncommitted_page().unwritten_tail();
+        self.written = 0;
+    }
+
+    /// Provide uncommitted length
+    pub fn uncommitted_len(&self) -> usize {
+        let mut l = 0;
+        for p in self.uncommitted_pages() {
+            l += p.written;
+        }
+        l
     }
 }
 
@@ -199,7 +245,6 @@ impl Serializer for TokenBuffer {
             self.written += bytes_length;
             Ok(())
         } else {
-            println!("write err (extend) {}", bytes_length);
             Err(BufferOverflow::new(bytes_length))
         }
     }
