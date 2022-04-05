@@ -8,7 +8,7 @@ use rkyv::{ser::Serializer, Fallible};
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 
-const UNCOMMITTED_PAGE_SIZE: usize = 1024 * 4096; // todo - needs to be elastic memory
+const UNCOMMITTED_PAGE_SIZE: usize = 1024 * 1024; // todo - needs to be elastic memory
 
 #[derive(Debug)]
 pub struct UncommittedPage {
