@@ -175,6 +175,11 @@ impl TokenBuffer {
     pub fn reset_buffer(&mut self, buffer: &mut [u8]) {
         self.buffer = buffer;
     }
+
+    /// Rewind to the beginnging of the buffer
+    pub fn rewind(&mut self) {
+        self.written = 0;
+    }
 }
 
 pub struct BufferOverflow {
