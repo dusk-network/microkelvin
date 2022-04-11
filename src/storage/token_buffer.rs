@@ -8,7 +8,7 @@ use rkyv::{ser::Serializer, Fallible};
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 
-const UNCOMMITTED_PAGE_SIZE: usize = 1024 * 1024; // todo - needs to be elastic memory
+const UNCOMMITTED_PAGE_SIZE: usize = 1024 * 1024;
 
 #[derive(Debug)]
 pub struct UncommittedPage {
@@ -28,6 +28,9 @@ impl UncommittedPage {
     }
     pub fn written_slice(&self) -> &[u8] {
         &self.bytes[..self.written]
+    }
+    pub fn set_written(&mut self, written: usize) {
+        self.written = written;
     }
     pub fn add_written(&mut self, written: usize) {
         self.written += written;
@@ -193,6 +196,28 @@ impl TokenBuffer {
     pub fn uncommitted_page(&mut self) -> &mut UncommittedPage {
         assert!(!self.uncommitted_pages.is_empty());
         self.uncommitted_pages.last_mut().unwrap()
+    }
+
+    /// Provide uncommitted pages
+    pub fn uncommitted_pages(&self) -> &Vec<UncommittedPage> {
+        &self.uncommitted_pages
+    }
+
+    /// Extend uncommitted storage
+    pub fn extend_uncommitted(&mut self) {
+        self.uncommitted_page().written = self.written;
+        self.uncommitted_pages.push(UncommittedPage::new());
+        self.buffer = self.uncommitted_page().unwritten_tail();
+        self.written = 0;
+    }
+
+    /// Provide uncommitted length
+    pub fn uncommitted_len(&self) -> usize {
+        let mut l = 0;
+        for p in self.uncommitted_pages() {
+            l += p.written;
+        }
+        l
     }
 }
 
