@@ -17,9 +17,7 @@ use crate::walk::{Discriminant, Step, Walkable, Walker};
 use crate::{Compound, Fundamental};
 
 /// The maximum value of a collection
-#[derive(
-    PartialEq, Eq, Clone, Debug, Archive, Serialize, Deserialize, CheckBytes,
-)]
+#[derive(Clone, Debug, Archive, Serialize, Deserialize, CheckBytes)]
 #[repr(u8)]
 #[archive(as = "Self")]
 #[archive(bound(archive = "
@@ -43,59 +41,28 @@ impl<K> Default for MaxKey<K> {
     }
 }
 
-impl<K> PartialOrd for MaxKey<K>
+impl<K, O> PartialEq<O> for MaxKey<K>
 where
-    K: PartialOrd,
+    K: Borrow<O>,
+    O: PartialEq,
 {
-    fn partial_cmp(&self, other: &MaxKey<K>) -> Option<Ordering> {
-        match (self, other) {
-            (MaxKey::NegativeInfinity, MaxKey::NegativeInfinity) => {
-                Some(Ordering::Equal)
-            }
-            (_, MaxKey::NegativeInfinity) => Some(Ordering::Greater),
-            (MaxKey::NegativeInfinity, _) => Some(Ordering::Less),
-            (MaxKey::Maximum(a), MaxKey::Maximum(b)) => a.partial_cmp(b),
-        }
-    }
-}
-
-impl<K> PartialEq<K> for MaxKey<K>
-where
-    K: PartialEq,
-{
-    fn eq(&self, other: &K) -> bool {
+    fn eq(&self, other: &O) -> bool {
         match self {
             MaxKey::NegativeInfinity => false,
-            MaxKey::Maximum(k) => k == other,
+            MaxKey::Maximum(k) => k.borrow() == other,
         }
     }
 }
 
-impl<K> PartialOrd<K> for MaxKey<K>
+impl<K, O> PartialOrd<O> for MaxKey<K>
 where
-    K: PartialEq<K>,
-    K: PartialOrd,
+    K: Borrow<O>,
+    O: PartialOrd + PartialEq,
 {
-    fn partial_cmp(&self, other: &K) -> Option<Ordering> {
+    fn partial_cmp(&self, other: &O) -> Option<Ordering> {
         match self {
             MaxKey::NegativeInfinity => Some(Ordering::Less),
-            MaxKey::Maximum(k) => k.partial_cmp(other),
-        }
-    }
-}
-
-impl<K> Ord for MaxKey<K>
-where
-    K: Ord,
-{
-    fn cmp(&self, other: &MaxKey<K>) -> Ordering {
-        match (self, other) {
-            (MaxKey::NegativeInfinity, MaxKey::NegativeInfinity) => {
-                Ordering::Equal
-            }
-            (_, MaxKey::NegativeInfinity) => Ordering::Greater,
-            (MaxKey::NegativeInfinity, _) => Ordering::Less,
-            (MaxKey::Maximum(a), MaxKey::Maximum(b)) => a.cmp(b),
+            MaxKey::Maximum(k) => k.borrow().partial_cmp(other),
         }
     }
 }
@@ -117,8 +84,17 @@ where
 {
     fn combine(&mut self, other: &A) {
         let b = other.borrow();
-        if b > self {
-            *self = b.clone()
+        match (&*self, b) {
+            (MaxKey::NegativeInfinity, MaxKey::Maximum(m))
+            | (MaxKey::Maximum(m), MaxKey::NegativeInfinity) => {
+                *self = MaxKey::Maximum(m.clone())
+            }
+            (MaxKey::Maximum(a), MaxKey::Maximum(b)) => {
+                if b > a {
+                    *self = MaxKey::Maximum(b.clone())
+                }
+            }
+            _ => (),
         }
     }
 }
@@ -149,16 +125,30 @@ where
                 Discriminant::Leaf(l) => {
                     let leaf_max: MaxKey<K> = MaxKey::Maximum(l.key().clone());
 
-                    if leaf_max > current_max {
-                        current_max = leaf_max;
+                    if current_max < *l.key() {
+                        current_max = MaxKey::Maximum(l.key().clone());
                         current_step = Step::Found(i);
                     }
                 }
                 Discriminant::Annotation(ann) => {
                     let node_max: &MaxKey<K> = (*ann).borrow();
-                    if node_max > &current_max {
-                        current_max = node_max.clone();
-                        current_step = Step::Found(i);
+
+                    match (&current_max, node_max) {
+                        (
+                            MaxKey::NegativeInfinity,
+                            max @ MaxKey::Maximum(m),
+                        ) => {
+                            current_max = max.clone();
+                            current_step = Step::Found(i);
+                        }
+                        (MaxKey::Maximum(_), MaxKey::NegativeInfinity) => (),
+                        (MaxKey::Maximum(a), max @ MaxKey::Maximum(b))
+                            if b > a =>
+                        {
+                            current_max = max.clone();
+                            current_step = Step::Found(i);
+                        }
+                        _ => (),
                     }
                 }
                 Discriminant::Empty => (),

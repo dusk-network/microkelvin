@@ -24,6 +24,7 @@ mod branch_mut;
 mod compound;
 mod link;
 mod tower;
+mod viz;
 mod walk;
 mod wrappers;
 
@@ -49,6 +50,8 @@ pub use storage::{
     Ident, Store, StoreProvider, StoreRef, StoreSerializer, Stored, Token,
     TokenBuffer,
 };
+
+pub use viz::TreeViz;
 
 #[cfg(feature = "host")]
 pub use storage::{HostStore, UnwrapInfallible};

@@ -9,35 +9,30 @@ use rkyv::{Archive, Deserialize, Serialize};
 
 use crate::tower::{Fundamental, WellArchived, WellFormed};
 use crate::Keyed;
+use crate::MaybeStored;
 use crate::{
     Annotation, Child, ChildMut, Compound, Link, MaxKey, StoreProvider,
     StoreSerializer,
 };
 
 /// A BTree key-value pair
-#[derive(Archive, Clone, Serialize, Deserialize)]
+#[derive(Archive, Clone, Serialize, Deserialize, Debug)]
 #[archive_attr(derive(CheckBytes))]
 pub struct Pair<K, V> {
     /// The key of the key-value pair
-    pub key: K,
+    pub k: K,
     /// The value of the key-value pair
-    pub val: V,
+    pub v: V,
 }
 
 impl<K, V> Keyed<K> for Pair<K, V> {
     fn key(&self) -> &K {
-        &self.key
+        &self.k
     }
 }
 
-impl<K, V> Pair<K, V> {
-    fn into_val(self) -> V {
-        self.val
-    }
-}
-
-/// TODO make not public.
-#[derive(Archive, Clone, Serialize, Deserialize)]
+/// TODO make private.
+#[derive(Archive, Clone, Serialize, Deserialize, Debug)]
 #[archive_attr(derive(CheckBytes))]
 pub struct LeafNode<K, V, const LE: usize>(Vec<Pair<K, V>>);
 
@@ -52,26 +47,28 @@ pub struct LeafNode<K, V, const LE: usize>(Vec<Pair<K, V>>);
 #[archive(bound(deserialize = "
   A: Fundamental,
   __D: StoreProvider,"))]
-/// TODO make not public.
+/// TODO make private.
 pub struct LinkNode<K, V, A, const LE: usize, const LI: usize>(
     #[omit_bounds] Vec<Link<BTreeMap<K, V, A, LE, LI>, A>>,
 );
 
-/// A BTreeMap
+// A BTreeMap
 #[derive(Clone, Deserialize, Archive, Serialize)]
 #[archive_attr(derive(CheckBytes))]
 pub struct BTreeMap<K, V, A, const LE: usize = 3, const LI: usize = 3>(
     BTreeMapInner<K, V, A, LE, LI>,
 );
 
-impl<K, V, A> Default for BTreeMap<K, V, A> {
+impl<K, V, A, const LE: usize, const LI: usize> Default
+    for BTreeMap<K, V, A, LE, LI>
+{
     fn default() -> Self {
         Self(Default::default())
     }
 }
 
 /// We have an inner type to avoid having to make LeafNode and LinkNode public
-/// TODO make this not public.
+/// TODO make this private.
 #[derive(Archive, Clone, Deserialize, Serialize)]
 #[archive_attr(derive(CheckBytes))]
 pub enum BTreeMapInner<K, V, A, const LE: usize, const LI: usize> {
@@ -95,6 +92,31 @@ impl<K, V, const N: usize> Default for LeafNode<K, V, N> {
     }
 }
 
+fn leaf_search<'a, O, K, V>(o: &'a O) -> impl Fn(&Pair<K, V>) -> Ordering + 'a
+where
+    K: 'a + Borrow<O>,
+    O: Ord,
+{
+    move |p: &Pair<K, V>| p.k.borrow().cmp(o)
+}
+
+fn node_search<'a, O, K, V, A, const LE: usize, const LI: usize>(
+    o: &'a O,
+) -> impl Fn(&Link<BTreeMap<K, V, A, LE, LI>, A>) -> Ordering + 'a
+where
+    O: Ord,
+    K: 'a + Ord + Fundamental + Borrow<O>,
+    V: WellFormed,
+    V::Archived: WellArchived<V>,
+    A: Fundamental + Annotation<Pair<K, V>> + Borrow<MaxKey<K>>,
+{
+    move |link: &Link<BTreeMap<K, V, A, LE, LI>, A>| {
+        let ann = &*link.annotation();
+        let max: &MaxKey<K> = ann.borrow();
+        max.partial_cmp(o).expect("Always ordered")
+    }
+}
+
 impl<K, V, const LE: usize> LeafNode<K, V, LE>
 where
     K: Fundamental + Ord,
@@ -110,66 +132,60 @@ where
     }
 
     pub fn insert(&mut self, k: K, v: V) -> Result<Option<V>, Self> {
-        match self
-            .0
-            .binary_search_by(|Pair { key, .. }| -> Ordering { key.cmp(&k) })
-        {
-            Ok(idx) => Ok(Some(mem::replace(&mut self.0[idx].val, v))),
+        match self.0.binary_search_by(leaf_search(&k)) {
+            Ok(idx) => Ok(Some(mem::replace(&mut self.0[idx].v, v))),
             Err(idx) => {
                 if self.full() {
                     let point = Self::split_point();
-                    println!("point {:?}", point);
                     let mut rest = self.0.split_off(point);
 
-                    match rest[0].key.cmp(&k) {
+                    match rest[0].k.cmp(&k) {
                         Ordering::Greater => {
-                            self.0.insert(idx, Pair { key: k, val: v });
+                            self.0.insert(idx, Pair { k, v });
                         }
                         Ordering::Equal => unreachable!(
                             "Split on equal key instead of replacing"
                         ),
                         Ordering::Less => {
-                            rest.insert(idx - point, Pair { key: k, val: v })
+                            rest.insert(idx - point, Pair { k, v })
                         }
                     }
                     Err(LeafNode(rest))
                 } else {
-                    self.0.insert(idx, Pair { key: k, val: v });
+                    self.0.insert(idx, Pair { k, v });
                     Ok(None)
                 }
             }
         }
     }
 
-    pub fn get<O>(&self, k: &O) -> Option<&V>
+    pub fn get<O>(&self, o: &O) -> Option<&V>
     where
         K: Borrow<O>,
         O: Ord,
     {
-        if let Ok(idx) =
-            self.0.binary_search_by(|Pair { key, .. }| -> Ordering {
-                key.borrow().cmp(k)
-            })
-        {
-            Some(&self.0[idx].val)
+        if let Ok(idx) = self.0.binary_search_by(leaf_search(o)) {
+            Some(&self.0[idx].v)
         } else {
             None
         }
     }
 
-    pub fn remove<O>(&mut self, k: &O) -> Option<V>
+    fn remove<O>(&mut self, o: &O) -> RemoveResult<V>
     where
         K: Borrow<O>,
         O: Ord,
     {
-        if let Ok(idx) =
-            self.0.binary_search_by(|Pair { key, .. }| -> Ordering {
-                key.borrow().cmp(k)
-            })
-        {
-            Some(self.0.remove(idx).into_val())
+        if let Ok(idx) = self.0.binary_search_by(leaf_search(o)) {
+            let removed = self.0.remove(idx).v;
+
+            if self.0.len() < LE / 2 {
+                RemoveResult::Underflow(removed)
+            } else {
+                RemoveResult::Removed(removed)
+            }
         } else {
-            None
+            RemoveResult::None
         }
     }
 }
@@ -189,21 +205,30 @@ where
         LinkNode(vec![link_a, link_b])
     }
 
-    pub fn get<O>(&self, k: &O) -> Option<&V>
+    pub fn get<O>(&self, o: &O) -> Option<&V>
     where
         K: Borrow<O>,
         O: Ord,
     {
-        if let Ok(idx) = self.0.binary_search_by(|link| -> Ordering {
-            match (*link.annotation()).borrow() {
-                MaxKey::NegativeInfinity => unreachable!(),
-                MaxKey::Maximum(m) => m.borrow().cmp(k),
-            }
-        }) {
-            todo!()
-        } else {
-            None
+        match self.0.binary_search_by(node_search(o)) {
+            Ok(i) | Err(i) => match self.0[i].inner() {
+                MaybeStored::Memory(map) => map.get(o),
+                MaybeStored::Stored(_) => todo!(),
+            },
         }
+    }
+
+    fn remove<O>(&mut self, o: &O) -> RemoveResult<V>
+    where
+        K: Borrow<O>,
+        O: Ord,
+    {
+        let i = match self.0.binary_search_by(node_search(o)) {
+            Ok(i) => i,
+            Err(i) => core::cmp::min(i, self.0.len() - 1),
+        };
+        println!("remove entering {:?}", i);
+        self.0[i].inner_mut().sub_remove(o)
     }
 }
 
@@ -235,19 +260,21 @@ where
     }
 }
 
+#[derive(Debug)]
 enum InsertResult<V> {
     Ok,
     Replaced(V),
     Split,
 }
 
+#[derive(Debug)]
 enum RemoveResult<V> {
     None,
     Removed(V),
-    Underflow,
+    Underflow(V),
 }
 
-impl<K, V, A> BTreeMap<K, V, A>
+impl<K, V, A, const LE: usize, const LI: usize> BTreeMap<K, V, A, LE, LI>
 where
     K: Fundamental + Ord,
     V: WellFormed,
@@ -270,7 +297,6 @@ where
     }
 
     fn sub_insert(&mut self, k: K, v: V) -> InsertResult<V> {
-        println!("sub insert");
         match &mut self.0 {
             BTreeMapInner::LeafNode(leaves) => match leaves.insert(k, v) {
                 Ok(Some(op)) => InsertResult::Replaced(op),
@@ -285,38 +311,17 @@ where
                 }
             },
             BTreeMapInner::LinkNode(links) => {
-                // default to last link
-                let mut idx = links.0.len() - 1;
-
-                for i in 0..links.0.len() {
-                    match (*links.0[i].annotation()).borrow() {
-                        MaxKey::NegativeInfinity => unreachable!(),
-                        MaxKey::Maximum(key) => {
-                            if let Ordering::Greater = key.cmp(&k) {
-                                idx = i;
-                                break;
-                            }
-                        }
-                    }
-                }
-
-                println!("idx = {:?}", idx);
-
-                // insert in last
-                let last = &mut links.0[idx];
-                let inner = last.inner_mut();
-                let res = inner.sub_insert(k, v);
-                if let InsertResult::Split = res {
-                    todo!()
-                } else {
-                    res
-                }
+                let i = match links.0.binary_search_by(node_search(&k)) {
+                    Ok(i) => i,
+                    Err(i) => core::cmp::min(i, links.0.len() - 1),
+                };
+                links.0[i].inner_mut().sub_insert(k, v)
             }
         }
     }
 
     /// Get a reference to the value of the key `k`, if any
-    fn get<O>(&mut self, k: &O) -> Option<&V>
+    pub fn get<O>(&self, k: &O) -> Option<&V>
     where
         K: Borrow<O>,
         O: Ord,
@@ -329,21 +334,40 @@ where
 
     /// Remove the value of key `k`, returning it if present
     /// Get a reference to the value of the key `k`, if any
-    fn remove<O>(&mut self, k: &O) -> Option<V>
+    pub fn remove<O>(&mut self, o: &O) -> Option<V>
+    where
+        K: Borrow<O>,
+        O: Ord,
+    {
+        match self.sub_remove(o) {
+            RemoveResult::None => None,
+            RemoveResult::Removed(v) | RemoveResult::Underflow(v) => Some(v),
+        }
+    }
+
+    fn sub_remove<O>(&mut self, o: &O) -> RemoveResult<V>
     where
         K: Borrow<O>,
         O: Ord,
     {
         match &mut self.0 {
-            BTreeMapInner::LeafNode(leaves) => leaves.remove(k),
-            BTreeMapInner::LinkNode(links) => todo!(),
+            BTreeMapInner::LeafNode(leaves) => leaves.remove(o),
+            BTreeMapInner::LinkNode(links) => match links.remove(o) {},
+        }
+    }
+
+    #[cfg(test)]
+    fn correct_empty_state(&self) -> bool {
+        match &self.0 {
+            BTreeMapInner::LeafNode(leaves) => leaves.0.len() == 0,
+            _ => false,
         }
     }
 }
 
 #[cfg(test)]
 mod test {
-    use crate::MaxKey;
+    use crate::{MaxKey, TreeViz};
 
     use super::BTreeMap;
 
@@ -363,11 +387,15 @@ mod test {
             for i in 0..o {
                 println!("insert {:?}", i);
                 assert_eq!(map.insert(LittleEndian::from(i), i), None);
+
+                map.print_tree();
             }
 
             for i in 0..o {
                 println!("re-insert {:?}", i);
                 assert_eq!(map.insert(LittleEndian::from(i), i + 1), Some(i));
+
+                map.print_tree();
             }
 
             for i in 0..o {
@@ -375,8 +403,14 @@ mod test {
             }
 
             for i in 0..o {
+                println!("removing {:?}", i);
+
                 assert_eq!(map.remove(&LittleEndian::from(i)), Some(i + 1));
+
+                map.print_tree();
             }
+
+            assert!(map.correct_empty_state());
 
             // reverse
 
@@ -390,6 +424,8 @@ mod test {
             for i in 0..o {
                 let i = o - i - 1;
                 assert_eq!(map.remove(&LittleEndian::from(i)), Some(i));
+                println!("removed {}", i);
+                map.print_tree();
             }
         }
     }
