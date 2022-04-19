@@ -194,14 +194,13 @@ impl PageStorage {
         if uncommitted_len <= self.unwritten_tail().len() {
             self.unwritten_tail()[..uncommitted_len].copy_from_slice(unsafe { buffer.last_uncommitted_slice(uncommitted_len) });
             if let Some(top_page) = self.pages.last_mut(){
-                top_page.written += written;
+                top_page.commit(written);
             }
         } else {
             if uncommitted_len <= PAGE_SIZE {
                 self.pages.push(Page::create(buffer.uncommitted_page().written_slice()));
             } else {
-                self.persist(&buffer.uncommitted_pages());
-                println!("xcommit persists as uncommitted size is {}", uncommitted_len);
+                self.persist(&buffer.uncommitted_pages()).expect("Host store persistence");
             }
         }
         buffer.reset_uncommitted();
@@ -244,7 +243,7 @@ impl PageStorage {
         let mmap_len = self.mmap_len() as u64;
         if self.pages_data_len() > 0 || uncommitted_pages.len() > 0 {
             if let Some(file) = &mut self.file {
-                file.seek(SeekFrom::Start(mmap_len));
+                file.seek(SeekFrom::Start(mmap_len))?;
                 write_pages(&self.pages, file)?;
                 write_uncommitted_bytes(uncommitted_pages, file)?;
                 file.flush()?;
