@@ -71,7 +71,7 @@ impl<T> Ident<T> {
 }
 
 /// Stored is a reference to a value stored, along with the backing store
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Stored<T> {
     store: StoreRef,
     ident: Ident<T>,

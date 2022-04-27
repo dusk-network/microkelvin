@@ -17,7 +17,7 @@ use crate::tower::{WellArchived, WellFormed};
 use crate::wrappers::MaybeStored;
 use crate::{ARef, Annotation, Compound, StoreSerializer};
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 /// The Link struct is an annotated merkle link to a compound type
 ///
 /// The link takes care of lazily evaluating the annotation of the inner type,
@@ -162,7 +162,17 @@ impl<C, A> Link<C, A> {
     }
 
     /// Unwraps the underlying value, clones or deserializes it
+    #[deprecated(since = "like, forever")]
     pub fn unlink(self) -> C
+    where
+        C: Compound<A> + WellFormed,
+        C::Archived: WellArchived<C>,
+    {
+        self.into_inner()
+    }
+
+    /// Unwraps the underlying value, clones or deserializes it
+    pub fn into_inner(self) -> C
     where
         C: Compound<A> + WellFormed,
         C::Archived: WellArchived<C>,

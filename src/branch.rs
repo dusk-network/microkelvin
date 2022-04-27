@@ -370,6 +370,22 @@ where
     Exhausted,
 }
 
+impl<'a, C, A, W> BranchIterator<'a, C, A, W>
+where
+    C: Compound<A> + WellFormed,
+    C::Archived: ArchivedCompound<C, A> + WellArchived<C>,
+    C::Leaf: WellFormed,
+    <C::Leaf as Archive>::Archived: WellArchived<C::Leaf>,
+{
+    pub fn depth(&self) -> usize {
+        match self {
+            BranchIterator::Initial(b, _)
+            | BranchIterator::Intermediate(b, _) => b.depth(),
+            BranchIterator::Exhausted => 0,
+        }
+    }
+}
+
 // iterators
 impl<'a, C, A> IntoIterator for Branch<'a, C, A>
 where

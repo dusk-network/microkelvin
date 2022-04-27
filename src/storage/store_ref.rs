@@ -21,6 +21,12 @@ pub struct StoreRef {
     inner: Arc<dyn Store>,
 }
 
+impl core::fmt::Debug for StoreRef {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("StoreRef").finish()
+    }
+}
+
 impl StoreRef {
     /// Creates a new StoreReference
     pub fn new<S: 'static + Store>(store: S) -> StoreRef {

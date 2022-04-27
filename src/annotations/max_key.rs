@@ -123,8 +123,6 @@ where
         for i in 0.. {
             match walk.probe(i) {
                 Discriminant::Leaf(l) => {
-                    let leaf_max: MaxKey<K> = MaxKey::Maximum(l.key().clone());
-
                     if current_max < *l.key() {
                         current_max = MaxKey::Maximum(l.key().clone());
                         current_step = Step::Found(i);
@@ -136,7 +134,7 @@ where
                     match (&current_max, node_max) {
                         (
                             MaxKey::NegativeInfinity,
-                            max @ MaxKey::Maximum(m),
+                            max @ MaxKey::Maximum(_),
                         ) => {
                             current_max = max.clone();
                             current_step = Step::Found(i);

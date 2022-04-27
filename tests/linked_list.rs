@@ -124,7 +124,7 @@ where
         match core::mem::take(self) {
             LinkedList::Empty => None,
             LinkedList::Node { val: t, next } => {
-                *self = next.unlink();
+                *self = next.into_inner();
                 Some(t)
             }
         }
