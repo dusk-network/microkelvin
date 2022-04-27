@@ -86,12 +86,12 @@ where
     fn child(&self, ofs: usize) -> Child<Self, A> {
         match &self.0 {
             BTreeMapInner::LeafNode(le) => match le.get_leaf(ofs) {
-                Some(_) => todo!(),
-                None => todo!(),
+                Some(pair) => Child::Leaf(pair),
+                None => Child::End,
             },
             BTreeMapInner::LinkNode(li) => match li.get_link(ofs) {
                 Some(link) => Child::Link(link),
-                None => todo!(),
+                None => Child::End,
             },
         }
     }
