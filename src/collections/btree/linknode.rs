@@ -2,6 +2,7 @@ use core::borrow::{Borrow, BorrowMut};
 use core::cmp::Ordering;
 use core::fmt::Debug;
 
+use crate::collections::btree::btreemap::BTreeMapInner;
 use crate::{
     Annotation, Fundamental, Link, MaxKey, MaybeStored, StoreProvider,
     StoreSerializer, WellArchived, WellFormed,
@@ -166,13 +167,18 @@ where
         match inner.sub_remove(o) {
             rem @ Remove::None | rem @ Remove::Removed(_) => rem,
             Remove::Underflow(v) => {
-                let _taken = self.0.remove(i).into_inner();
+                let taken = self.0.remove(i).into_inner();
 
-                // match self.0.get_mut(i).map(Link::inner_mut) {
-                //     Some(BTreeMap(BTreeMapInner::LeafNode(le))) => todo!(),
-                //     Some(BTreeMap(BTreeMapInner::LinkNode(li))) => todo!(),
-                //     None => (),
-                // }
+                // same index is now the next node, wich may or may not exist
+                match (taken, self.0.get_mut(i).map(Link::inner_mut)) {
+                    (
+                        BTreeMap(BTreeMapInner::LeafNode(removed_le)),
+                        Some(BTreeMap(BTreeMapInner::LeafNode(self_le))),
+                    ) => {
+                        self_le.prepend(removed_le);
+                    }
+                    _ => todo!(),
+                }
 
                 // if let Some(next) = self.0.get_mut(i) {
 
@@ -197,6 +203,7 @@ where
 
                 if self.underflow() {
                     println!("underflow in link?");
+
                     Remove::Underflow(v)
                 } else {
                     Remove::Removed(v)
@@ -205,16 +212,31 @@ where
         }
     }
 
-    pub(crate) fn insert_leaf(&mut self, k: K, _v: V) -> Insert<V, Self>
+    pub(crate) fn insert_leaf(&mut self, k: K, v: V) -> Insert<V, Self>
     where
         K: Ord,
         A: Borrow<MaxKey<K>>,
     {
         println!("insert leaf in linknode");
-        match self.0.binary_search_by(node_search(&k)) {
-            Ok(_idx) | Err(_idx) => {
-                todo!()
+        dbg!(&self);
+
+        let i = match self.0.binary_search_by(link_search(&k)) {
+            Ok(i) => i,
+            Err(i) => core::cmp::min(i, self.0.len() - 1),
+        };
+
+        match self.0.get_mut(i).map(Link::inner_mut) {
+            Some(BTreeMap(BTreeMapInner::LeafNode(le))) => {
+                match le.insert_leaf(k, v) {
+                    Insert::Ok => Insert::Ok,
+                    Insert::Replaced(v) => Insert::Replaced(v),
+                    Insert::Split(ln) => {
+                        todo!()
+                    }
+                }
             }
+            Some(BTreeMap(BTreeMapInner::LinkNode(li))) => todo!(),
+            None => todo!(),
         }
     }
 

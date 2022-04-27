@@ -121,7 +121,7 @@ where
         None
     }
 
-    fn prepend(&mut self, mut other: Self) -> Option<Self> {
+    pub(crate) fn prepend(&mut self, mut other: Self) -> Option<Self> {
         let cap = self.remaining_capacity();
         let needed = other.len();
 
@@ -178,6 +178,9 @@ where
             let removed = self.0.remove(idx).v;
             if self.underflow() {
                 println!("underflow in remove leaf");
+
+                dbg!(self);
+
                 Remove::Underflow(removed)
             } else {
                 Remove::Removed(removed)
