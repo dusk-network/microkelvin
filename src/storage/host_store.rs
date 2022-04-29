@@ -10,11 +10,11 @@ use memmap2::Mmap;
 use parking_lot::RwLock;
 use rkyv::Fallible;
 
+use rkyv::ser::Serializer;
 use std::fs::{File, OpenOptions};
-use std::io::{self, SeekFrom, Write, Seek};
+use std::io::{self, Seek, SeekFrom, Write};
 use std::path::Path;
 use std::sync::Arc;
-use rkyv::ser::Serializer;
 
 use crate::Store;
 
@@ -142,13 +142,17 @@ impl PageStorage {
             for (i, p) in pages.iter().enumerate() {
                 sum += p.written;
                 if pages_ofs <= sum {
-                    return i
+                    return i;
                 }
             }
             unreachable!()
         }
         // generalized mod
-        fn page_ofs_for_ofs(pages_ofs: usize, pages: &Vec<Page>, cur_page: usize) -> usize {
+        fn page_ofs_for_ofs(
+            pages_ofs: usize,
+            pages: &Vec<Page>,
+            cur_page: usize,
+        ) -> usize {
             assert!(cur_page < pages.len());
             if cur_page == 0 {
                 pages_ofs
@@ -160,20 +164,21 @@ impl PageStorage {
                 pages_ofs - sum
             }
         }
-        // println!("get ofs={} len={} number of pages={}", ofs.offset(), ofs.len(), &self.pages.len());
+        // println!("get ofs={} len={} number of pages={}", ofs.offset(),
+        // ofs.len(), &self.pages.len());
         let OffsetLen(ofs, len) = *ofs;
         let (ofs, len) = (u64::from(ofs) as usize, u32::from(len) as usize);
 
         let slice = match &self.mmap {
-            Some(mmap) if (ofs + len) <= mmap.len() => {
-     
-                &mmap[ofs..][..len]
-            },
+            Some(mmap) if (ofs + len) <= mmap.len() => &mmap[ofs..][..len],
             _ => {
                 let pages_ofs = ofs - self.mmap_len();
                 let mut cur_page = page_for_ofs(pages_ofs, &self.pages);
-                let mut cur_page_ofs = page_ofs_for_ofs(pages_ofs, &self.pages, cur_page);
-                if page_for_ofs(pages_ofs, &self.pages) < page_for_ofs(pages_ofs + len, &self.pages) {
+                let mut cur_page_ofs =
+                    page_ofs_for_ofs(pages_ofs, &self.pages, cur_page);
+                if page_for_ofs(pages_ofs, &self.pages)
+                    < page_for_ofs(pages_ofs + len, &self.pages)
+                {
                     cur_page_ofs = 0;
                     cur_page += 1;
                 }
@@ -185,22 +190,28 @@ impl PageStorage {
     }
 
     fn commit(&mut self, buffer: &mut TokenBuffer) -> OffsetLen {
-        // println!("commit num uncommitted pages={} buffer pos={}", buffer.uncomitted_pages.len(), buffer.pos());
+        // println!("commit num uncommitted pages={} buffer pos={}",
+        // buffer.uncomitted_pages.len(), buffer.pos());
         let offset = self.offset();
         let written = buffer.pos();
         buffer.uncommitted_page().add_written(written);
         buffer.advance();
         let uncommitted_len = buffer.uncommitted_len();
         if uncommitted_len <= self.unwritten_tail().len() {
-            self.unwritten_tail()[..uncommitted_len].copy_from_slice(unsafe { buffer.last_uncommitted_slice(uncommitted_len) });
-            if let Some(top_page) = self.pages.last_mut(){
+            self.unwritten_tail()[..uncommitted_len].copy_from_slice(unsafe {
+                buffer.last_uncommitted_slice(uncommitted_len)
+            });
+            if let Some(top_page) = self.pages.last_mut() {
                 top_page.commit(written);
             }
         } else {
             if uncommitted_len <= PAGE_SIZE {
-                self.pages.push(Page::create(buffer.uncommitted_page().written_slice()));
+                self.pages.push(Page::create(
+                    buffer.uncommitted_page().written_slice(),
+                ));
             } else {
-                self.persist(&buffer.uncommitted_pages()).expect("Host store persistence");
+                self.persist(&buffer.uncommitted_pages())
+                    .expect("Host store persistence");
             }
         }
         buffer.reset_uncommitted();
@@ -210,7 +221,11 @@ impl PageStorage {
         OffsetLen::new(offset as u64, uncommitted_len as u32)
     }
 
-    fn extend(&mut self, buffer: &mut TokenBuffer, _by: usize) -> Result<(), ()> {
+    fn extend(
+        &mut self,
+        buffer: &mut TokenBuffer,
+        _by: usize,
+    ) -> Result<(), ()> {
         if buffer.pos() > 0 {
             buffer.extend_uncommitted();
         }
@@ -221,14 +236,20 @@ impl PageStorage {
         self.token.return_token(token)
     }
 
-    fn persist(&mut self, uncommitted_pages: &Vec<UncommittedPage>) -> Result<(), std::io::Error> {
+    fn persist(
+        &mut self,
+        uncommitted_pages: &Vec<UncommittedPage>,
+    ) -> Result<(), std::io::Error> {
         fn write_pages(pages: &Vec<Page>, file: &mut File) -> io::Result<()> {
             for page in pages {
                 file.write(&page.bytes[..page.written])?;
             }
             Ok(())
         }
-        fn write_uncommitted_bytes(pages: &Vec<UncommittedPage>, file: &mut File) -> io::Result<()> {
+        fn write_uncommitted_bytes(
+            pages: &Vec<UncommittedPage>,
+            file: &mut File,
+        ) -> io::Result<()> {
             for p in pages {
                 file.write(p.written_slice())?;
             }
@@ -239,7 +260,12 @@ impl PageStorage {
             println!("uncommitted page {}", p.pos());
             uncommitted_data_len += p.pos();
         }
-        println!("persist1: data in pages={} data in uncommitted={} data in mmap={}", self.pages_data_len(), uncommitted_data_len, self.mmap_len());
+        println!(
+            "persist1: data in pages={} data in uncommitted={} data in mmap={}",
+            self.pages_data_len(),
+            uncommitted_data_len,
+            self.mmap_len()
+        );
         let mmap_len = self.mmap_len() as u64;
         if self.pages_data_len() > 0 || uncommitted_pages.len() > 0 {
             if let Some(file) = &mut self.file {
@@ -251,7 +277,11 @@ impl PageStorage {
                 self.mmap = Some(unsafe { Mmap::map(&*file)? })
             }
         }
-        println!("persist2: data in pages={} data in mmap={}", self.pages_data_len(), self.mmap_len());
+        println!(
+            "persist2: data in pages={} data in mmap={}",
+            self.pages_data_len(),
+            self.mmap_len()
+        );
         Ok(())
     }
 }

@@ -4,9 +4,9 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use rkyv::{ser::Serializer, Fallible};
 use alloc::boxed::Box;
 use alloc::vec::Vec;
+use rkyv::{ser::Serializer, Fallible};
 
 const UNCOMMITTED_PAGE_SIZE: usize = 1024 * 1024;
 
@@ -120,7 +120,7 @@ impl TokenBuffer {
             self.buffer = page.unwritten_tail();
             self.uncommitted_pages = vec![page];
         } else {
-            for i in 1..self.uncommitted_pages.len(){
+            for i in 1..self.uncommitted_pages.len() {
                 self.uncommitted_pages.remove(i);
             }
             let mut page = self.uncommitted_pages.get_mut(0).unwrap();
@@ -134,7 +134,7 @@ impl TokenBuffer {
             token: Token::new(),
             buffer: &mut [],
             written: 0,
-            uncommitted_pages: Vec::new()
+            uncommitted_pages: Vec::new(),
         }
     }
 

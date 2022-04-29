@@ -123,7 +123,6 @@ fn many_raw_persist_and_restore() -> Result<(), io::Error> {
 
 #[test]
 fn big_items_persist_and_restore() -> Result<(), io::Error> {
-
     const SZ: usize = 35176; // size is more than half of the page size
     let item1 = [1u8; SZ];
     let item2 = [2u8; SZ];
@@ -134,15 +133,15 @@ fn big_items_persist_and_restore() -> Result<(), io::Error> {
 
     let host_store = StoreRef::new(HostStore::with_file(dir.path())?);
 
-    let ident1 = host_store.put(&item1 );
-    let ident2 = host_store.put(&item2 );
+    let ident1 = host_store.put(&item1);
+    let ident2 = host_store.put(&item2);
 
     host_store.persist().unwrap();
 
     let host_store_restored = StoreRef::new(HostStore::with_file(dir.path())?);
 
-    let restored1 = host_store_restored.get::<[u8;SZ]>(&ident1);
-    let restored2 = host_store_restored.get::<[u8;SZ]>(&ident2);
+    let restored1 = host_store_restored.get::<[u8; SZ]>(&ident1);
+    let restored2 = host_store_restored.get::<[u8; SZ]>(&ident2);
 
     for b in restored1.into_iter() {
         assert_eq!(*b, 1u8)
