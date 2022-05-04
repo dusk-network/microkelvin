@@ -158,20 +158,12 @@ where
                     *self = BTreeMap(BTreeMapInner::LinkNode(linknode));
                     None
                 }
-                (BTreeMapInner::LeafNode(_), BTreeMapInner::LinkNode(_)) => {
-                    todo!()
+                (BTreeMapInner::LinkNode(a), BTreeMapInner::LinkNode(b)) => {
+                    let linknode = LinkNode::from_link_nodes(mem::take(a), b);
+                    *self = BTreeMap(BTreeMapInner::LinkNode(linknode));
+                    None
                 }
-                (BTreeMapInner::LinkNode(a), BTreeMapInner::LeafNode(b)) => {
-                    let link = Link::new(BTreeMap(BTreeMapInner::LeafNode(b)));
-
-                    match a.append_link(link) {
-                        Append::Ok => None,
-                        Append::Split(_s) => todo!(),
-                    }
-                }
-                (BTreeMapInner::LinkNode(_), BTreeMapInner::LinkNode(_)) => {
-                    todo!()
-                }
+                _ => unreachable!(),
             },
         }
     }
@@ -199,8 +191,7 @@ where
             Remove::None => None,
             Remove::Removed(v) => Some(v),
             Remove::Underflow(v) => {
-                println!("underflow toplevel");
-
+                println!("underflow toplevel\n--\n{:?}", self);
                 match &mut self.0 {
                     BTreeMapInner::LeafNode(_) => Some(v),
                     BTreeMapInner::LinkNode(links) => {
@@ -211,13 +202,6 @@ where
                     }
                 }
             }
-        }
-    }
-
-    fn len(&self) -> usize {
-        match &self.0 {
-            BTreeMapInner::LeafNode(le) => le.len(),
-            BTreeMapInner::LinkNode(li) => li.len(),
         }
     }
 
@@ -283,5 +267,21 @@ where
             }
             None => true,
         }
+    }
+
+    #[doc(hidden)]
+    // for use only in tests
+    pub fn n_leaves(&self) -> u32 {
+        use crate::All;
+
+        let mut leaves = 0;
+
+        if let Some(branch) = self.walk(All) {
+            for _ in branch {
+                leaves += 1;
+            }
+        }
+
+        leaves
     }
 }

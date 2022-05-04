@@ -3,13 +3,13 @@ use microkelvin::{MaxKey, TreeViz};
 
 use rkyv::rend::LittleEndian;
 
-const S: i32 = 4;
-const N: i32 = 16;
+const S: u32 = 255;
+const N: u32 = 256;
 
 #[test]
 fn btree_add_remove_simple() {
     let mut map =
-        BTreeMap::<LittleEndian<i32>, i32, MaxKey<LittleEndian<i32>>>::new();
+        BTreeMap::<LittleEndian<u32>, u32, MaxKey<LittleEndian<u32>>>::new();
 
     for o in S..N {
         println!("\n------------\nTESTING N = {}", o);
@@ -17,6 +17,10 @@ fn btree_add_remove_simple() {
         for i in 0..o {
             println!("insert {:?}", i);
             assert_eq!(map.insert(LittleEndian::from(i), i), None);
+
+            println!("insert succsessful");
+
+            assert_eq!(map.n_leaves(), 1 + i);
 
             map.print_tree();
 
@@ -27,6 +31,8 @@ fn btree_add_remove_simple() {
             println!("removing {:?}", i);
 
             assert_eq!(map.remove(&LittleEndian::from(i)), Some(i));
+
+            assert_eq!(map.n_leaves(), o - i - 1);
 
             map.print_tree();
 
@@ -40,7 +46,7 @@ fn btree_add_remove_simple() {
 #[test]
 fn btree_add_remove_reverse() {
     let mut map =
-        BTreeMap::<LittleEndian<i32>, i32, MaxKey<LittleEndian<i32>>>::new();
+        BTreeMap::<LittleEndian<u32>, u32, MaxKey<LittleEndian<u32>>>::new();
 
     for o in S..N {
         for i in 0..o {
@@ -66,7 +72,7 @@ fn btree_add_remove_reverse() {
 #[test]
 fn btree_add_change_remove() {
     let mut map =
-        BTreeMap::<LittleEndian<i32>, i32, MaxKey<LittleEndian<i32>>>::new();
+        BTreeMap::<LittleEndian<u32>, u32, MaxKey<LittleEndian<u32>>>::new();
 
     for o in S..N {
         println!("\n------------\nTESTING N = {}", o);

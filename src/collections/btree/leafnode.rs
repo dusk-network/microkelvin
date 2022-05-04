@@ -95,32 +95,6 @@ where
         }
     }
 
-    fn append(&mut self, mut other: Self) -> Option<Self> {
-        let cap = self.remaining_capacity();
-        let needed = other.len();
-
-        if cap >= needed {
-            self.0.append(&mut other.0)
-        } else {
-            println!("a {:?}", self);
-            println!("b {:?}", other);
-
-            let total_len = self.len() + other.len();
-
-            let ideal_len = total_len / 2;
-
-            let _split_at = ideal_len - other.len();
-
-            // let last = self.split_off(split_at);
-
-            debug_assert!(self.prepend(other).is_none());
-
-            todo!()
-        }
-
-        None
-    }
-
     pub(crate) fn prepend(&mut self, mut other: Self) -> Option<Self> {
         let cap = self.remaining_capacity();
         let needed = other.len();
@@ -136,8 +110,7 @@ where
         } else {
             // make room by splitting.
 
-            println!("a {:?}", self);
-            println!("b {:?}", other);
+            println!("gorka");
 
             let total_len = self.len() + other.len();
 
@@ -148,6 +121,8 @@ where
             let last = self.split_off(split_at);
 
             debug_assert!(self.prepend(other).is_none());
+
+            println!("returning {:?}", last);
 
             Some(last)
         }
@@ -177,10 +152,7 @@ where
         if let Ok(idx) = self.0.binary_search_by(leaf_search(o)) {
             let removed = self.0.remove(idx).v;
             if self.underflow() {
-                println!("underflow in remove leaf");
-
-                dbg!(self);
-
+                println!("underflow in leaf node");
                 Remove::Underflow(removed)
             } else {
                 Remove::Removed(removed)

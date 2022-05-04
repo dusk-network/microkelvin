@@ -2,7 +2,6 @@ use core::borrow::{Borrow, BorrowMut};
 use core::cmp::Ordering;
 use core::fmt::Debug;
 
-use crate::collections::btree::btreemap::BTreeMapInner;
 use crate::{
     Annotation, Fundamental, Link, MaxKey, MaybeStored, StoreProvider,
     StoreSerializer, WellArchived, WellFormed,
@@ -13,7 +12,7 @@ use rkyv::{Archive, Deserialize, Serialize};
 
 use bytecheck::CheckBytes;
 
-use super::btreemap::{BTreeMap, Insert, Pair, Remove};
+use super::btreemap::{BTreeMap, BTreeMapInner, Insert, Pair, Remove};
 use super::leafnode::LeafNode;
 
 fn node_search<'a, O, K, V, A, const LE: usize, const LI: usize>(
@@ -118,6 +117,17 @@ where
         LinkNode(vec![link_a, link_b])
     }
 
+    pub(crate) fn from_link_nodes(
+        a: LinkNode<K, V, A, LE, LI>,
+        b: LinkNode<K, V, A, LE, LI>,
+    ) -> Self {
+        let map_a = BTreeMap::from(a);
+        let map_b = BTreeMap::from(b);
+        let link_a = Link::new(map_a);
+        let link_b = Link::new(map_b);
+        LinkNode(vec![link_a, link_b])
+    }
+
     pub(crate) fn get_link(
         &self,
         ofs: usize,
@@ -152,10 +162,6 @@ where
         A: Borrow<MaxKey<K>>,
         O: Ord,
     {
-        if self.len() == 0 {
-            return Remove::None;
-        };
-
         let i = match self.0.binary_search_by(link_search(o)) {
             Ok(i) => i,
             Err(i) => core::cmp::min(i, self.0.len() - 1),
@@ -167,46 +173,58 @@ where
         match inner.sub_remove(o) {
             rem @ Remove::None | rem @ Remove::Removed(_) => rem,
             Remove::Underflow(v) => {
-                let taken = self.0.remove(i).into_inner();
+                let removed = self.0.remove(i).into_inner();
 
-                // same index is now the next node, wich may or may not exist
-                match (taken, self.0.get_mut(i).map(Link::inner_mut)) {
-                    (
-                        BTreeMap(BTreeMapInner::LeafNode(removed_le)),
-                        Some(BTreeMap(BTreeMapInner::LeafNode(self_le))),
-                    ) => {
-                        self_le.prepend(removed_le);
+                match removed {
+                    BTreeMap(BTreeMapInner::LeafNode(removed_leaves)) => {
+                        if let Some(BTreeMap(BTreeMapInner::LeafNode(
+                            sibling_leaves,
+                        ))) = self.0.get_mut(i).map(Link::inner_mut)
+                        {
+                            if let Some(split) =
+                                sibling_leaves.prepend(removed_leaves)
+                            {
+                                let link = Link::new(BTreeMap(
+                                    BTreeMapInner::LeafNode(split),
+                                ));
+
+                                self.0.push(link);
+                            }
+                        } else {
+                            // no sibling to the right
+                            if i > 0 {
+                                todo!()
+                            }
+                        }
+
+                        if self.underflow() {
+                            Remove::Underflow(v)
+                        } else {
+                            Remove::Removed(v)
+                        }
                     }
-                    _ => todo!(),
-                }
+                    BTreeMap(BTreeMapInner::LinkNode(removed_links)) => {
+                        if let Some(BTreeMap(BTreeMapInner::LinkNode(
+                            sibling_links,
+                        ))) = self.0.get_mut(i).map(Link::inner_mut)
+                        {
+                            if let Some(split) =
+                                sibling_links.prepend(removed_links)
+                            {
+                                let link = Link::new(BTreeMap(
+                                    BTreeMapInner::LinkNode(split),
+                                ));
 
-                // if let Some(next) = self.0.get_mut(i) {
+                                self.0.push(link);
+                            }
+                        }
 
-                //     match next.inner_mut() {
-                //     }
-
-                //     if let Some(leaves) = next.prepend(taken) {
-                //         self.0.insert(i + 1, Link::new(leaves))
-                //     } else {
-                //         ()
-                //     }
-                // } else {
-                //     if i > 0 {
-                //         let prev = self.0[i - 1].inner_mut();
-                //         println!("appending here?");
-
-                //         if taken.len() > 0 {
-                //             prev.append(taken);
-                //         }
-                //     }
-                // }
-
-                if self.underflow() {
-                    println!("underflow in link?");
-
-                    Remove::Underflow(v)
-                } else {
-                    Remove::Removed(v)
+                        if self.underflow() {
+                            Remove::Underflow(v)
+                        } else {
+                            Remove::Removed(v)
+                        }
+                    }
                 }
             }
         }
@@ -218,7 +236,6 @@ where
         A: Borrow<MaxKey<K>>,
     {
         println!("insert leaf in linknode");
-        dbg!(&self);
 
         let i = match self.0.binary_search_by(link_search(&k)) {
             Ok(i) => i,
@@ -231,16 +248,65 @@ where
                     Insert::Ok => Insert::Ok,
                     Insert::Replaced(v) => Insert::Replaced(v),
                     Insert::Split(ln) => {
-                        todo!()
+                        println!("splutt");
+                        let link =
+                            Link::new(BTreeMap(BTreeMapInner::LeafNode(ln)));
+
+                        if !self.full() {
+                            self.0.push(link);
+                            Insert::Ok
+                        } else {
+                            println!("split?");
+                            let mut split = self.split();
+                            println!("split {:?}", split);
+                            split.append_link(link);
+                            Insert::Split(split)
+                        }
                     }
                 }
             }
-            Some(BTreeMap(BTreeMapInner::LinkNode(li))) => todo!(),
+            Some(BTreeMap(BTreeMapInner::LinkNode(li))) => {
+                match li.insert_leaf(k, v) {
+                    Insert::Ok => Insert::Ok,
+                    Insert::Replaced(v) => Insert::Replaced(v),
+                    Insert::Split(li) => {
+                        println!("splutt");
+                        let link =
+                            Link::new(BTreeMap(BTreeMapInner::LinkNode(li)));
+
+                        if !self.full() {
+                            self.0.push(link);
+                            Insert::Ok
+                        } else {
+                            println!("split?");
+                            let mut split = self.split();
+                            println!("split {:?}", split);
+                            split.append_link(link);
+                            Insert::Split(split)
+                        }
+                    }
+                }
+            }
             None => todo!(),
         }
     }
 
-    fn prepend(&mut self, mut other: Self) -> Option<Self> {
+    fn split(&mut self) -> Self {
+        LinkNode(self.0.split_off((LI + 1) / 2))
+    }
+
+    pub(crate) fn append_link(
+        &mut self,
+        link: Link<BTreeMap<K, V, A, LE, LI>, A>,
+    ) {
+        self.0.push(link)
+    }
+
+    fn split_off(&mut self, at: usize) -> Self {
+        LinkNode(self.0.split_off(at))
+    }
+
+    pub(crate) fn prepend(&mut self, mut other: Self) -> Option<Self> {
         let cap = self.remaining_capacity();
         let needed = other.len();
 
@@ -251,30 +317,25 @@ where
         if cap >= needed {
             other.0.append(&mut self.0);
             *self = other;
+            None
+        } else {
+            // make room by splitting.
+
+            println!("gorka");
+
+            let total_len = self.len() + other.len();
+
+            let ideal_len = total_len / 2;
+
+            let split_at = ideal_len - other.len();
+
+            let last = self.split_off(split_at);
+
+            debug_assert!(self.prepend(other).is_none());
+
+            println!("returning {:?}", last);
+
+            Some(last)
         }
-
-        None
-    }
-
-    pub(crate) fn append_link(
-        &mut self,
-        _link: Link<BTreeMap<K, V, A, LE, LI>, A>,
-    ) -> Append<Self> {
-        todo!()
-    }
-
-    fn append(&mut self, mut other: Self) -> Option<Self> {
-        let cap = self.remaining_capacity();
-        let needed = other.len();
-
-        // example
-
-        // self [2, 3, 4] prepended with [0, 1].
-
-        if cap >= needed {
-            self.0.append(&mut other.0);
-        }
-
-        None
     }
 }
