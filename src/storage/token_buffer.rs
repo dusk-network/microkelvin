@@ -106,7 +106,7 @@ impl TokenBuffer {
             token: Token::new(),
             buffer: &mut [],
             written: 0,
-            uncomitted_pages: Vec::new()
+            uncomitted_pages: Vec::new(),
         }
     }
 
