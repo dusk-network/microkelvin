@@ -164,8 +164,6 @@ impl PageStorage {
                 pages_ofs - sum
             }
         }
-        // println!("get ofs={} len={} number of pages={}", ofs.offset(),
-        // ofs.len(), &self.pages.len());
         let OffsetLen(ofs, len) = *ofs;
         let (ofs, len) = (u64::from(ofs) as usize, u32::from(len) as usize);
 
@@ -190,8 +188,6 @@ impl PageStorage {
     }
 
     fn commit(&mut self, buffer: &mut TokenBuffer) -> OffsetLen {
-        // println!("commit num uncommitted pages={} buffer pos={}",
-        // buffer.uncomitted_pages.len(), buffer.pos());
         let offset = self.offset();
         let written = buffer.pos();
         buffer.uncommitted_page().add_written(written);
@@ -215,9 +211,6 @@ impl PageStorage {
             }
         }
         buffer.reset_uncommitted();
-        assert_eq!(buffer.pos(), 0);
-        assert_eq!(buffer.uncommitted_page().pos(), 0);
-        // println!("commit returning offs={} len={}", offset, uncommitted_len);
         OffsetLen::new(offset as u64, uncommitted_len as u32)
     }
 
@@ -255,17 +248,6 @@ impl PageStorage {
             }
             Ok(())
         }
-        let mut uncommitted_data_len = 0;
-        for p in uncommitted_pages {
-            println!("uncommitted page {}", p.pos());
-            uncommitted_data_len += p.pos();
-        }
-        println!(
-            "persist1: data in pages={} data in uncommitted={} data in mmap={}",
-            self.pages_data_len(),
-            uncommitted_data_len,
-            self.mmap_len()
-        );
         let mmap_len = self.mmap_len() as u64;
         if self.pages_data_len() > 0 || uncommitted_pages.len() > 0 {
             if let Some(file) = &mut self.file {
@@ -277,11 +259,6 @@ impl PageStorage {
                 self.mmap = Some(unsafe { Mmap::map(&*file)? })
             }
         }
-        println!(
-            "persist2: data in pages={} data in mmap={}",
-            self.pages_data_len(),
-            self.mmap_len()
-        );
         Ok(())
     }
 }
@@ -331,7 +308,6 @@ impl Store for HostStore {
             }
         };
 
-        // let bytes = guard.unwritten_tail();
         TokenBuffer::new_uncommitted(token)
     }
 

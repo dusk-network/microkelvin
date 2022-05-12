@@ -159,7 +159,7 @@ impl TokenBuffer {
         &mut slice[self.written..]
     }
 
-    /// Temp
+    /// Returns slice from the last uncommitted page
     pub unsafe fn last_uncommitted_slice(&self, len: usize) -> &[u8] {
         let page = self.uncommitted_pages.last().unwrap();
         &page.bytes[page.written - len..page.written]
