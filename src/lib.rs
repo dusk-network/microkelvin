@@ -41,9 +41,9 @@ pub use wrappers::{MaybeArchived, MaybeStored, Primitive};
 
 mod storage;
 pub use storage::{
-    Ident, OffsetLen, PersistError, Store, StoreProvider, StoreRef,
+    Ident, OffsetLen, Store, StoreProvider, StoreRef,
     StoreSerializer, Stored, Token, TokenBuffer,
 };
 
 #[cfg(feature = "host")]
-pub use storage::{HostStore, UnwrapInfallible};
+pub use storage::{HostStore, PersistError, UnwrapInfallible};
