@@ -4,6 +4,8 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use microkelvin::PersistError;
+
 mod linked_list;
 
 #[cfg(feature = "host")]
@@ -11,8 +13,6 @@ mod persist_tests {
     use super::*;
 
     use linked_list::LinkedList;
-
-    use std::io;
 
     use rend::LittleEndian;
 
@@ -30,7 +30,7 @@ mod persist_tests {
         }
     }
 
-    fn persist() -> Result<(), io::Error> {
+    fn persist() -> Result<(), PersistError> {
         let store = StoreRef::new(HostStore::new());
 
         let n: u64 = 16;
@@ -62,26 +62,26 @@ mod persist_tests {
     }
 
     #[test]
-    fn persist_a() -> Result<(), io::Error> {
+    fn persist_a() -> Result<(), PersistError> {
         persist()
     }
 
     #[test]
-    fn persist_b() -> Result<(), io::Error> {
+    fn persist_b() -> Result<(), PersistError> {
         persist()
     }
 
     #[test]
-    fn persist_c() -> Result<(), io::Error> {
+    fn persist_c() -> Result<(), PersistError> {
         persist()
     }
 
     #[test]
-    fn persist_d() -> Result<(), io::Error> {
+    fn persist_d() -> Result<(), PersistError> {
         persist()
     }
 
-    fn persist_across_threads() -> Result<(), io::Error> {
+    fn persist_across_threads() -> Result<(), PersistError> {
         let store = StoreRef::new(HostStore::new());
 
         let n: u64 = 16;
@@ -119,22 +119,22 @@ mod persist_tests {
     }
 
     #[test]
-    fn persist_across_threads_a() -> Result<(), io::Error> {
+    fn persist_across_threads_a() -> Result<(), PersistError> {
         persist_across_threads()
     }
 
     #[test]
-    fn persist_across_threads_b() -> Result<(), io::Error> {
+    fn persist_across_threads_b() -> Result<(), PersistError> {
         persist_across_threads()
     }
 
     #[test]
-    fn persist_across_threads_c() -> Result<(), io::Error> {
+    fn persist_across_threads_c() -> Result<(), PersistError> {
         persist_across_threads()
     }
 
     #[test]
-    fn persist_across_threads_d() -> Result<(), io::Error> {
+    fn persist_across_threads_d() -> Result<(), PersistError> {
         persist_across_threads()
     }
 }

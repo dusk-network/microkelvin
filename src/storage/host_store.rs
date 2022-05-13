@@ -10,6 +10,7 @@ use memmap2::Mmap;
 use parking_lot::RwLock;
 use rkyv::Fallible;
 
+use crate::storage::PersistError;
 use rkyv::ser::Serializer;
 use std::fs::{File, OpenOptions};
 use std::io::{self, Seek, SeekFrom, Write};
@@ -85,7 +86,7 @@ impl PageStorage {
     }
 
     /// Attaches storage to a file at a given path
-    fn with_file<P: AsRef<Path>>(path: P) -> io::Result<Self> {
+    fn with_file<P: AsRef<Path>>(path: P) -> Result<Self, PersistError> {
         let path = path.as_ref().join(Self::STORAGE_FILENAME);
         let path_exists = path.exists();
         let file = OpenOptions::new()
@@ -232,7 +233,7 @@ impl PageStorage {
     fn persist(
         &mut self,
         uncommitted_pages: &Vec<UncommittedPage>,
-    ) -> Result<(), std::io::Error> {
+    ) -> Result<(), PersistError> {
         fn write_pages(pages: &Vec<Page>, file: &mut File) -> io::Result<()> {
             for page in pages {
                 file.write(&page.bytes[..page.written])?;
@@ -278,7 +279,7 @@ impl HostStore {
     }
 
     /// Creates a new HostStore backed by a file
-    pub fn with_file<P: AsRef<Path>>(path: P) -> io::Result<Self> {
+    pub fn with_file<P: AsRef<Path>>(path: P) -> Result<Self, PersistError> {
         Ok(HostStore {
             inner: Arc::new(RwLock::new(PageStorage::with_file(&path)?)),
         })
@@ -297,7 +298,7 @@ impl Store for HostStore {
     }
 
     fn request_buffer(&self) -> TokenBuffer {
-        // loop waiting to aquire write token
+        // loop waiting to acquire write token
         let mut guard = self.inner.write();
 
         let token = loop {
@@ -311,16 +312,16 @@ impl Store for HostStore {
         TokenBuffer::new_uncommitted(token)
     }
 
-    fn extend(&self, buffer: &mut TokenBuffer, by: usize) -> Result<(), ()> {
-        self.inner.write().extend(buffer, by)
-    }
-
-    fn persist(&self) -> Result<(), ()> {
-        self.inner.write().persist(&vec![]).map_err(|_| ())
+    fn persist(&self) -> Result<(), PersistError> {
+        self.inner.write().persist(&vec![])
     }
 
     fn commit(&self, buf: &mut TokenBuffer) -> Self::Identifier {
         self.inner.write().commit(buf)
+    }
+
+    fn extend(&self, buffer: &mut TokenBuffer, by: usize) -> Result<(), ()> {
+        self.inner.write().extend(buffer, by)
     }
 
     fn return_token(&self, token: Token) {

@@ -15,8 +15,8 @@ use rkyv::{
 use microkelvin::{
     Annotation, ArchivedChild, ArchivedCompound, BranchRef, BranchRefMut,
     Child, ChildMut, Compound, Discriminant, Keyed, Link, MaxKey,
-    MaybeArchived, Step, StoreProvider, StoreRef, StoreSerializer, Walkable,
-    Walker,
+    MaybeArchived, PersistError, Step, StoreProvider, StoreRef,
+    StoreSerializer, Walkable, Walker,
 };
 
 #[derive(Clone, Archive, Serialize, Deserialize)]
@@ -347,9 +347,6 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
-
-    use std::io;
-
     use microkelvin::{HostStore, Keyed, Member};
     use rand::prelude::SliceRandom;
     use rend::LittleEndian;
@@ -381,7 +378,7 @@ mod test {
     }
 
     #[test]
-    fn many_many_many() -> Result<(), io::Error> {
+    fn many_many_many() -> Result<(), PersistError> {
         let store = StoreRef::new(HostStore::new());
 
         const N: u16 = 2;

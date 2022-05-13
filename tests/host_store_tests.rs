@@ -4,9 +4,8 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use microkelvin::{HostStore, StoreRef};
+use microkelvin::{HostStore, PersistError, StoreRef};
 use rkyv::rend::LittleEndian;
-use std::io;
 
 #[test]
 fn it_works() {
@@ -39,7 +38,7 @@ fn lot_more() {
 }
 
 #[test]
-fn many_raw_persist_and_restore() -> Result<(), io::Error> {
+fn many_raw_persist_and_restore() -> Result<(), PersistError> {
     const N: usize = 1024 * 64;
 
     let mut references = vec![];
@@ -122,7 +121,7 @@ fn many_raw_persist_and_restore() -> Result<(), io::Error> {
 }
 
 #[test]
-fn big_items_persist_and_restore() -> Result<(), io::Error> {
+fn big_items_persist_and_restore() -> Result<(), PersistError> {
     const SZ: usize = 35176; // size is more than half of the page size
     let item1 = [1u8; SZ];
     let item2 = [2u8; SZ];
