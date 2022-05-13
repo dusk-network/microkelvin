@@ -9,10 +9,10 @@ use crate::tower::{Fundamental, WellArchived, WellFormed};
 use crate::ArchivedChild;
 use crate::ArchivedCompound;
 use crate::Keyed;
-use crate::{Annotation, Child, ChildMut, Compound, Link, MaxKey};
+use crate::TreeViz;
+use crate::{Annotation, Child, ChildMut, Compound, MaxKey};
 
 use super::leafnode::LeafNode;
-use super::linknode::Append;
 use super::linknode::LinkNode;
 
 /// A BTree key-value pair
@@ -32,11 +32,24 @@ impl<K, V> Keyed<K> for Pair<K, V> {
 }
 
 // A BTreeMap
-#[derive(Clone, Deserialize, Archive, Serialize, Debug)]
+#[derive(Clone, Deserialize, Archive, Serialize)]
 #[archive_attr(derive(CheckBytes))]
 pub struct BTreeMap<K, V, A, const LE: usize = 3, const LI: usize = 3>(
     pub(crate) BTreeMapInner<K, V, A, LE, LI>,
 );
+
+impl<K, V, A, const LE: usize, const LI: usize> Debug
+    for BTreeMap<K, V, A, LE, LI>
+where
+    K: Fundamental + Debug,
+    V: WellFormed + Debug,
+    V::Archived: WellArchived<V> + Debug,
+    A: Annotation<Pair<K, V>> + Fundamental + Debug,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.treeify(f, 0)
+    }
+}
 
 impl<K, V, A, const LE: usize, const LI: usize> Default
     for BTreeMap<K, V, A, LE, LI>
@@ -48,7 +61,7 @@ impl<K, V, A, const LE: usize, const LI: usize> Default
 
 /// We have an inner type to avoid having to make LeafNode and LinkNode public
 /// TODO make this private.
-#[derive(Archive, Clone, Deserialize, Serialize, Debug)]
+#[derive(Archive, Clone, Deserialize, Serialize)]
 #[archive_attr(derive(CheckBytes))]
 pub enum BTreeMapInner<K, V, A, const LE: usize, const LI: usize> {
     /// A node of leaves
@@ -172,7 +185,7 @@ where
     pub fn get<O>(&self, k: &O) -> Option<&V>
     where
         K: Borrow<O>,
-        O: Ord,
+        O: Ord + Debug,
     {
         match &self.0 {
             BTreeMapInner::LeafNode(leaves) => leaves.get(k),
@@ -185,7 +198,7 @@ where
     pub fn remove<O>(&mut self, o: &O) -> Option<V>
     where
         K: Borrow<O>,
-        O: Ord,
+        O: Ord + Debug,
     {
         match self.sub_remove(o) {
             Remove::None => None,
@@ -195,7 +208,6 @@ where
                 match &mut self.0 {
                     BTreeMapInner::LeafNode(_) => Some(v),
                     BTreeMapInner::LinkNode(links) => {
-                        debug_assert!(links.len() == 1);
                         let mut taken = mem::take(links);
                         *self = taken.remove_link(0).into_inner();
                         Some(v)
@@ -227,7 +239,7 @@ where
     pub(crate) fn sub_remove<O>(&mut self, o: &O) -> Remove<V>
     where
         K: Borrow<O>,
-        O: Ord,
+        O: Ord + Debug,
     {
         match &mut self.0 {
             BTreeMapInner::LeafNode(leaves) => leaves.remove_leaf(o),

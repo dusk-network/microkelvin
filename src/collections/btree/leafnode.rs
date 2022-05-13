@@ -72,7 +72,14 @@ where
             Ok(idx) => Insert::Replaced(mem::replace(&mut self.0[idx].v, v)),
             Err(idx) => {
                 if self.full() {
-                    let point = Self::split_point();
+                    println!("orgo");
+
+                    let mut point = Self::split_point();
+
+                    if idx < point {
+                        point -= 1
+                    }
+
                     let mut rest = self.0.split_off(point);
 
                     match rest[0].k.cmp(&k) {
@@ -92,6 +99,40 @@ where
                     Insert::Ok
                 }
             }
+        }
+    }
+
+    pub(crate) fn append(&mut self, mut other: Self) -> Option<Self> {
+        let cap = self.remaining_capacity();
+        let needed = other.len();
+
+        // example
+
+        // self [2, 3, 4] prepended with [0, 1].
+
+        if cap >= needed {
+            self.0.append(&mut other.0);
+            None
+        } else {
+            // make room by splitting.
+
+            println!("torka");
+
+            let total_len = self.len() + other.len();
+
+            let ideal_len = total_len / 2;
+
+            let split_at = ideal_len - other.len();
+
+            let last = self.split_off(split_at);
+
+            //mem::swap(&mut last, self);
+
+            debug_assert!(self.append(other).is_none());
+
+            println!("returning {:?}", last);
+
+            Some(last)
         }
     }
 
@@ -147,10 +188,15 @@ where
     pub(crate) fn remove_leaf<O>(&mut self, o: &O) -> Remove<V>
     where
         K: Borrow<O>,
-        O: Ord,
+        O: Ord + Debug,
     {
+        println!("remove {:?} from {:?}", o, self);
+
         if let Ok(idx) = self.0.binary_search_by(leaf_search(o)) {
             let removed = self.0.remove(idx).v;
+
+            println!("after remove leaf {:?}", self);
+
             if self.underflow() {
                 println!("underflow in leaf node");
                 Remove::Underflow(removed)

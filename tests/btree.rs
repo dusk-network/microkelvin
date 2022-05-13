@@ -3,8 +3,8 @@ use microkelvin::{MaxKey, TreeViz};
 
 use rkyv::rend::LittleEndian;
 
-const S: u32 = 255;
-const N: u32 = 256;
+const S: u32 = N - 1;
+const N: u32 = 6;
 
 #[test]
 fn btree_add_remove_simple() {
@@ -22,7 +22,7 @@ fn btree_add_remove_simple() {
 
             assert_eq!(map.n_leaves(), 1 + i);
 
-            map.print_tree();
+            println!("{:?}", map);
 
             assert!(map.all_leaves_at_same_level());
         }
@@ -34,7 +34,7 @@ fn btree_add_remove_simple() {
 
             assert_eq!(map.n_leaves(), o - i - 1);
 
-            map.print_tree();
+            println!("{:?}", map);
 
             assert!(map.all_leaves_at_same_level());
         }
@@ -54,13 +54,20 @@ fn btree_add_remove_reverse() {
             assert_eq!(map.insert(LittleEndian::from(i), i), None);
 
             assert!(map.all_leaves_at_same_level());
+
+            println!("{:?}", map);
         }
+
+        println!("{:?}", map);
 
         for i in 0..o {
             let i = o - i - 1;
+
+            println!("remove {}", i);
+
             assert_eq!(map.remove(&LittleEndian::from(i)), Some(i));
             println!("removed {}", i);
-            map.print_tree();
+            println!("{:?}", map);
 
             assert!(map.all_leaves_at_same_level());
         }
@@ -81,7 +88,7 @@ fn btree_add_change_remove() {
             println!("insert {:?}", i);
             assert_eq!(map.insert(LittleEndian::from(i), i), None);
 
-            map.print_tree();
+            println!("{:?}", map);
 
             assert!(map.all_leaves_at_same_level());
         }
@@ -90,7 +97,7 @@ fn btree_add_change_remove() {
             println!("re-insert {:?}", i);
             assert_eq!(map.insert(LittleEndian::from(i), i + 1), Some(i));
 
-            map.print_tree();
+            println!("{:?}", map);
         }
 
         for i in 0..o {
@@ -102,7 +109,7 @@ fn btree_add_change_remove() {
 
             assert_eq!(map.remove(&LittleEndian::from(i)), Some(i + 1));
 
-            map.print_tree();
+            println!("{:?}", map);
 
             assert!(map.all_leaves_at_same_level());
         }

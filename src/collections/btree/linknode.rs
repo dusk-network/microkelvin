@@ -4,7 +4,7 @@ use core::fmt::Debug;
 
 use crate::{
     Annotation, Fundamental, Link, MaxKey, MaybeStored, StoreProvider,
-    StoreSerializer, WellArchived, WellFormed,
+    StoreSerializer, TreeViz, WellArchived, WellFormed,
 };
 
 use rkyv::ser::{ScratchSpace, Serializer};
@@ -19,7 +19,7 @@ fn node_search<'a, O, K, V, A, const LE: usize, const LI: usize>(
     o: &'a O,
 ) -> impl Fn(&Link<BTreeMap<K, V, A, LE, LI>, A>) -> Ordering + 'a
 where
-    O: Ord,
+    O: Ord + Debug,
     K: 'a + Ord + Fundamental + Borrow<O> + Debug,
     V: WellFormed + Debug,
     V::Archived: WellArchived<V> + Debug,
@@ -32,7 +32,7 @@ where
     }
 }
 
-#[derive(Archive, Clone, Serialize, Deserialize, Debug)]
+#[derive(Archive, Clone, Serialize, Deserialize)]
 #[archive_attr(derive(CheckBytes))]
 #[archive(bound(serialize = "
   K: Fundamental + Debug,
@@ -56,11 +56,30 @@ impl<K, V, A, const LE: usize, const LI: usize> Default
     }
 }
 
+impl<K, V, A, const LE: usize, const LI: usize> Debug
+    for LinkNode<K, V, A, LE, LI>
+where
+    K: Fundamental + Debug,
+    V: WellFormed + Debug,
+    V::Archived: WellArchived<V> + Debug,
+    A: Annotation<Pair<K, V>> + Fundamental + Debug,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for link in &self.0 {
+            match link.inner() {
+                MaybeStored::Memory(mem) => mem.treeify(f, 0)?,
+                MaybeStored::Stored(_) => todo!(),
+            }
+        }
+        Ok(())
+    }
+}
+
 fn link_search<'a, O, K, V, A, const LE: usize, const LI: usize>(
     o: &'a O,
 ) -> impl Fn(&Link<BTreeMap<K, V, A, LE, LI>, A>) -> Ordering + 'a
 where
-    O: Ord,
+    O: Ord + Debug,
     K: 'a + Ord + Fundamental + Borrow<O> + Debug,
     V: WellFormed + Debug,
     V::Archived: WellArchived<V> + Debug,
@@ -146,7 +165,7 @@ where
     where
         K: Ord + Borrow<O>,
         A: Borrow<MaxKey<K>>,
-        O: Ord,
+        O: Ord + Debug,
     {
         match self.0.binary_search_by(link_search(o)) {
             Ok(i) | Err(i) => match self.0[i].inner() {
@@ -160,7 +179,7 @@ where
     where
         K: Ord + Borrow<O>,
         A: Borrow<MaxKey<K>>,
-        O: Ord,
+        O: Ord + Debug,
     {
         let i = match self.0.binary_search_by(link_search(o)) {
             Ok(i) => i,
@@ -170,64 +189,7 @@ where
 
         let inner = self.0[i].inner_mut();
 
-        match inner.sub_remove(o) {
-            rem @ Remove::None | rem @ Remove::Removed(_) => rem,
-            Remove::Underflow(v) => {
-                let removed = self.0.remove(i).into_inner();
-
-                match removed {
-                    BTreeMap(BTreeMapInner::LeafNode(removed_leaves)) => {
-                        if let Some(BTreeMap(BTreeMapInner::LeafNode(
-                            sibling_leaves,
-                        ))) = self.0.get_mut(i).map(Link::inner_mut)
-                        {
-                            if let Some(split) =
-                                sibling_leaves.prepend(removed_leaves)
-                            {
-                                let link = Link::new(BTreeMap(
-                                    BTreeMapInner::LeafNode(split),
-                                ));
-
-                                self.0.push(link);
-                            }
-                        } else {
-                            // no sibling to the right
-                            if i > 0 {
-                                todo!()
-                            }
-                        }
-
-                        if self.underflow() {
-                            Remove::Underflow(v)
-                        } else {
-                            Remove::Removed(v)
-                        }
-                    }
-                    BTreeMap(BTreeMapInner::LinkNode(removed_links)) => {
-                        if let Some(BTreeMap(BTreeMapInner::LinkNode(
-                            sibling_links,
-                        ))) = self.0.get_mut(i).map(Link::inner_mut)
-                        {
-                            if let Some(split) =
-                                sibling_links.prepend(removed_links)
-                            {
-                                let link = Link::new(BTreeMap(
-                                    BTreeMapInner::LinkNode(split),
-                                ));
-
-                                self.0.push(link);
-                            }
-                        }
-
-                        if self.underflow() {
-                            Remove::Underflow(v)
-                        } else {
-                            Remove::Removed(v)
-                        }
-                    }
-                }
-            }
-        }
+        inner.sub_remove(o)
     }
 
     pub(crate) fn insert_leaf(&mut self, k: K, v: V) -> Insert<V, Self>

@@ -3,17 +3,7 @@ use crate::{Child, Compound, MaybeStored, WellFormed};
 use core::fmt;
 
 pub trait TreeViz<A> {
-    fn print_tree(&self) {
-        println!("{}", self.to_string());
-    }
-
-    fn to_string(&self) -> String {
-        let mut s = String::new();
-        self.treeify(&mut s, 0);
-        s
-    }
-
-    fn treeify(&self, s: &mut String, ident: usize);
+    fn treeify(&self, s: &mut fmt::Formatter, ident: usize) -> fmt::Result;
 }
 
 impl<C, A> TreeViz<A> for C
@@ -22,32 +12,32 @@ where
     C::Leaf: fmt::Debug,
     A: fmt::Debug,
 {
-    fn treeify(&self, s: &mut String, ident: usize) {
-        *s += "\n";
+    fn treeify(&self, s: &mut fmt::Formatter, ident: usize) -> fmt::Result {
+        write!(s, "\n")?;
         for _ in 0..ident {
-            *s += "  ";
+            write!(s, "  ")?;
         }
-        *s += "[";
+        write!(s, "[")?;
         for i in 0.. {
             match self.child(i) {
-                Child::Leaf(leaf) => *s += &format!("{:?}", leaf),
+                Child::Leaf(leaf) => write!(s, "{:?}", leaf)?,
                 Child::Link(link) => match link.inner() {
-                    MaybeStored::Memory(c) => c.treeify(s, ident + 1),
+                    MaybeStored::Memory(c) => c.treeify(s, ident + 1)?,
                     MaybeStored::Stored(_) => todo!(),
                 },
 
-                Child::Empty => *s += "_",
+                Child::Empty => write!(s, "_")?,
                 Child::End => {
                     break;
                 }
-            }
+            };
 
             if let Child::End = self.child(i + 1) {
             } else {
-                *s += ", "
+                write!(s, ", ")?;
             }
         }
 
-        *s += "]";
+        write!(s, "]")
     }
 }
