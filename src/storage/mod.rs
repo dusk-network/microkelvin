@@ -27,7 +27,9 @@ pub use store_serializer::*;
 mod token_buffer;
 pub use token_buffer::*;
 
+#[cfg(feature = "host")]
 mod error;
+#[cfg(feature = "host")]
 pub use error::*;
 
 use crate::{
@@ -186,7 +188,7 @@ pub trait Store {
     ///
     /// To keep the trait simple, the error type is omitted, and will have to be
     /// returned by other means, for example in logging.
-    fn persist(&self) -> Result<(), PersistError>;
+    fn persist(&self) -> Result<(), ()>;
 
     /// Commit written bytes to the
     fn commit(&self, buffer: &mut TokenBuffer) -> Self::Identifier;

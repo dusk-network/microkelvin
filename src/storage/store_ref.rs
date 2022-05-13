@@ -12,9 +12,7 @@ use bytecheck::CheckBytes;
 use rkyv::validation::validators::DefaultValidator;
 use rkyv::{check_archived_root, Archive, Fallible, Serialize};
 
-use crate::{
-    Ident, PersistError, Store, StoreProvider, StoreSerializer, Stored,
-};
+use crate::{Ident, Store, StoreProvider, StoreSerializer, Stored};
 
 use super::{Token, TokenBuffer};
 
@@ -84,7 +82,7 @@ impl<I> StoreRef<I> {
     }
 
     /// Persist the storage to a backend
-    pub fn persist(&self) -> Result<(), PersistError> {
+    pub fn persist(&self) -> Result<(), ()> {
         self.inner.persist()
     }
 

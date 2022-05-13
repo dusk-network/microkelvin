@@ -312,8 +312,8 @@ impl Store for HostStore {
         TokenBuffer::new_uncommitted(token)
     }
 
-    fn persist(&self) -> Result<(), PersistError> {
-        self.inner.write().persist(&vec![])
+    fn persist(&self) -> Result<(), ()> {
+        self.inner.write().persist(&vec![]).map_err(|_| ())
     }
 
     fn commit(&self, buf: &mut TokenBuffer) -> Self::Identifier {
