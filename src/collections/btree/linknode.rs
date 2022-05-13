@@ -187,9 +187,88 @@ where
         };
         println!("remove entering {:?}", i);
 
-        let inner = self.0[i].inner_mut();
+        let remove = match self.0[i].inner_mut() {
+            BTreeMap(BTreeMapInner::LeafNode(le)) => le.remove(o),
+            BTreeMap(BTreeMapInner::LinkNode(li)) => li.remove(o),
+        };
 
-        inner.sub_remove(o)
+        // remove completed
+
+        match remove {
+            Remove::None => Remove::None,
+            Remove::Removed(v) => Remove::Removed(v),
+            Remove::Underflow(v) => {
+                println!("underflow in linknode \n{:?}", self);
+                let removed = self.0.remove(i).into_inner();
+                match removed {
+                    BTreeMap(BTreeMapInner::LeafNode(removed_leaves)) => {
+                        if let Some(BTreeMap(BTreeMapInner::LeafNode(
+                            sibling_leaves,
+                        ))) = self.0.get_mut(i).map(Link::inner_mut)
+                        {
+                            if let Some(split) =
+                                sibling_leaves.prepend(removed_leaves)
+                            {
+                                let link = Link::new(BTreeMap(
+                                    BTreeMapInner::LeafNode(split),
+                                ));
+
+                                self.0.push(link);
+                            }
+                        } else {
+                            // if no sibling to the right, look to the left
+                            if i > 0 {
+                                if let Some(BTreeMap(
+                                    BTreeMapInner::LeafNode(sibling_leaves),
+                                )) =
+                                    self.0.get_mut(i - 1).map(Link::inner_mut)
+                                {
+                                    if let Some(split) =
+                                        sibling_leaves.append(removed_leaves)
+                                    {
+                                        let link = Link::new(BTreeMap(
+                                            BTreeMapInner::LeafNode(split),
+                                        ));
+
+                                        self.0.push(link);
+                                    }
+                                }
+                            }
+                        }
+
+                        if self.underflow() {
+                            Remove::Underflow(v)
+                        } else {
+                            Remove::Removed(v)
+                        }
+                    }
+                    BTreeMap(BTreeMapInner::LinkNode(removed_links)) => {
+                        if let Some(BTreeMap(BTreeMapInner::LinkNode(
+                            sibling_links,
+                        ))) = self.0.get_mut(i).map(Link::inner_mut)
+                        {
+                            if let Some(split) =
+                                sibling_links.prepend(removed_links)
+                            {
+                                let link = Link::new(BTreeMap(
+                                    BTreeMapInner::LinkNode(split),
+                                ));
+
+                                self.0.push(link);
+                            }
+                        }
+
+                        if self.underflow() {
+                            Remove::Underflow(v)
+                        } else {
+                            Remove::Removed(v)
+                        }
+                    }
+                }
+            }
+        }
+
+        // inner.sub_remove(o)
     }
 
     pub(crate) fn insert_leaf(&mut self, k: K, v: V) -> Insert<V, Self>

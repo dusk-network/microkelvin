@@ -242,7 +242,7 @@ where
         O: Ord + Debug,
     {
         match &mut self.0 {
-            BTreeMapInner::LeafNode(leaves) => leaves.remove_leaf(o),
+            BTreeMapInner::LeafNode(leaves) => leaves.remove(o),
             BTreeMapInner::LinkNode(links) => links.remove(o),
         }
     }

@@ -185,7 +185,7 @@ where
         self.0.get(ofs)
     }
 
-    pub(crate) fn remove_leaf<O>(&mut self, o: &O) -> Remove<V>
+    pub(crate) fn remove<O>(&mut self, o: &O) -> Remove<V>
     where
         K: Borrow<O>,
         O: Ord + Debug,
