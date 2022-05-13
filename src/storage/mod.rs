@@ -27,6 +27,9 @@ pub use store_serializer::*;
 mod token_buffer;
 pub use token_buffer::*;
 
+mod error;
+pub use error::*;
+
 use crate::{
     Annotation, ArchivedCompound, Branch, Compound, MaybeArchived, Walker,
 };
