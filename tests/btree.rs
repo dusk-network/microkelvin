@@ -4,7 +4,7 @@ use microkelvin::{MaxKey, TreeViz};
 use rkyv::rend::LittleEndian;
 
 const S: u32 = N - 1;
-const N: u32 = 256;
+const N: u32 = 6;
 
 #[test]
 fn btree_add_remove_simple() {

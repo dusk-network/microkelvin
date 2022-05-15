@@ -16,13 +16,23 @@ use super::leafnode::LeafNode;
 use super::linknode::LinkNode;
 
 /// A BTree key-value pair
-#[derive(Archive, Clone, Serialize, Deserialize, Debug)]
+#[derive(Archive, Clone, Serialize, Deserialize)]
 #[archive_attr(derive(CheckBytes))]
 pub struct Pair<K, V> {
     /// The key of the key-value pair
     pub k: K,
     /// The value of the key-value pair
     pub v: V,
+}
+
+impl<K, V> Debug for Pair<K, V>
+where
+    K: Debug,
+    V: Debug,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}: {:?}", &self.k, &self.v)
+    }
 }
 
 impl<K, V> Keyed<K> for Pair<K, V> {
@@ -244,6 +254,18 @@ where
         match &mut self.0 {
             BTreeMapInner::LeafNode(leaves) => leaves.remove(o),
             BTreeMapInner::LinkNode(links) => links.remove(o),
+        }
+    }
+
+    pub(crate) fn prepend(&mut self, affix: Self) -> Result<(), ()> {
+        match (&mut self.0, &mut affix.0) {
+            (BTreeMapInner::LeafNode(a), BTreeMapInner::LeafNode(b)) => {
+                a.prepend(b)
+            }
+            (BTreeMapInner::LinkNode(a), BTreeMapInner::LinkNode(b)) => {
+                a.prepend(b)
+            }
+            _ => unreachable!(),
         }
     }
 

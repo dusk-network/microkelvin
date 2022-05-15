@@ -200,75 +200,30 @@ where
             Remove::Underflow(v) => {
                 println!("underflow in linknode \n{:?}", self);
                 let removed = self.0.remove(i).into_inner();
-                match removed {
-                    BTreeMap(BTreeMapInner::LeafNode(removed_leaves)) => {
-                        if let Some(BTreeMap(BTreeMapInner::LeafNode(
-                            sibling_leaves,
-                        ))) = self.0.get_mut(i).map(Link::inner_mut)
-                        {
-                            if let Some(split) =
-                                sibling_leaves.prepend(removed_leaves)
-                            {
-                                let link = Link::new(BTreeMap(
-                                    BTreeMapInner::LeafNode(split),
-                                ));
 
-                                self.0.push(link);
+                let links = &mut *self.0;
+
+                let (left, right) = links.split_at_mut(i);
+
+                let sibling_left = left.last_mut();
+                let sibling_right = right.first_mut();
+
+                match (sibling_left, sibling_right) {
+                    (None, None) => Remove::Underflow(v),
+                    (_, Some(right_link)) => {
+                        match right_link.inner_mut().prepend(removed) {
+                            Ok(()) => Remove::Removed(v),
+                            Err(rest) => {
+                                todo!()
                             }
-                        } else {
-                            // if no sibling to the right, look to the left
-                            if i > 0 {
-                                if let Some(BTreeMap(
-                                    BTreeMapInner::LeafNode(sibling_leaves),
-                                )) =
-                                    self.0.get_mut(i - 1).map(Link::inner_mut)
-                                {
-                                    if let Some(split) =
-                                        sibling_leaves.append(removed_leaves)
-                                    {
-                                        let link = Link::new(BTreeMap(
-                                            BTreeMapInner::LeafNode(split),
-                                        ));
-
-                                        self.0.push(link);
-                                    }
-                                }
-                            }
-                        }
-
-                        if self.underflow() {
-                            Remove::Underflow(v)
-                        } else {
-                            Remove::Removed(v)
                         }
                     }
-                    BTreeMap(BTreeMapInner::LinkNode(removed_links)) => {
-                        if let Some(BTreeMap(BTreeMapInner::LinkNode(
-                            sibling_links,
-                        ))) = self.0.get_mut(i).map(Link::inner_mut)
-                        {
-                            if let Some(split) =
-                                sibling_links.prepend(removed_links)
-                            {
-                                let link = Link::new(BTreeMap(
-                                    BTreeMapInner::LinkNode(split),
-                                ));
-
-                                self.0.push(link);
-                            }
-                        }
-
-                        if self.underflow() {
-                            Remove::Underflow(v)
-                        } else {
-                            Remove::Removed(v)
-                        }
+                    (Some(prev), None) => {
+                        todo!()
                     }
                 }
             }
         }
-
-        // inner.sub_remove(o)
     }
 
     pub(crate) fn insert_leaf(&mut self, k: K, v: V) -> Insert<V, Self>
@@ -347,7 +302,7 @@ where
         LinkNode(self.0.split_off(at))
     }
 
-    pub(crate) fn prepend(&mut self, mut other: Self) -> Option<Self> {
+    pub(crate) fn prepend(&mut self, other: &mut Self) -> Result<(), ()> {
         let cap = self.remaining_capacity();
         let needed = other.len();
 
@@ -358,7 +313,7 @@ where
         if cap >= needed {
             other.0.append(&mut self.0);
             *self = other;
-            None
+            Ok(())
         } else {
             // make room by splitting.
 

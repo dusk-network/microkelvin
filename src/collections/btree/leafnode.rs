@@ -106,48 +106,64 @@ where
         let cap = self.remaining_capacity();
         let needed = other.len();
 
-        // example
-
-        // self [2, 3, 4] prepended with [0, 1].
+        println!("leafnode: append\n{:?}\nto self \n{:?}", other, self);
 
         if cap >= needed {
             self.0.append(&mut other.0);
             None
         } else {
-            // make room by splitting.
+            //other.0.prepend(self);
 
-            println!("torka");
+            println!("{} {}\n{:?}\n{:?}", cap, needed, self, other);
 
-            let total_len = self.len() + other.len();
+            todo!();
 
-            let ideal_len = total_len / 2;
+            // // make room by splitting.
+            // println!("\n\n--torka");
 
-            let split_at = ideal_len - other.len();
+            // let total_len = self.len() + other.len();
+            // let ideal_len = total_len / 2;
 
-            let last = self.split_off(split_at);
+            // let self_len = self.len();
+            // let other_len = other.len();
 
-            //mem::swap(&mut last, self);
+            // dbg!(total_len, ideal_len, self_len, other_len);
 
-            debug_assert!(self.append(other).is_none());
+            // if self.len() >= ideal_len {
+            //     println!("skorgo");
 
-            println!("returning {:?}", last);
+            //     let split_at = ideal_len - other.len();
+            //     let last = self.split_off(split_at);
 
-            Some(last)
+            //     debug_assert!(self.append(other).is_none());
+
+            //     println!("self {:?}\nlast {:?}", self, last);
+
+            //     Some(last)
+            // } else {
+            //     println!("gorgo");
+
+            //     let split_at = other.len() - ideal_len;
+
+            //     let mut last = other.split_off(split_at);
+
+            //     dbg!(split_at, self, last);
+
+            //     todo!()
+
+            //     //Some(last)
+            // }
         }
     }
 
-    pub(crate) fn prepend(&mut self, mut other: Self) -> Option<Self> {
+    pub(crate) fn prepend(&mut self, other: &mut Self) -> Result<(), ()> {
         let cap = self.remaining_capacity();
         let needed = other.len();
 
-        // example
-
-        // self [2, 3, 4] prepended with [0, 1].
-
         if cap >= needed {
             other.0.append(&mut self.0);
-            *self = other;
-            None
+            mem::swap(other, self);
+            Ok(())
         } else {
             // make room by splitting.
 
