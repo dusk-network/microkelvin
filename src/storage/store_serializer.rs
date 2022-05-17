@@ -92,9 +92,10 @@ impl<I> Serializer for StoreSerializer<I> {
         loop {
             match self.buffer.write(bytes) {
                 Ok(ok) => return Ok(ok),
-                Err(bo) => {
-                    self.store.extend(&mut self.buffer, bo.size_needed).unwrap()
-                }
+                Err(buffer_overflow) => self
+                    .store
+                    .extend(&mut self.buffer, buffer_overflow.size_needed)
+                    .unwrap(),
             }
         }
     }

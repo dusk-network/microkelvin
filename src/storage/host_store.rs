@@ -18,7 +18,7 @@ use std::sync::Arc;
 
 use crate::Store;
 
-use super::{OffsetLen, Token, TokenBuffer, UncommittedPage};
+use super::{OffsetLen, Token, TokenBuffer};
 
 const PAGE_SIZE: usize = 1024 * 64;
 
@@ -190,28 +190,22 @@ impl PageStorage {
     fn commit(&mut self, buffer: &mut TokenBuffer) -> OffsetLen {
         let offset = self.offset();
         let written = buffer.pos();
-        buffer.uncommitted_page().add_written(written);
-        buffer.advance();
-        let uncommitted_len = buffer.uncommitted_len();
-        if uncommitted_len <= self.unwritten_tail().len() {
-            self.unwritten_tail()[..uncommitted_len].copy_from_slice(unsafe {
-                buffer.last_uncommitted_slice(uncommitted_len)
-            });
+        let written_slice = buffer.written_bytes();
+        if written <= self.unwritten_tail().len() {
+            self.unwritten_tail()[..written].copy_from_slice(written_slice);
             if let Some(top_page) = self.pages.last_mut() {
                 top_page.commit(written);
             }
         } else {
-            if uncommitted_len <= PAGE_SIZE {
-                self.pages.push(Page::create(
-                    buffer.uncommitted_page().written_slice(),
-                ));
+            if written <= PAGE_SIZE {
+                self.pages.push(Page::create(written_slice));
             } else {
-                self.persist(&buffer.uncommitted_pages())
+                self.persist(Some(written_slice))
                     .expect("Host store persistence");
             }
         }
-        buffer.reset_uncommitted();
-        OffsetLen::new(offset as u64, uncommitted_len as u32)
+        buffer.advance();
+        OffsetLen::new(offset as u64, written as u32)
     }
 
     fn extend(
@@ -219,9 +213,8 @@ impl PageStorage {
         buffer: &mut TokenBuffer,
         _by: usize,
     ) -> Result<(), ()> {
-        if buffer.pos() > 0 {
-            buffer.extend_uncommitted();
-        }
+        self.pages.push(Page::new());
+        buffer.remap(self.unwritten_tail());
         Ok(())
     }
 
@@ -231,7 +224,7 @@ impl PageStorage {
 
     fn persist(
         &mut self,
-        uncommitted_pages: &Vec<UncommittedPage>,
+        uncommitted_data: Option<&[u8]>,
     ) -> Result<(), std::io::Error> {
         fn write_pages(pages: &Vec<Page>, file: &mut File) -> io::Result<()> {
             for page in pages {
@@ -240,20 +233,20 @@ impl PageStorage {
             Ok(())
         }
         fn write_uncommitted_bytes(
-            pages: &Vec<UncommittedPage>,
+            data: &[u8],
             file: &mut File,
         ) -> io::Result<()> {
-            for p in pages {
-                file.write(p.written_slice())?;
-            }
+            file.write(data)?;
             Ok(())
         }
         let mmap_len = self.mmap_len() as u64;
-        if self.pages_data_len() > 0 || uncommitted_pages.len() > 0 {
+        if self.pages_data_len() > 0 || uncommitted_data.is_some() {
             if let Some(file) = &mut self.file {
                 file.seek(SeekFrom::Start(mmap_len))?;
                 write_pages(&self.pages, file)?;
-                write_uncommitted_bytes(uncommitted_pages, file)?;
+                if uncommitted_data.is_some() {
+                    write_uncommitted_bytes(uncommitted_data.unwrap(), file)?;
+                }
                 file.flush()?;
                 self.pages.clear();
                 self.mmap = Some(unsafe { Mmap::map(&*file)? })
@@ -263,10 +256,31 @@ impl PageStorage {
     }
 }
 
+const UNCOMMITTED_BUFFER_SIZE: usize = 1024 * 1024;
+
+#[derive(Debug)]
+pub struct UncommittedBuffer {
+    bytes: Box<[u8; UNCOMMITTED_BUFFER_SIZE]>,
+    written: usize,
+}
+
+impl UncommittedBuffer {
+    pub fn new() -> Self {
+        UncommittedBuffer {
+            bytes: Box::new([0u8; UNCOMMITTED_BUFFER_SIZE]),
+            written: 0,
+        }
+    }
+    pub fn unwritten_tail(&mut self) -> &mut [u8] {
+        &mut self.bytes[self.written..]
+    }
+}
+
 /// Store that utilises a reference-counted PageStorage
 #[derive(Clone)]
 pub struct HostStore {
     inner: Arc<RwLock<PageStorage>>,
+    uncomitted_buffer: Arc<RwLock<UncommittedBuffer>>,
 }
 
 impl HostStore {
@@ -274,6 +288,7 @@ impl HostStore {
     pub fn new() -> Self {
         HostStore {
             inner: Arc::new(RwLock::new(PageStorage::new())),
+            uncomitted_buffer: Arc::new(RwLock::new(UncommittedBuffer::new())),
         }
     }
 
@@ -281,6 +296,7 @@ impl HostStore {
     pub fn with_file<P: AsRef<Path>>(path: P) -> io::Result<Self> {
         Ok(HostStore {
             inner: Arc::new(RwLock::new(PageStorage::with_file(&path)?)),
+            uncomitted_buffer: Arc::new(RwLock::new(UncommittedBuffer::new())),
         })
     }
 }
@@ -308,7 +324,7 @@ impl Store for HostStore {
             }
         };
 
-        TokenBuffer::new_uncommitted(token)
+        TokenBuffer::new(token, self.uncomitted_buffer.write().unwritten_tail())
     }
 
     fn extend(&self, buffer: &mut TokenBuffer, by: usize) -> Result<(), ()> {
@@ -316,7 +332,7 @@ impl Store for HostStore {
     }
 
     fn persist(&self) -> Result<(), ()> {
-        self.inner.write().persist(&vec![]).map_err(|_| ())
+        self.inner.write().persist(None).map_err(|_| ())
     }
 
     fn commit(&self, buf: &mut TokenBuffer) -> Self::Identifier {
