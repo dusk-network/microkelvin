@@ -5,6 +5,7 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use core::marker::PhantomData;
+use std::ops::Deref;
 
 use alloc::vec::Vec;
 use bytecheck::CheckBytes;
@@ -16,7 +17,7 @@ use crate::storage::StoreRef;
 use crate::tower::{WellArchived, WellFormed};
 use crate::walk::{All, Discriminant, Step, Walkable, Walker};
 use crate::wrappers::{MaybeArchived, MaybeStored};
-use crate::{ARef, Annotation};
+use crate::{ARef, Annotation, Fundamental};
 
 pub struct Level<'a, C, A>
 where
@@ -549,5 +550,21 @@ where
         let leaf: MaybeArchived<'a, C::Leaf> =
             unsafe { core::mem::transmute(leaf) };
         (self.closure)(leaf)
+    }
+}
+
+impl<'a, C, A> Deref for Branch<'a, C, A>
+where
+    C: Compound<A> + WellFormed,
+    C::Leaf: Fundamental,
+    <C as Archive>::Archived: ArchivedCompound<C, A> + WellArchived<C>,
+{
+    type Target = C::Leaf;
+
+    fn deref(&self) -> &Self::Target {
+        match self.leaf() {
+            MaybeArchived::Memory(m) => &m,
+            MaybeArchived::Archived(a) => &a,
+        }
     }
 }

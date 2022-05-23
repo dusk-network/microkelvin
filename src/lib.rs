@@ -28,9 +28,6 @@ mod viz;
 mod walk;
 mod wrappers;
 
-/// Collections implemented using microkelvin
-pub mod collections;
-
 pub use annotations::{
     ARef, Annotation, Cardinality, Combine, FindMaxKey, Keyed, MaxKey, Member,
     Nth,
