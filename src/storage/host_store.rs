@@ -33,8 +33,8 @@ pub struct OffsetLen(LittleEndian<u64>, LittleEndian<u16>);
 const OFSLEN_SIZE: usize =
     core::mem::size_of::<<OffsetLen as Archive>::Archived>();
 
-impl From<Identifier> for OffsetLen {
-    fn from(id: Identifier) -> Self {
+impl From<&Identifier> for OffsetLen {
+    fn from(id: &Identifier) -> Self {
         debug_assert!(id.len() >= OFSLEN_SIZE);
         // Safe, since all possible values of integers are valid
         unsafe { archived_root::<OffsetLen>(&id[0..OFSLEN_SIZE]).clone() }
@@ -43,10 +43,10 @@ impl From<Identifier> for OffsetLen {
 
 impl Into<Identifier> for OffsetLen {
     fn into(self) -> Identifier {
-        let mut id = Identifier::default();
-        let mut ser = BufferSerializer::new(&mut id[0..OFSLEN_SIZE]);
+        let mut buf = [0u8; OFSLEN_SIZE];
+        let mut ser = BufferSerializer::new(&mut buf[..]);
         ser.serialize_value(&self).expect("Infallible");
-        id
+        Identifier(Box::new(buf))
     }
 }
 
@@ -269,7 +269,7 @@ impl Store for HostStore {
     fn get<'a>(&'a self, id: &Identifier) -> &'a [u8] {
         let guard = self.inner.read();
 
-        let ofslen = (*id).into();
+        let ofslen = (id).into();
 
         let bytes = guard.get(&ofslen);
 

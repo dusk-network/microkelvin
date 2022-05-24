@@ -180,7 +180,7 @@ impl<C, A> Link<C, A> {
         match self {
             Link::Memory { rc, .. } => match Rc::try_unwrap(rc) {
                 Ok(c) => c,
-                Err(rc) => (&*rc).clone(),
+                Err(rc) => (*rc).clone(),
             },
             Link::Stored { stored, .. } => {
                 let inner: &C::Archived = stored.inner();
@@ -193,7 +193,7 @@ impl<C, A> Link<C, A> {
     }
 
     /// Returns a reference to the inner node, possibly in its stored form
-    pub fn inner<'a>(&'a self) -> MaybeStored<'a, C>
+    pub fn inner(&self) -> MaybeStored<C>
     where
         C: Archive,
     {

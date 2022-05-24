@@ -53,8 +53,6 @@ impl<T> Clone for Ident<T> {
     }
 }
 
-impl<T> Copy for Ident<T> {}
-
 impl<T> Ident<T> {
     /// Creates a typed identifier
     pub fn new(id: Identifier) -> Self {
@@ -132,11 +130,19 @@ pub trait StoreProvider: Sized + Fallible {
     fn store(&self) -> &StoreRef;
 }
 
-#[derive(
-    Copy, Clone, Archive, Serialize, Deserialize, CheckBytes, Debug, Default,
-)]
-#[archive(as = "Self")]
-pub struct Identifier([u8; 32]);
+#[derive(Clone, Archive, Serialize, Deserialize, Debug, Default)]
+pub struct Identifier(Box<[u8]>);
+
+impl<C> CheckBytes<C> for Identifier {
+    type Error = core::convert::Infallible;
+
+    unsafe fn check_bytes<'a>(
+        value: *const Self,
+        _: &mut C,
+    ) -> Result<&'a Self, Self::Error> {
+        Ok(&*value)
+    }
+}
 
 impl Deref for Identifier {
     type Target = [u8];
