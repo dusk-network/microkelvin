@@ -120,3 +120,24 @@ fn many_raw_persist_and_restore() -> Result<(), io::Error> {
 
     Ok(())
 }
+#[test]
+fn crossing_page_boundary_items_persist_and_restore() -> Result<(), io::Error> {
+    const SZ: usize = 32769; // size is more than half of the page size
+    let (item1, item2) = ([1u8; SZ], [2u8; SZ]);
+    use tempfile::tempdir;
+    let dir = tempdir()?;
+    let host_store = StoreRef::new(HostStore::with_file(dir.path())?);
+    let ident1 = host_store.put(&item1);
+    let ident2 = host_store.put(&item2);
+    host_store.persist().unwrap();
+    let host_store_restored = StoreRef::new(HostStore::with_file(dir.path())?);
+    let restored1 = host_store_restored.get::<[u8; SZ]>(&ident1);
+    let restored2 = host_store_restored.get::<[u8; SZ]>(&ident2);
+    for b in restored1.into_iter() {
+        assert_eq!(*b, 1u8)
+    }
+    for b in restored2.into_iter() {
+        assert_eq!(*b, 2u8)
+    }
+    Ok(())
+}
