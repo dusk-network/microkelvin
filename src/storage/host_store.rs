@@ -131,7 +131,7 @@ impl PageStorage {
         let (ofs, len) = (u64::from(ofs) as usize, u16::from(len) as usize);
 
         let slice = match &self.mmap {
-            Some(mmap) if ofs <= mmap.len() - len => &mmap[ofs..][..len],
+            Some(mmap) if (ofs + len) <= mmap.len() => &mmap[ofs..][..len],
             _ => {
                 let pages_ofs = ofs - self.mmap_len();
                 let cur_page_ofs = pages_ofs % PAGE_SIZE;
@@ -169,8 +169,12 @@ impl PageStorage {
 
     fn persist(&mut self) -> Result<(), std::io::Error> {
         fn write_pages(pages: &Vec<Page>, file: &mut File) -> io::Result<()> {
-            for page in pages {
-                file.write(&page.bytes[..page.written])?;
+            for (i, page) in pages.iter().enumerate() {
+                if i < (pages.len() - 1) {
+                    file.write(page.bytes.as_slice())?;
+                } else {
+                    file.write(&page.bytes[..page.written])?;
+                }
             }
             file.flush()
         }
@@ -221,7 +225,7 @@ impl Store for HostStore {
     }
 
     fn request_buffer(&self) -> TokenBuffer {
-        // loop waiting to aquire write token
+        // loop waiting to acquire write token
         let mut guard = self.inner.write();
 
         let token = loop {
@@ -236,16 +240,16 @@ impl Store for HostStore {
         TokenBuffer::new(token, bytes)
     }
 
-    fn extend(&self, buffer: &mut TokenBuffer) -> Result<(), ()> {
-        self.inner.write().extend(buffer)
-    }
-
     fn persist(&self) -> Result<(), ()> {
         self.inner.write().persist().map_err(|_| ())
     }
 
     fn commit(&self, buf: &mut TokenBuffer) -> Self::Identifier {
         self.inner.write().commit(buf)
+    }
+
+    fn extend(&self, buffer: &mut TokenBuffer) -> Result<(), ()> {
+        self.inner.write().extend(buffer)
     }
 
     fn return_token(&self, token: Token) {
