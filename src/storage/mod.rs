@@ -189,7 +189,7 @@ pub trait Store {
     fn commit(&self, buffer: &mut TokenBuffer) -> Self::Identifier;
 
     /// Request additional bytes for writing    
-    fn extend(&self, buffer: &mut TokenBuffer) -> Result<(), ()>;
+    fn extend(&self, buffer: &mut TokenBuffer, by: usize) -> Result<(), ()>;
 
     /// Return the token to the store
     fn return_token(&self, token: Token);
