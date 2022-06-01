@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Test and fix for objects crossing page boundary
 - Add test directory `wasm_tests`
 - Add Default for Link,
 
