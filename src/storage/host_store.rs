@@ -208,11 +208,7 @@ impl PageStorage {
         OffsetLen::new(offset as u64, written as u32)
     }
 
-    fn extend(
-        &mut self,
-        buffer: &mut TokenBuffer,
-        _by: usize,
-    ) -> Result<(), ()> {
+    fn extend(&mut self, buffer: &mut TokenBuffer) -> Result<(), ()> {
         self.pages.push(Page::new());
         buffer.remap(self.unwritten_tail());
         Ok(())
@@ -327,9 +323,6 @@ impl Store for HostStore {
         TokenBuffer::new(token, self.uncomitted_buffer.write().unwritten_tail())
     }
 
-    fn extend(&self, buffer: &mut TokenBuffer, by: usize) -> Result<(), ()> {
-        self.inner.write().extend(buffer, by)
-    }
 
     fn persist(&self) -> Result<(), ()> {
         self.inner.write().persist(None).map_err(|_| ())
@@ -339,6 +332,9 @@ impl Store for HostStore {
         self.inner.write().commit(buf)
     }
 
+    fn extend(&self, buffer: &mut TokenBuffer) -> Result<(), ()> {
+        self.inner.write().extend(buffer)
+    }
     fn return_token(&self, token: Token) {
         self.inner.write().return_token(token)
     }

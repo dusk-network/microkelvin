@@ -122,15 +122,8 @@ impl TokenBuffer {
     }
 }
 
-pub struct BufferOverflow {
-    pub size_needed: usize,
-}
+pub struct BufferOverflow;
 
-impl BufferOverflow {
-    pub fn new(size_needed: usize) -> Self {
-        BufferOverflow { size_needed }
-    }
-}
 
 impl Serializer for TokenBuffer {
     fn pos(&self) -> usize {
@@ -145,7 +138,7 @@ impl Serializer for TokenBuffer {
             self.written += bytes_length;
             Ok(())
         } else {
-            Err(BufferOverflow::new(bytes_length))
+            Err(BufferOverflow)
         }
     }
 }
