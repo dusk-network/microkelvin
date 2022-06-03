@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Change `memmap 0.7.0` dependency to `memmap2 0.5.3`
 - Change CI to use `make test` instead of `cargo test`
 - Change name of feature `persistance` to the correctly spelled `persistence`
 - Change `compound` and `compound_mut` on Link to `inner` and `inner_mut`
