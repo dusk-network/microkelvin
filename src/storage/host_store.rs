@@ -6,7 +6,7 @@
 
 use core::convert::Infallible;
 
-use memmap::Mmap;
+use memmap2::Mmap;
 use parking_lot::RwLock;
 use rkyv::Fallible;
 
@@ -183,7 +183,7 @@ impl PageStorage {
                 write_pages(&self.pages, file)?;
                 self.pages.clear();
                 if self.mmap.is_none() {
-                    self.mmap = Some(unsafe { Mmap::map(&file)? })
+                    self.mmap = Some(unsafe { Mmap::map(&*file)? })
                 }
             }
         }
