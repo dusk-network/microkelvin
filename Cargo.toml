@@ -11,7 +11,7 @@ readme = "README.md"
 [dependencies]
 rend = { version = "0.3.6", default_features = false }
 parking_lot = { version = "0.11.2", optional = true }
-rkyv = { version = "0.7.29", default_features = false, features = ["size_32", "archive_le", "validation"] }
+rkyv = { version = "0.7.29", default_features = false, features = ["size_32", "validation"] }
 memmap2 = { version = "0.5.3", optional = true }
 bytecheck = { version = "0.6.7", default_features = false }
 
