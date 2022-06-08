@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.10.0] - 2021-07-26
 
+### Removed
+
+- Remove rkyv dependency archive_le feature
+
 ### Added
 
 - Test and fix for objects crossing page boundary
