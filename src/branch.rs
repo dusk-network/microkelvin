@@ -4,89 +4,76 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use core::ops::Deref;
+use crate::compound::{Child, Compound};
+use crate::walk::{AllLeaves, Step, Walk, Walker};
 
+use alloc::boxed::Box;
 use alloc::vec::Vec;
 
-use canonical::{Canon, CanonError};
+use core::ops::Deref;
 
-use crate::annotations::Annotation;
-use crate::compound::{Child, Compound};
-use crate::link::LinkCompound;
-use crate::walk::{AllLeaves, Step, Walk, Walker};
+use ranno::{Annotated, Annotation};
 
 #[derive(Debug)]
 enum LevelNode<'a, C, A> {
     Root(&'a C),
-    Val(LinkCompound<'a, C, A>),
+    Val(&'a Annotated<Box<C>, A>),
 }
 
 #[derive(Debug)]
 pub struct Level<'a, C, A> {
-    offset: usize,
+    index: usize,
     node: LevelNode<'a, C, A>,
 }
 
-impl<'a, C, A> Deref for Level<'a, C, A>
-where
-    C: Compound<A>,
-    A: Canon,
-{
+impl<'a, C, A> Deref for Level<'a, C, A> {
     type Target = C;
 
     fn deref(&self) -> &Self::Target {
-        &*self.node
+        &self.node
     }
 }
 
 impl<'a, C, A> Level<'a, C, A> {
     pub fn new_root(root: &'a C) -> Level<'a, C, A> {
         Level {
-            offset: 0,
+            index: 0,
             node: LevelNode::Root(root),
         }
     }
 
-    pub fn new_val(link_compound: LinkCompound<'a, C, A>) -> Level<'a, C, A> {
+    pub fn new_val(annotated: &'a Annotated<Box<C>, A>) -> Level<'a, C, A> {
         Level {
-            offset: 0,
-            node: LevelNode::Val(link_compound),
+            index: 0,
+            node: LevelNode::Val(annotated),
         }
     }
 
-    /// Returns the offset of the branch level
-    pub fn offset(&self) -> usize {
-        self.offset
+    /// Returns the index of the branch level
+    pub fn index(&self) -> usize {
+        self.index
     }
 
-    fn offset_mut(&mut self) -> &mut usize {
-        &mut self.offset
+    fn index_mut(&mut self) -> &mut usize {
+        &mut self.index
     }
 }
 
 #[derive(Debug)]
 pub struct PartialBranch<'a, C, A>(Vec<Level<'a, C, A>>);
 
-impl<'a, C, A> Deref for LevelNode<'a, C, A>
-where
-    C: Compound<A>,
-    A: Canon,
-{
+impl<'a, C, A> Deref for LevelNode<'a, C, A> {
     type Target = C;
 
     fn deref(&self) -> &Self::Target {
         match self {
             LevelNode::Root(target) => target,
-            LevelNode::Val(val) => &**val,
+            LevelNode::Val(val) => val.child(),
         }
     }
 }
 
-impl<'a, C, A> PartialBranch<'a, C, A>
-where
-    C: Compound<A>,
-    A: Canon,
-{
+impl<'a, C, A> PartialBranch<'a, C, A> {
     fn new(root: &'a C) -> Self {
         PartialBranch(vec![Level::new_root(root)])
     }
@@ -99,16 +86,6 @@ where
         &self.0
     }
 
-    fn leaf(&self) -> Option<&C::Leaf> {
-        let top = self.top();
-        let ofs = top.offset();
-
-        match (**top).child(ofs) {
-            Child::Leaf(l) => Some(l),
-            _ => None,
-        }
-    }
-
     fn top(&self) -> &Level<C, A> {
         self.0.last().expect("Never empty")
     }
@@ -118,7 +95,7 @@ where
     }
 
     fn advance(&mut self) {
-        *self.top_mut().offset_mut() += 1;
+        *self.top_mut().index_mut() += 1;
     }
 
     fn pop(&mut self) -> Option<Level<'a, C, A>> {
@@ -129,8 +106,23 @@ where
             None
         }
     }
+}
 
-    fn walk<W>(&mut self, walker: &mut W) -> Result<Option<()>, CanonError>
+impl<'a, C, A> PartialBranch<'a, C, A>
+where
+    C: Compound<A>,
+{
+    fn leaf(&self) -> Option<&C::Leaf> {
+        let top = self.top();
+        let index = top.index();
+
+        match (**top).child(index) {
+            Child::Leaf(l) => Some(l),
+            _ => None,
+        }
+    }
+
+    fn walk<W>(&mut self, walker: &mut W) -> Option<()>
     where
         W: Walker<C, A>,
     {
@@ -149,31 +141,32 @@ where
                     Some(_) => {
                         self.advance();
                     }
-                    None => return Ok(None),
+                    None => return None,
                 },
             }
 
             let top = self.top_mut();
-            let step = walker.walk(Walk::new(&**top, top.offset()));
+            let step = walker.walk(Walk::new(&**top, top.index()));
 
             match step {
-                Step::Found(walk_ofs) => {
-                    *top.offset_mut() += walk_ofs;
-                    return Ok(Some(()));
+                Step::Found(walk_index) => {
+                    *top.index_mut() += walk_index;
+                    return Some(());
                 }
-                Step::Into(walk_ofs) => {
-                    *top.offset_mut() += walk_ofs;
-                    let ofs = top.offset();
-                    let top_child = top.child(ofs);
+                Step::Into(walk_index) => {
+                    *top.index_mut() += walk_index;
+                    let index = top.index();
+                    let top_child = top.child(index);
                     if let Child::Node(n) = top_child {
-                        let level: Level<'_, C, A> = Level::new_val(n.inner()?);
+                        let level: Level<'_, C, A> = Level::new_val(n);
+
                         // Extend the lifetime of the Level.
                         //
                         // JUSTIFICATION
                         //
                         // The `Vec<Level<'a, C, A>>` used here cannot be
                         // expressed in safe rust, since it relies on the
-                        // elements of the `Vec` refering to prior elements in
+                        // elements of the `Vec` referring to prior elements in
                         // the same `Vec`.
                         //
                         // This vec from the start contains one single `Level`
@@ -204,7 +197,6 @@ where
                         // the meantime, thus invalidating the pointers is
                         // not possible, and this extension of the lifetime of
                         // the level is safe.
-
                         let extended: Level<'a, C, A> =
                             unsafe { core::mem::transmute(level) };
                         state = State::Push(extended);
@@ -214,18 +206,14 @@ where
                 }
                 Step::Advance => state = State::Pop,
                 Step::Abort => {
-                    return Ok(None);
+                    return None;
                 }
             }
         }
     }
 }
 
-impl<'a, C, A> Branch<'a, C, A>
-where
-    C: Compound<A>,
-    A: Canon,
-{
+impl<'a, C, A> Branch<'a, C, A> {
     /// Returns the depth of the branch
     pub fn depth(&self) -> usize {
         self.0.depth()
@@ -235,7 +223,12 @@ where
     pub fn levels(&self) -> &[Level<C, A>] {
         self.0.levels()
     }
+}
 
+impl<'a, C, A> Branch<'a, C, A>
+where
+    C: Compound<A>,
+{
     /// Returns a branch that maps the leaf to a specific value.
     /// Used in maps for example, to get easy access to the value of the KV-pair
     pub fn map_leaf<M>(
@@ -250,21 +243,18 @@ where
 
     /// Performs a tree walk, returning either a valid branch or None if the
     /// walk failed.
-    pub fn walk<W>(
-        root: &'a C,
-        mut walker: W,
-    ) -> Result<Option<Self>, CanonError>
+    pub fn walk<W>(root: &'a C, mut walker: W) -> Option<Self>
     where
         W: Walker<C, A>,
     {
         let mut partial = PartialBranch::new(root);
-        Ok(partial.walk(&mut walker)?.map(|()| Branch(partial)))
+        partial.walk(&mut walker).map(|()| Branch(partial))
     }
 }
 
-/// Reprents an immutable branch view into a collection.
+/// Represents an immutable branch view into a collection.
 ///
-/// Branche are always guaranteed to point at a leaf, and can be dereferenced
+/// Branches are always guaranteed to point at a leaf, and can be de-referenced
 /// to the pointed-at leaf.
 #[derive(Debug)]
 pub struct Branch<'a, C, A>(PartialBranch<'a, C, A>);
@@ -272,7 +262,6 @@ pub struct Branch<'a, C, A>(PartialBranch<'a, C, A>);
 impl<'a, C, A> Deref for Branch<'a, C, A>
 where
     C: Compound<A>,
-    A: Canon,
 {
     type Target = C::Leaf;
 
@@ -293,12 +282,11 @@ impl<'a, C, A, M> Deref for MappedBranch<'a, C, A, M>
 where
     C: Compound<A>,
     C::Leaf: 'a,
-    A: Canon,
 {
     type Target = M;
 
     fn deref(&self) -> &M {
-        (self.closure)(&*self.inner)
+        (self.closure)(&self.inner)
     }
 }
 
@@ -312,9 +300,8 @@ pub enum BranchIterator<'a, C, A, W> {
 impl<'a, C, A> IntoIterator for Branch<'a, C, A>
 where
     C: Compound<A>,
-    A: Canon,
 {
-    type Item = Result<&'a C::Leaf, CanonError>;
+    type Item = &'a C::Leaf;
 
     type IntoIter = BranchIterator<'a, C, A, AllLeaves>;
 
@@ -327,9 +314,8 @@ impl<'a, C, A, W> Iterator for BranchIterator<'a, C, A, W>
 where
     C: Compound<A>,
     W: Walker<C, A>,
-    A: Canon,
 {
-    type Item = Result<&'a C::Leaf, CanonError>;
+    type Item = &'a C::Leaf;
 
     fn next(&mut self) -> Option<Self::Item> {
         match core::mem::replace(self, BranchIterator::Exhausted) {
@@ -338,17 +324,14 @@ where
             }
             BranchIterator::Intermediate(mut branch, mut walker) => {
                 branch.0.advance();
-                // access partialbranch
+                // access partial branch
                 match branch.0.walk(&mut walker) {
-                    Ok(None) => {
+                    None => {
                         *self = BranchIterator::Exhausted;
                         return None;
                     }
-                    Ok(Some(..)) => {
+                    Some(..) => {
                         *self = BranchIterator::Intermediate(branch, walker);
-                    }
-                    Err(e) => {
-                        return Some(Err(e));
                     }
                 }
             }
@@ -362,7 +345,7 @@ where
                 let leaf: &C::Leaf = &*branch;
                 let leaf_extended: &'a C::Leaf =
                     unsafe { core::mem::transmute(leaf) };
-                Some(Ok(leaf_extended))
+                Some(leaf_extended)
             }
             _ => unreachable!(),
         }
@@ -372,7 +355,7 @@ where
 pub enum MappedBranchIterator<'a, C, A, W, M>
 where
     C: Compound<A>,
-    A: Annotation<C::Leaf>,
+    A: Annotation<C>,
 {
     Initial(MappedBranch<'a, C, A, M>, W),
     Intermediate(MappedBranch<'a, C, A, M>, W),
@@ -382,10 +365,10 @@ where
 impl<'a, C, A, M> IntoIterator for MappedBranch<'a, C, A, M>
 where
     C: Compound<A>,
-    A: Annotation<C::Leaf>,
+    A: Annotation<C>,
     M: 'a,
 {
-    type Item = Result<&'a M, CanonError>;
+    type Item = &'a M;
 
     type IntoIter = MappedBranchIterator<'a, C, A, AllLeaves, M>;
 
@@ -397,11 +380,11 @@ where
 impl<'a, C, A, W, M> Iterator for MappedBranchIterator<'a, C, A, W, M>
 where
     C: Compound<A>,
-    A: Annotation<C::Leaf>,
+    A: Annotation<C>,
     W: Walker<C, A>,
     M: 'a,
 {
-    type Item = Result<&'a M, CanonError>;
+    type Item = &'a M;
 
     fn next(&mut self) -> Option<Self::Item> {
         match core::mem::replace(self, Self::Exhausted) {
@@ -410,17 +393,14 @@ where
             }
             Self::Intermediate(mut branch, mut walker) => {
                 branch.inner.0.advance();
-                // access partialbranch
+                // access partial branch
                 match branch.inner.0.walk(&mut walker) {
-                    Ok(None) => {
+                    None => {
                         *self = Self::Exhausted;
                         return None;
                     }
-                    Ok(Some(..)) => {
+                    Some(..) => {
                         *self = Self::Intermediate(branch, walker);
-                    }
-                    Err(e) => {
-                        return Some(Err(e));
                     }
                 }
             }
@@ -434,7 +414,7 @@ where
                 let leaf: &M = &*branch;
                 let leaf_extended: &'a M =
                     unsafe { core::mem::transmute(leaf) };
-                Some(Ok(leaf_extended))
+                Some(leaf_extended)
             }
             _ => unreachable!(),
         }
