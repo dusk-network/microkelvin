@@ -4,25 +4,52 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use canonical::{Canon, CanonError};
-use canonical_derive::Canon;
+use microkelvin::{Child, ChildMut, Compound, First, MutableLeaves};
+use ranno::{Annotated, Annotation};
 
-use microkelvin::{
-    Annotation, Child, ChildMut, Compound, First, Link, MutableLeaves,
-};
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+struct Cardinality(usize);
 
-#[derive(Clone, Debug, Canon)]
+impl From<usize> for Cardinality {
+    fn from(c: usize) -> Self {
+        Self(c)
+    }
+}
+
+impl From<Cardinality> for usize {
+    fn from(c: Cardinality) -> Self {
+        c.0
+    }
+}
+
+impl<T> Annotation<LinkedList<T, Cardinality>> for Cardinality {
+    fn from_child(t: &LinkedList<T, Cardinality>) -> Self {
+        match t {
+            LinkedList::Empty => 0.into(),
+            LinkedList::Node { next, .. } => Cardinality(next.anno().0 + 1),
+        }
+    }
+}
+
+impl<T> Annotation<LinkedList<T, ()>> for () {
+    fn from_child(_: &LinkedList<T, ()>) -> Self {}
+}
+
+#[derive(Clone, Debug)]
 pub enum LinkedList<T, A>
 where
-    A: Annotation<T>,
+    A: Annotation<Self>,
 {
     Empty,
-    Node { val: T, next: Link<Self, A> },
+    Node {
+        val: T,
+        next: Annotated<Box<Self>, A>,
+    },
 }
 
 impl<T, A> Default for LinkedList<T, A>
 where
-    A: Annotation<T>,
+    A: Annotation<Self>,
 {
     fn default() -> Self {
         LinkedList::Empty
@@ -31,16 +58,12 @@ where
 
 impl<T, A> Compound<A> for LinkedList<T, A>
 where
-    A: Annotation<T>,
-    T: Canon,
+    A: Annotation<Self>,
 {
     type Leaf = T;
 
-    fn child(&self, ofs: usize) -> Child<Self, A>
-    where
-        A: Annotation<Self::Leaf>,
-    {
-        match (self, ofs) {
+    fn child(&self, index: usize) -> Child<Self, A> {
+        match (self, index) {
             (LinkedList::Node { val, .. }, 0) => Child::Leaf(val),
             (LinkedList::Node { next, .. }, 1) => Child::Node(next),
             (LinkedList::Node { .. }, _) => Child::EndOfNode,
@@ -48,11 +71,8 @@ where
         }
     }
 
-    fn child_mut(&mut self, ofs: usize) -> ChildMut<Self, A>
-    where
-        A: Annotation<Self::Leaf>,
-    {
-        match (self, ofs) {
+    fn child_mut(&mut self, index: usize) -> ChildMut<Self, A> {
+        match (self, index) {
             (LinkedList::Node { val, .. }, 0) => ChildMut::Leaf(val),
             (LinkedList::Node { next, .. }, 1) => ChildMut::Node(next),
             (LinkedList::Node { .. }, _) => ChildMut::EndOfNode,
@@ -61,12 +81,11 @@ where
     }
 }
 
-impl<T, A> MutableLeaves for LinkedList<T, A> where A: Annotation<T> {}
+impl<T, A> MutableLeaves for LinkedList<T, A> where A: Annotation<Self> {}
 
 impl<T, A> LinkedList<T, A>
 where
-    A: Annotation<T>,
-    T: Canon,
+    A: Annotation<Self>,
 {
     pub fn new() -> Self {
         Default::default()
@@ -77,28 +96,25 @@ where
             LinkedList::Empty => {
                 *self = LinkedList::Node {
                     val: t,
-                    next: Link::new(LinkedList::<T, A>::Empty),
+                    next: Annotated::new(Box::new(LinkedList::Empty)),
                 }
             }
             old @ LinkedList::Node { .. } => {
                 *self = LinkedList::Node {
                     val: t,
-                    next: Link::new(old),
+                    next: Annotated::new(Box::new(old)),
                 };
             }
         }
     }
 
-    pub fn pop(&mut self) -> Result<Option<T>, CanonError>
-    where
-        T: Canon,
-        A: Canon,
-    {
+    pub fn pop(&mut self) -> Option<T> {
         match core::mem::take(self) {
-            LinkedList::Empty => Ok(None),
+            LinkedList::Empty => None,
             LinkedList::Node { val: t, next } => {
-                *self = next.into_compound()?;
-                Ok(Some(t))
+                let (mut next, _) = next.split();
+                core::mem::swap(self, &mut next);
+                Some(t)
             }
         }
     }
@@ -119,8 +135,6 @@ fn push() {
 fn push_cardinality() {
     let n: u64 = 1024;
 
-    use microkelvin::Cardinality;
-
     let mut list = LinkedList::<_, Cardinality>::new();
 
     for i in 0..n {
@@ -129,155 +143,7 @@ fn push_cardinality() {
 }
 
 #[test]
-fn push_nth() -> Result<(), CanonError> {
-    let n: u64 = 1024;
-
-    use microkelvin::{Cardinality, Nth};
-
-    let mut list = LinkedList::<_, Cardinality>::new();
-
-    for i in 0..n {
-        list.push(i)
-    }
-
-    for i in 0..n {
-        assert_eq!(*list.nth(i)?.expect("Some(branch)"), n - i - 1)
-    }
-
-    Ok(())
-}
-
-#[test]
-fn push_pop() -> Result<(), CanonError> {
-    let n: u64 = 1024;
-
-    let mut list = LinkedList::<_, ()>::new();
-
-    for i in 0..n {
-        list.push(i)
-    }
-
-    for i in 0..n {
-        assert_eq!(list.pop()?, Some(n - i - 1))
-    }
-
-    Ok(())
-}
-
-#[test]
-fn push_mut() -> Result<(), CanonError> {
-    let n: u64 = 1024;
-
-    use microkelvin::{Cardinality, Nth};
-
-    let mut list = LinkedList::<_, Cardinality>::new();
-
-    for i in 0..n {
-        list.push(i)
-    }
-
-    for i in 0..n {
-        *list.nth_mut(i)?.expect("Some(branch)") += 1
-    }
-
-    for i in 0..n {
-        assert_eq!(*list.nth(i)?.expect("Some(branch)"), n - i)
-    }
-
-    Ok(())
-}
-
-#[test]
-fn iterate_immutable() -> Result<(), CanonError> {
-    let n: u64 = 16;
-
-    use microkelvin::{Cardinality, Nth};
-
-    let mut list = LinkedList::<_, Cardinality>::new();
-
-    for i in 0..n {
-        list.push(i)
-    }
-
-    // branch from first element
-    let branch = list.first()?.expect("Some(branch)");
-
-    let mut count = n;
-
-    for res_leaf in branch {
-        let leaf = res_leaf?;
-
-        count -= 1;
-
-        assert_eq!(*leaf, count);
-    }
-
-    // branch from 7th element
-    let branch = list.nth(6)?.expect("Some(branch)");
-
-    let mut count = n - 6;
-
-    for res_leaf in branch {
-        let leaf = res_leaf?;
-
-        count -= 1;
-
-        assert_eq!(*leaf, count);
-    }
-
-    Ok(())
-}
-
-#[test]
-fn iterate_mutable() -> Result<(), CanonError> {
-    let n: u64 = 32;
-
-    use microkelvin::{Cardinality, Nth};
-
-    let mut list = LinkedList::<_, Cardinality>::new();
-
-    for i in 0..n {
-        list.push(i)
-    }
-
-    // branch from first element
-    let branch_mut = list.first_mut()?.expect("Some(branch_mut)");
-
-    let mut count = n;
-
-    for res_leaf in branch_mut {
-        *res_leaf? += 1;
-    }
-
-    // branch from first element
-    let branch = list.first()?.expect("Some(brach)");
-
-    for res_leaf in branch {
-        let leaf = res_leaf?;
-
-        assert_eq!(*leaf, count);
-
-        count -= 1;
-    }
-
-    // branch from 8th element
-    let branch = list.nth(7)?.expect("Some(branch)");
-
-    let mut count = n - 7;
-
-    for res_leaf in branch {
-        let leaf = res_leaf?;
-
-        assert_eq!(*leaf, count);
-
-        count -= 1;
-    }
-
-    Ok(())
-}
-
-#[test]
-fn iterate_map() -> Result<(), CanonError> {
+fn iterate_map() {
     let n: u64 = 32;
 
     let mut list = LinkedList::<_, ()>::new();
@@ -287,24 +153,20 @@ fn iterate_map() -> Result<(), CanonError> {
     }
 
     // branch from first element
-    let branch_mut = list.first()?.expect("Some(brach_mut)");
+    let branch_mut = list.first().expect("Some(brach_mut)");
     let mapped = branch_mut.map_leaf(|x| x);
 
     let mut count = n - 1;
 
     for leaf in mapped {
-        let leaf = leaf?;
-
         assert_eq!(*leaf, count);
 
         count = count.saturating_sub(1);
     }
-
-    Ok(())
 }
 
 #[test]
-fn iterate_map_mutable() -> Result<(), CanonError> {
+fn iterate_map_mutable() {
     let n: u64 = 32;
 
     let mut list = LinkedList::<_, ()>::new();
@@ -314,24 +176,20 @@ fn iterate_map_mutable() -> Result<(), CanonError> {
     }
 
     // branch from first element
-    let branch_mut = list.first_mut()?.expect("Some(branch_mut)");
+    let branch_mut = list.first_mut().expect("Some(branch_mut)");
     let mapped = branch_mut.map_leaf(|x| x);
 
     let mut count = n - 1;
 
     for leaf in mapped {
-        let leaf = leaf?;
-
         assert_eq!(*leaf, count);
 
         count = count.saturating_sub(1);
     }
-
-    Ok(())
 }
 
 #[test]
-fn deref_mapped_mutable_branch() -> Result<(), CanonError> {
+fn deref_mapped_mutable_branch() {
     let n: u64 = 32;
 
     let mut list = LinkedList::<_, ()>::new();
@@ -341,10 +199,8 @@ fn deref_mapped_mutable_branch() -> Result<(), CanonError> {
     }
 
     // branch from first element
-    let branch_mut = list.first_mut()?.expect("Some(brach_mut)");
+    let branch_mut = list.first_mut().expect("Some(brach_mut)");
     let mapped = branch_mut.map_leaf(|x| x);
 
-    assert_eq!(core::ops::Deref::deref(&mapped), &31);
-
-    Ok(())
+    assert_eq!(*mapped, 31);
 }

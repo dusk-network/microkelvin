@@ -4,45 +4,27 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-//! Microkelvin
+//! A crate for dealing with annotated tree-shaped data. It has three parts:
 //!
-//! A library for dealing with tree-shaped Canonical data. It has three parts:
-//!
-//! `Compound`, a trait for a generic way to implement tree structures
-//! `Annotation`, a trait for annotated subtrees used for searching
-//! `Branch` and `BranchMut`, types for representing branches in tree-formed
-//! data as well as methods of search.
+//! - [`Compound`], a trait for a generic way to implement tree structures.
+//! - [`Branch`] and [`BranchMut`], types for representing branches in tree-formed
+//! data as well as methods for searching.
+//! - [`Walker`], a trait for a generic way of walking [`Compound`]s.
 
-#![cfg_attr(not(feature = "persistence"), no_std)]
+#![no_std]
 #![deny(missing_docs)]
+#![deny(clippy::all)]
 
 #[macro_use]
 extern crate alloc;
 
-mod annotations;
 mod branch;
 mod branch_mut;
 mod compound;
-mod generic;
-mod link;
 mod walk;
 
-#[cfg(feature = "persistence")]
-mod persist;
-
-pub use annotations::{
-    Annotation, Cardinality, Combine, GetMaxKey, Keyed, MaxKey, Nth,
-};
 pub use branch::Branch;
 pub use branch_mut::BranchMut;
-pub use generic::*;
 
-pub use compound::{AnnoIter, Child, ChildMut, Compound, MutableLeaves};
-pub use link::{Link, LinkAnnotation, LinkCompound, LinkCompoundMut};
+pub use compound::{Child, ChildMut, Compound, MutableLeaves};
 pub use walk::{First, Step, Walk, Walker};
-
-#[cfg(feature = "persistence")]
-pub use persist::{
-    Backend, BackendCtor, DiskBackend, PersistError, PersistedId, Persistence,
-    PutResult,
-};

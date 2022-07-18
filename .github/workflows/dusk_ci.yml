@@ -1,46 +1,81 @@
-on: [pull_request]
+on:
+  pull_request:
+  push:
+    branches:
+      - main
 
-name: Continuous integration
+name: build
 
 jobs:
   analyze:
-    name: Dusk Analyzer
+    name: Dusk analyzer
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
+      - name: Install latest nightly toolchain
+        uses: actions-rs/toolchain@v1
         with:
           profile: minimal
           toolchain: nightly
-      - uses: actions-rs/cargo@v1
+          override: true
+      - name: Install cargo-dusk-analyzer
+        uses: actions-rs/cargo@v1
         with:
           command: install
           args: --git https://github.com/dusk-network/cargo-dusk-analyzer
-      - uses: actions-rs/cargo@v1
+      - name: Run `cargo dusk-analyzer`
+        uses: actions-rs/cargo@v1
         with:
           command: dusk-analyzer
 
-  test_nightly:
-    name: Nightly tests
+  test:
+    name: Cargo test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
+      - name: Install latest stable toolchain
+        uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-      - run: rustup target add wasm32-unknown-unknown
-      - run: make test
+          toolchain: stable
+          override: true
+      - name: Run `cargo test`
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
 
   fmt:
     name: Rustfmt
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
+      - name: Install latest stable toolchain
+        uses: actions-rs/toolchain@v1
         with:
           profile: minimal
+          toolchain: stable
+          override: true
       - run: rustup component add rustfmt
-      - uses: actions-rs/cargo@v1
+      - name: Run `cargo fmt`
+        uses: actions-rs/cargo@v1
         with:
           command: fmt
           args: --all -- --check
+
+  clippy:
+    name: Clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Install latest stable toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+      - run: rustup component add clippy
+      - name: Run `cargo clippy`
+        uses: actions-rs/cargo@v1
+        with:
+          command: clippy
+          args: -- -D warnings

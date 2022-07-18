@@ -4,14 +4,13 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use canonical::{Canon, CanonError};
+use alloc::boxed::Box;
 
-use core::marker::PhantomData;
+use ranno::Annotated;
 
-use crate::annotations::{Annotation, WrappedAnnotation};
-use crate::link::Link;
-
-/// The response of the `child` method on a `Compound` node.
+/// The response of the [`child`] method on a [`Compound`] node.
+///
+/// [`child`]: Compound::child
 #[derive(Debug)]
 pub enum Child<'a, C, A>
 where
@@ -20,14 +19,16 @@ where
     /// Child is a leaf
     Leaf(&'a C::Leaf),
     /// Child is an annotated subtree node
-    Node(&'a Link<C, A>),
+    Node(&'a Annotated<Box<C>, A>),
     /// Empty slot
     Empty,
     /// No more children
     EndOfNode,
 }
 
-/// The response of the `child_mut` method on a `Compound` node.
+/// The response of the [`child_mut`] method on a [`Compound`] node.
+///
+/// [`child_mut`]: Compound::child_mut
 #[derive(Debug)]
 pub enum ChildMut<'a, C, A>
 where
@@ -36,7 +37,7 @@ where
     /// Child is a leaf
     Leaf(&'a mut C::Leaf),
     /// Child is an annotated node
-    Node(&'a mut Link<C, A>),
+    Node(&'a mut Annotated<Box<C>, A>),
     /// Empty slot
     Empty,
     /// No more children
@@ -44,84 +45,19 @@ where
 }
 
 /// A type that can recursively contain itself and leaves.
-pub trait Compound<A>: Canon {
-    /// The leaf type of the Compound collection
-    type Leaf: Canon;
+pub trait Compound<A>: Sized {
+    /// The leaf type of the compound collection
+    type Leaf;
 
-    /// Returns a reference to a possible child at specified offset
-    fn child(&self, ofs: usize) -> Child<Self, A>;
+    /// Returns a reference to a possible child at specified index
+    fn child(&self, index: usize) -> Child<Self, A>;
 
-    /// Returns a mutable reference to a possible child at specified offset
-    fn child_mut(&mut self, ofs: usize) -> ChildMut<Self, A>;
-
-    /// Provides an iterator over all sub-annotations of the compound node
-    fn annotations(&self) -> AnnoIter<Self, A>
-    where
-        A: Annotation<Self::Leaf>,
-    {
-        AnnoIter {
-            node: self,
-            ofs: 0,
-            _marker: PhantomData,
-        }
-    }
-
-    /// Construct a specific compound tree from a generic tree
-    fn from_generic(
-        _tree: &crate::generic::GenericTree,
-    ) -> Result<Self, CanonError>
-    where
-        Self::Leaf: Canon,
-        A: Canon,
-    {
-        unimplemented!("deprecated");
-    }
+    /// Returns a mutable reference to a possible child at specified index
+    fn child_mut(&mut self, index: usize) -> ChildMut<Self, A>;
 }
 
-/// An iterator over the sub-annotations of a Compound collection
-pub struct AnnoIter<'a, C, A> {
-    node: &'a C,
-    ofs: usize,
-    _marker: PhantomData<A>,
-}
-
-impl<'a, C, A> Clone for AnnoIter<'a, C, A> {
-    fn clone(&self) -> Self {
-        AnnoIter {
-            node: self.node,
-            ofs: self.ofs,
-            _marker: self._marker,
-        }
-    }
-}
-
-impl<'a, C, A> Iterator for AnnoIter<'a, C, A>
-where
-    C: Compound<A>,
-    A: Annotation<C::Leaf> + 'a,
-{
-    type Item = WrappedAnnotation<'a, C, A>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            match self.node.child(self.ofs) {
-                Child::Empty => self.ofs += 1,
-                Child::EndOfNode => return None,
-                Child::Leaf(l) => {
-                    self.ofs += 1;
-                    return Some(WrappedAnnotation::Owned(A::from_leaf(l)));
-                }
-                Child::Node(a) => {
-                    self.ofs += 1;
-                    return Some(WrappedAnnotation::Link(a.annotation()));
-                }
-            }
-        }
-    }
-}
-
-/// Marker trait to signal that a datastructre can allow mutable access to its
-/// leaves.
+/// Marker trait to signal that a data structure can allow mutable access to
+/// its leaves.
 ///
 /// For example, a `Vec`-like structure can allow editing of its leaves without
 /// issue, whereas editing the (Key, Value) pair of a map could make the map
