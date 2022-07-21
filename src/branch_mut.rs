@@ -98,6 +98,7 @@ impl<'a, C, A> LevelMut<'a, C, A> {
     }
 }
 
+#[derive(Debug)]
 pub struct PartialBranchMut<'a, C, A>(Vec<LevelMut<'a, C, A>>);
 
 impl<'a, C, A> PartialBranchMut<'a, C, A> {
@@ -265,6 +266,7 @@ where
 ///
 /// Branches are always guaranteed to point at a leaf, and can be de-referenced
 /// to the pointed-at leaf.
+#[derive(Debug)]
 pub struct BranchMut<'a, C, A>(PartialBranchMut<'a, C, A>);
 
 impl<'a, C, A> Deref for BranchMut<'a, C, A>
