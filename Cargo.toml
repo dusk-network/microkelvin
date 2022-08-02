@@ -17,4 +17,4 @@ license = "MPL-2.0"
 exclude = [".github/*", ".gitignore"]
 
 [dependencies]
-ranno = { git = "ssh://git@github.com/dusk-network/ranno", branch = "main" }
+ranno = { git = "https://github.com/dusk-network/ranno", branch = "main" }
