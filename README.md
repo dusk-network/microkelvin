@@ -4,7 +4,7 @@
 ![Build Status](https://github.com/dusk-network/microkelvin/workflows/build/badge.svg)
 [![Documentation](https://img.shields.io/badge/docs-microkelvin-blue?logo=rust)](https://docs.rs/microkelvin)
 
-Crate for dealing with annotated tree-shaped data
+Crate for creating and traversing recursively annotated structures.
 
 # Compound trait
 
