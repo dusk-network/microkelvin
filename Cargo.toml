@@ -1,25 +1,20 @@
 [package]
 name = "microkelvin"
-version = "0.16.0-rkyv.3"
-authors = ["Kristoffer Ström <kristoffer@dusk.network>"]
-edition = "2018"
-keywords = ["datastructures"]
-description = "A library for tree traversal over annotated datastructures"
+description = "A crate for tree traversal over annotated data structures"
+categories = ["data-structures", "no-std"]
+keywords = ["tree", "traversal", "annotation", "data", "structure"]
+
+repository = "https://github.com/dusk-network/microkelvin"
+authors = [
+    "Kristoffer Ström <kristoffer@dusk.network>",
+    "Eduardo Leegwater Simões <eduardo@dusk.network>"
+]
+version = "0.17.0"
+
+edition = "2021"
 license = "MPL-2.0"
-readme = "README.md"
+
+exclude = [".github/*", ".gitignore"]
 
 [dependencies]
-rend = { version = "0.3.6", default_features = false }
-parking_lot = { version = "0.11.2", optional = true }
-rkyv = { version = "0.7.29", default_features = false, features = ["size_32", "validation"] }
-memmap2 = { version = "0.5.3", optional = true }
-bytecheck = { version = "0.6.7", default_features = false }
-
-[dev-dependencies]
-rand = "0.8.4"
-tempfile = "3.3.0"
-
-[features]
-default = ["host"]
-host = ["parking_lot", "memmap2"]
-
+ranno = "0.1"
