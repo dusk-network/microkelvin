@@ -1,10 +1,9 @@
-![Dusk CI](https://github.com/dusk-network/microkelvin/actions/workflows/dusk_ci.yml/badge.svg)
-[![codecov](https://codecov.io/gh/dusk-network/microkelvin/branch/main/graph/badge.svg?token=AQOU3EH0W3)](https://codecov.io/gh/dusk-network/microkelvin)
 
 # microkelvin
 
 [![Repository](https://img.shields.io/badge/github-microkelvin-blueviolet?logo=github)](https://github.com/dusk-network/microkelvin)
 ![Build Status](https://github.com/dusk-network/microkelvin/workflows/build/badge.svg)
+[![codecov](https://codecov.io/gh/dusk-network/microkelvin/branch/main/graph/badge.svg?token=AQOU3EH0W3)](https://codecov.io/gh/dusk-network/microkelvin)
 [![Documentation](https://img.shields.io/badge/docs-microkelvin-blue?logo=rust)](https://docs.rs/microkelvin)
 
 Crate for creating and traversing recursively annotated structures.
