@@ -4,46 +4,28 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-//! Microkelvin
+//! Crate for creating and traversing recursively annotated structures. It has three
+//! parts:
 //!
-//! A library for dealing with tree-shaped data. It has three parts:
-//!
-//! `Compound`, a trait for a generic way to implement tree structures
-//! `Annotation`, a trait for annotated subtrees used for searching
-//! `Branch` and `BranchMut`, types for representing branches in tree-formed
-//! data as well as methods of search.
-#![cfg_attr(not(feature = "host"), no_std)]
+//! - [`Compound`], a trait for a generic way to implement tree structures.
+//! - [`Branch`] and [`BranchMut`], types for representing branches in tree-formed
+//! data as well as methods for searching.
+//! - [`Walker`], a trait for a generic way of walking [`Compound`]s.
+
+#![no_std]
 #![deny(missing_docs)]
+#![deny(clippy::all)]
 
 #[macro_use]
 extern crate alloc;
 
-mod annotations;
 mod branch;
 mod branch_mut;
 mod compound;
-mod link;
 mod walk;
-mod wrappers;
 
-pub use annotations::{
-    ARef, Annotation, Cardinality, Combine, FindMaxKey, Keyed, MaxKey, Member,
-    Nth,
-};
-pub use branch::{Branch, BranchRef, MappedBranch};
-pub use branch_mut::{BranchMut, BranchRefMut, MappedBranchMut};
-pub use compound::{
-    ArchivedChild, ArchivedCompound, Child, ChildMut, Compound, MutableLeaves,
-};
-pub use link::{ArchivedLink, Link};
-pub use walk::{All, Discriminant, Step, Walkable, Walker};
-pub use wrappers::{MaybeArchived, MaybeStored, Primitive};
+pub use branch::Branch;
+pub use branch_mut::BranchMut;
 
-mod storage;
-pub use storage::{
-    Ident, OffsetLen, Store, StoreProvider, StoreRef, StoreSerializer, Stored,
-    Token, TokenBuffer,
-};
-
-#[cfg(feature = "host")]
-pub use storage::{HostStore, UnwrapInfallible};
+pub use compound::{Child, ChildMut, Compound, MutableLeaves};
+pub use walk::{First, Step, Walk, Walker};

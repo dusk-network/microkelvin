@@ -1,9 +1,10 @@
 on:
   pull_request:
   push:
-    branches: main
+    branches:
+      - main
 
-name: Continuous integration
+name: build
 
 jobs:
   analyze:
@@ -11,70 +12,86 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: nightly
-      - uses: actions-rs/cargo@v1
-        with:
-          command: install
-          args: --git https://github.com/dusk-network/cargo-dusk-analyzer
-      - uses: actions-rs/cargo@v1
-        with:
-          command: dusk-analyzer
-
-  test_nightly:
-    name: Nightly tests
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v2
-
-      - name: Install Rust
+      - name: Install latest nightly toolchain
         uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-
-      - name: Install WASM32 target
-        run: rustup target add wasm32-unknown-unknown
-
-      - name: Install kcov
-        run: sudo apt install -y kcov
-
-      - name: Ensure WASM compilation
-        run: make wasm
-
-      - name: Build test executables
+          toolchain: nightly
+          override: true
+      - name: Install cargo-dusk-analyzer
         uses: actions-rs/cargo@v1
-        env:
-          RUSTFLAGS: '-Cinline-threshold=0 -Clink-dead-code'
-          RUSTDOCFLAGS: '-Cinline-threshold=0 -Clink-dead-code'
+        with:
+          command: install
+          args: --git https://github.com/dusk-network/cargo-dusk-analyzer
+      - name: Run `cargo dusk-analyzer`
+        uses: actions-rs/cargo@v1
+        with:
+          command: dusk-analyzer
+
+  nightly:
+    name: Nightly tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Install latest stable toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: nightly
+          override: true
+      - name: Run `cargo test`
+        uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --all-features --no-run
 
-      - name: Test with kcov
-        # Find every executable resulting from building the tests and run each
-        # one of them with kcov. This ensures all the code we cover is measured.
-        run: >
-          find target/debug/deps -type f -executable ! -name "*.*" |
-          xargs -n1 kcov --exclude-pattern=/.cargo,/usr/lib,/target,/tests --verify target/cov
-
-      - name: Upload coverage
-        uses: codecov/codecov-action@v1.0.2
+  test:
+    name: Stable tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Install latest stable toolchain
+        uses: actions-rs/toolchain@v1
         with:
-          token: ${{secrets.CODECOV_TOKEN}}
+          profile: minimal
+          toolchain: stable
+          override: true
+      - name: Run `cargo test`
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
 
   fmt:
     name: Rustfmt
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
+      - name: Install latest stable toolchain
+        uses: actions-rs/toolchain@v1
         with:
           profile: minimal
+          toolchain: nightly
+          override: true
       - run: rustup component add rustfmt
-      - uses: actions-rs/cargo@v1
+      - name: Run `cargo fmt`
+        uses: actions-rs/cargo@v1
         with:
           command: fmt
           args: --all -- --check
+
+  clippy:
+    name: Clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Install latest stable toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+      - run: rustup component add clippy
+      - name: Run `cargo clippy`
+        uses: actions-rs/cargo@v1
+        with:
+          command: clippy
+          args: -- -D warnings

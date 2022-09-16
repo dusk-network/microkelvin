@@ -4,178 +4,131 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use core::marker::PhantomData;
+use crate::compound::{Child, Compound};
+use crate::walk::{AllLeaves, Step, Walk, Walker};
 
+use alloc::boxed::Box;
 use alloc::vec::Vec;
-use bytecheck::CheckBytes;
-use rkyv::validation::validators::DefaultValidator;
-use rkyv::Archive;
 
-use crate::compound::{ArchivedChild, ArchivedCompound, Child, Compound};
-use crate::storage::StoreRef;
-use crate::walk::{All, Discriminant, Step, Walkable, Walker};
-use crate::wrappers::{MaybeArchived, MaybeStored};
-use crate::{ARef, Annotation};
+use core::ops::Deref;
 
-pub struct Level<'a, C, A, I>
-where
-    C: Archive,
-{
-    offset: usize,
-    // pub to be accesible from `walk.rs`
-    pub(crate) node: MaybeArchived<'a, C>,
-    _marker: PhantomData<(A, I)>,
+use ranno::{Annotated, Annotation};
+
+#[derive(Debug)]
+enum LevelNode<'a, C, A> {
+    Root(&'a C),
+    Val(&'a Annotated<Box<C>, A>),
 }
 
-impl<'a, C, A, I> Level<'a, C, A, I>
-where
-    C: Archive + Compound<A, I>,
-{
-    pub fn new(root: MaybeArchived<'a, C>) -> Level<'a, C, A, I> {
+#[derive(Debug)]
+pub struct Level<'a, C, A> {
+    index: usize,
+    node: LevelNode<'a, C, A>,
+}
+
+impl<'a, C, A> Deref for Level<'a, C, A> {
+    type Target = C;
+
+    fn deref(&self) -> &Self::Target {
+        &self.node
+    }
+}
+
+impl<'a, C, A> Level<'a, C, A> {
+    pub fn new_root(root: &'a C) -> Level<'a, C, A> {
         Level {
-            offset: 0,
-            node: root,
-            _marker: PhantomData,
+            index: 0,
+            node: LevelNode::Root(root),
         }
     }
 
-    /// Returns the offset of the branch level
-    pub fn offset(&self) -> usize {
-        self.offset
+    pub fn new_val(annotated: &'a Annotated<Box<C>, A>) -> Level<'a, C, A> {
+        Level {
+            index: 0,
+            node: LevelNode::Val(annotated),
+        }
     }
 
-    fn offset_mut(&mut self) -> &mut usize {
-        &mut self.offset
+    /// Returns the index of the branch level
+    pub fn index(&self) -> usize {
+        self.index
+    }
+
+    fn index_mut(&mut self) -> &mut usize {
+        &mut self.index
     }
 }
 
-impl<'a, C, A, I> Walkable<C, A, I> for &'a Level<'a, C, A, I>
-where
-    C: Compound<A, I>,
-    C::Archived: ArchivedCompound<C, A, I>,
-    A: Annotation<C::Leaf>,
-{
-    fn probe(&self, ofs: usize) -> Discriminant<C::Leaf, A> {
-        match self.node {
-            MaybeArchived::Memory(m) => match m.child(self.offset + ofs) {
-                Child::Leaf(leaf) => {
-                    Discriminant::Leaf(MaybeArchived::Memory(leaf))
-                }
-                Child::Link(link) => {
-                    Discriminant::Annotation(link.annotation())
-                }
-                Child::Empty => Discriminant::Empty,
-                Child::End => Discriminant::End,
-            },
-            MaybeArchived::Archived(a) => match a.child(self.offset + ofs) {
-                ArchivedChild::Leaf(leaf) => {
-                    Discriminant::Leaf(MaybeArchived::Archived(leaf))
-                }
-                ArchivedChild::Link(link) => {
-                    Discriminant::Annotation(ARef::Borrowed(link.annotation()))
-                }
-                ArchivedChild::Empty => Discriminant::Empty,
-                ArchivedChild::End => Discriminant::End,
-            },
+#[derive(Debug)]
+pub struct PartialBranch<'a, C, A>(Vec<Level<'a, C, A>>);
+
+impl<'a, C, A> Deref for LevelNode<'a, C, A> {
+    type Target = C;
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            LevelNode::Root(target) => target,
+            LevelNode::Val(val) => val.child(),
         }
     }
 }
 
-pub struct PartialBranch<'a, C, A, I>
-where
-    C: Archive,
-{
-    levels: Vec<Level<'a, C, A, I>>,
-    store: Option<StoreRef<I>>,
-}
-
-impl<'a, C, A, I> PartialBranch<'a, C, A, I>
-where
-    C: Archive + Compound<A, I>,
-    C::Archived: ArchivedCompound<C, A, I>,
-    C::Leaf: Archive,
-{
-    fn new(root: MaybeArchived<'a, C>) -> Self {
-        PartialBranch {
-            levels: vec![Level::new(root)],
-            store: None,
-        }
-    }
-
-    fn new_with_store(root: MaybeArchived<'a, C>, store: StoreRef<I>) -> Self {
-        PartialBranch {
-            levels: vec![Level::new(root)],
-            store: Some(store),
-        }
+impl<'a, C, A> PartialBranch<'a, C, A> {
+    fn new(root: &'a C) -> Self {
+        PartialBranch(vec![Level::new_root(root)])
     }
 
     pub fn depth(&self) -> usize {
-        self.levels.len()
+        self.0.len()
     }
 
-    pub fn levels(&self) -> &[Level<C, A, I>] {
-        &self.levels
+    pub fn levels(&self) -> &[Level<C, A>] {
+        &self.0
     }
 
-    fn leaf(&self) -> Option<MaybeArchived<C::Leaf>>
-    where
-        C: Compound<A, I>,
-        C::Leaf: Archive,
-    {
-        let top = self.top();
-        let ofs = top.offset();
-
-        match &top.node {
-            MaybeArchived::Memory(root) => match root.child(ofs) {
-                Child::Leaf(l) => Some(MaybeArchived::Memory(l)),
-                _ => None,
-            },
-            MaybeArchived::Archived(s) => match s.child(ofs) {
-                ArchivedChild::Leaf(l) => Some(MaybeArchived::Archived(l)),
-                _ => None,
-            },
-        }
+    fn top(&self) -> &Level<C, A> {
+        self.0.last().expect("Never empty")
     }
 
-    fn top(&self) -> &Level<C, A, I> {
-        self.levels.last().expect("Never empty")
-    }
-
-    fn top_mut(&mut self) -> &mut Level<'a, C, A, I> {
-        self.levels.last_mut().expect("Never empty")
+    fn top_mut(&mut self) -> &mut Level<'a, C, A> {
+        self.0.last_mut().expect("Never empty")
     }
 
     fn advance(&mut self) {
-        *self.top_mut().offset_mut() += 1;
+        *self.top_mut().index_mut() += 1;
     }
 
-    fn pop(&mut self) -> Option<Level<'a, C, A, I>> {
+    fn pop(&mut self) -> Option<Level<'a, C, A>> {
         // We never pop the root
-        if self.levels.len() > 1 {
-            self.levels.pop()
+        if self.0.len() > 1 {
+            self.0.pop()
         } else {
             None
+        }
+    }
+}
+
+impl<'a, C, A> PartialBranch<'a, C, A>
+where
+    C: Compound<A>,
+{
+    fn leaf(&self) -> Option<&C::Leaf> {
+        let top = self.top();
+        let index = top.index();
+
+        match (**top).child(index) {
+            Child::Leaf(l) => Some(l),
+            _ => None,
         }
     }
 
     fn walk<W>(&mut self, walker: &mut W) -> Option<()>
     where
-        C: Compound<A, I>,
-        C::Archived: ArchivedCompound<C, A, I>
-            + for<'any> CheckBytes<DefaultValidator<'any>>,
-        C::Leaf: 'a + Archive,
-        A: Annotation<C::Leaf>,
-        W: Walker<C, A, I>,
+        W: Walker<C, A>,
     {
-        enum State<'a, C, A, I>
-        where
-            C: Compound<A, I>,
-            C::Archived: for<'any> CheckBytes<DefaultValidator<'any>>,
-            C::Leaf: Archive,
-            A: Annotation<C::Leaf>,
-        {
+        enum State<'a, C, A> {
             Init,
-            Push(Level<'a, C, A, I>),
+            Push(Level<'a, C, A>),
             Pop,
         }
 
@@ -183,7 +136,7 @@ where
         loop {
             match core::mem::replace(&mut state, State::Init) {
                 State::Init => (),
-                State::Push(push) => self.levels.push(push),
+                State::Push(push) => self.0.push(push),
                 State::Pop => match self.pop() {
                     Some(_) => {
                         self.advance();
@@ -193,58 +146,63 @@ where
             }
 
             let top = self.top_mut();
+            let step = walker.walk(Walk::new(&**top, top.index()));
 
-            match walker.walk(&*top) {
-                Step::Found(walk_ofs) => {
-                    *top.offset_mut() += walk_ofs;
-                    let ofs = top.offset();
+            match step {
+                Step::Found(walk_index) => {
+                    *top.index_mut() += walk_index;
+                    return Some(());
+                }
+                Step::Into(walk_index) => {
+                    *top.index_mut() += walk_index;
+                    let index = top.index();
+                    let top_child = top.child(index);
+                    if let Child::Node(n) = top_child {
+                        let level: Level<'_, C, A> = Level::new_val(n);
 
-                    let archived = match &top.node {
-                        MaybeArchived::Memory(root) => match root.child(ofs) {
-                            Child::Leaf(_) => return Some(()),
-                            Child::Link(link) => match link.inner() {
-                                MaybeStored::Memory(c) => {
-                                    let level = Level::<C, A, I>::new(
-                                        MaybeArchived::Memory(c),
-                                    );
-                                    let extended: Level<'a, C, A, I> =
-                                        unsafe { core::mem::transmute(level) };
-                                    state = State::Push(extended);
-                                    continue;
-                                }
-                                MaybeStored::Stored(stored) => {
-                                    if self.store.is_none() {
-                                        self.store =
-                                            Some(stored.store().clone())
-                                    }
-                                    stored.inner()
-                                }
-                            },
-                            Child::Empty => return None,
-                            Child::End => return None,
-                        },
-                        MaybeArchived::Archived(archived) => {
-                            match archived.child(ofs) {
-                                ArchivedChild::Leaf(_) => return Some(()),
-                                ArchivedChild::Link(link) => {
-                                    if let Some(ref store) = self.store {
-                                        store.get(link.ident())
-                                    } else {
-                                        unreachable!()
-                                    }
-                                }
-                                _ => panic!("Invalid child found"),
-                            }
-                        }
-                    };
-
-                    // continued archived branch
-
-                    let level: Level<C, A, I> =
-                        Level::new(MaybeArchived::Archived(archived));
-                    let extended: Level<'a, C, A, I> =
-                        unsafe { core::mem::transmute(level) };
-                    state = State::Push(extended);
+                        // Extend the lifetime of the Level.
+                        //
+                        // JUSTIFICATION
+                        //
+                        // The `Vec<Level<'a, C, A>>` used here cannot be
+                        // expressed in safe rust, since it relies on the
+                        // elements of the `Vec` referring to prior elements in
+                        // the same `Vec`.
+                        //
+                        // This vec from the start contains one single `Level`
+                        // of variant in turn containing a `LevelNode::Root(&'a
+                        // C)`
+                        //
+                        // The first step `Into` will add a `Level` with the
+                        // following reference structure
+                        // `LevelNode::Val(AnnRef<'a, C, A>)` -> `Val<'a, C>` ->
+                        // ReprInner (from canonical) which in turns contains
+                        // the value of the next node behind an `Rc<C>`.
+                        //
+                        // The address of the pointed-to `C` thus remains
+                        // unchanged, even if the `Vec` in `PartialBranch`
+                        // re-allocates.
+                        //
+                        // The same is true of `LevelNode::Root` since it is a
+                        // reference that just gets copied over to the new
+                        // allocation.
+                        //
+                        // Additionally, the `Vec` is only ever changed at its
+                        // end, either pushed or popped, so any reference "Up"
+                        // the branch will always remain valid.
+                        //
+                        // Since `'a` controls the whole lifetime of the access
+                        // to the tree, there is also no
+                        // way for the tree to change in
+                        // the meantime, thus invalidating the pointers is
+                        // not possible, and this extension of the lifetime of
+                        // the level is safe.
+                        let extended: Level<'a, C, A> =
+                            unsafe { core::mem::transmute(level) };
+                        state = State::Push(extended);
+                    } else {
+                        panic!("Attempted descent into non-node")
+                    }
                 }
                 Step::Advance => state = State::Pop,
                 Step::Abort => {
@@ -255,148 +213,109 @@ where
     }
 }
 
-impl<'a, C, A, I> Branch<'a, C, A, I>
-where
-    C: Archive + Compound<A, I>,
-    C::Archived: ArchivedCompound<C, A, I>,
-    C::Leaf: Archive,
-{
+impl<'a, C, A> Branch<'a, C, A> {
     /// Returns the depth of the branch
     pub fn depth(&self) -> usize {
         self.0.depth()
     }
 
     /// Returns a slice into the levels of the tree.
-    pub fn levels(&self) -> &[Level<C, A, I>] {
+    pub fn levels(&self) -> &[Level<C, A>] {
         self.0.levels()
     }
+}
 
+impl<'a, C, A> Branch<'a, C, A>
+where
+    C: Compound<A>,
+{
     /// Returns a branch that maps the leaf to a specific value.
     /// Used in maps for example, to get easy access to the value of the KV-pair
     pub fn map_leaf<M>(
         self,
-        closure: fn(MaybeArchived<'a, C::Leaf>) -> M,
-    ) -> MappedBranch<'a, C, A, I, M>
-    where
-        C: Compound<A, I>,
-        M: 'a,
-    {
+        closure: for<'b> fn(&'b C::Leaf) -> &'b M,
+    ) -> MappedBranch<'a, C, A, M> {
         MappedBranch {
             inner: self,
             closure,
         }
     }
 
-    /// Returns a reference to the currently pointed-at leaf
-    pub fn leaf(&self) -> MaybeArchived<C::Leaf> {
-        self.0.leaf().expect("Invalid branch")
-    }
-
     /// Performs a tree walk, returning either a valid branch or None if the
     /// walk failed.
-    pub fn walk<W>(root: MaybeArchived<'a, C>, mut walker: W) -> Option<Self>
+    pub fn walk<W>(root: &'a C, mut walker: W) -> Option<Self>
     where
-        C: Compound<A, I>,
-        C::Archived: ArchivedCompound<C, A, I>
-            + for<'any> CheckBytes<DefaultValidator<'any>>,
-        C::Leaf: 'a + Archive,
-        A: Annotation<C::Leaf>,
-        W: Walker<C, A, I>,
+        W: Walker<C, A>,
     {
         let mut partial = PartialBranch::new(root);
         partial.walk(&mut walker).map(|()| Branch(partial))
     }
-
-    /// Performs a tree walk, returning either a valid branch or None if the
-    /// walk failed.
-    pub fn walk_with_store<W>(
-        root: MaybeArchived<'a, C>,
-        mut walker: W,
-        store: StoreRef<I>,
-    ) -> Option<Self>
-    where
-        C: Compound<A, I>,
-        C::Archived: ArchivedCompound<C, A, I>
-            + for<'any> CheckBytes<DefaultValidator<'any>>,
-        C::Leaf: 'a + Archive,
-        A: Annotation<C::Leaf>,
-        W: Walker<C, A, I>,
-    {
-        let mut partial = PartialBranch::new_with_store(root, store);
-        partial.walk(&mut walker).map(|()| Branch(partial))
-    }
 }
 
-/// Reprents an immutable branch view into a collection.
+/// Represents an immutable branch view into a collection.
 ///
-/// Branche are always guaranteed to point at a leaf, and can be dereferenced
+/// Branches are always guaranteed to point at a leaf, and can be de-referenced
 /// to the pointed-at leaf.
-pub struct Branch<'a, C, A, I>(PartialBranch<'a, C, A, I>)
-where
-    C: Archive;
+#[derive(Debug)]
+pub struct Branch<'a, C, A>(PartialBranch<'a, C, A>);
 
-/// A branch that applies a map to its leaf
-pub struct MappedBranch<'a, C, A, I, M>
+impl<'a, C, A> Deref for Branch<'a, C, A>
 where
-    C: Compound<A, I>,
-    C::Leaf: Archive,
-    M: 'a,
+    C: Compound<A>,
 {
-    inner: Branch<'a, C, A, I>,
-    closure: MapClosure<'a, C::Leaf, M>,
-}
+    type Target = C::Leaf;
 
-type MapClosure<'a, L, M> = fn(MaybeArchived<'a, L>) -> M;
-
-impl<'a, C, A, I, M> MappedBranch<'a, C, A, I, M>
-where
-    C: Compound<A, I>,
-    C::Archived: ArchivedCompound<C, A, I>,
-    C::Leaf: Archive,
-{
-    /// Get the mapped leaf of the branch
-    pub fn leaf(&'a self) -> M {
-        (self.closure)(self.inner.leaf())
+    fn deref(&self) -> &Self::Target {
+        self.0.leaf().expect("Invalid branch")
     }
 }
 
-pub enum BranchIterator<'a, C, A, I, W>
+pub struct MappedBranch<'a, C, A, M>
 where
-    C: Archive,
+    C: Compound<A>,
 {
-    Initial(Branch<'a, C, A, I>, W),
-    Intermediate(Branch<'a, C, A, I>, W),
+    inner: Branch<'a, C, A>,
+    closure: for<'b> fn(&'b C::Leaf) -> &'b M,
+}
+
+impl<'a, C, A, M> Deref for MappedBranch<'a, C, A, M>
+where
+    C: Compound<A>,
+    C::Leaf: 'a,
+{
+    type Target = M;
+
+    fn deref(&self) -> &M {
+        (self.closure)(&self.inner)
+    }
+}
+
+pub enum BranchIterator<'a, C, A, W> {
+    Initial(Branch<'a, C, A>, W),
+    Intermediate(Branch<'a, C, A>, W),
     Exhausted,
 }
 
 // iterators
-impl<'a, C, A, I> IntoIterator for Branch<'a, C, A, I>
+impl<'a, C, A> IntoIterator for Branch<'a, C, A>
 where
-    C: Compound<A, I>,
-    C::Archived: ArchivedCompound<C, A, I>
-        + for<'any> CheckBytes<DefaultValidator<'any>>,
-    C::Leaf: 'a + Archive,
-    A: Annotation<C::Leaf>,
+    C: Compound<A>,
 {
-    type Item = MaybeArchived<'a, C::Leaf>;
+    type Item = &'a C::Leaf;
 
-    type IntoIter = BranchIterator<'a, C, A, I, All>;
+    type IntoIter = BranchIterator<'a, C, A, AllLeaves>;
 
     fn into_iter(self) -> Self::IntoIter {
-        BranchIterator::Initial(self, All)
+        BranchIterator::Initial(self, AllLeaves)
     }
 }
 
-impl<'a, C, A, I, W> Iterator for BranchIterator<'a, C, A, I, W>
+impl<'a, C, A, W> Iterator for BranchIterator<'a, C, A, W>
 where
-    C: Compound<A, I>,
-    C::Archived: ArchivedCompound<C, A, I>
-        + for<'any> CheckBytes<DefaultValidator<'any>>,
-    C::Leaf: 'a + Archive,
-    A: Annotation<C::Leaf>,
-    W: Walker<C, A, I>,
+    C: Compound<A>,
+    W: Walker<C, A>,
 {
-    type Item = MaybeArchived<'a, C::Leaf>;
+    type Item = &'a C::Leaf;
 
     fn next(&mut self) -> Option<Self::Item> {
         match core::mem::replace(self, BranchIterator::Exhausted) {
@@ -405,13 +324,13 @@ where
             }
             BranchIterator::Intermediate(mut branch, mut walker) => {
                 branch.0.advance();
-                // access partialbranch
+                // access partial branch
                 match branch.0.walk(&mut walker) {
                     None => {
                         *self = BranchIterator::Exhausted;
                         return None;
                     }
-                    Some(_) => {
+                    Some(..) => {
                         *self = BranchIterator::Intermediate(branch, walker);
                     }
                 }
@@ -423,8 +342,8 @@ where
 
         match self {
             BranchIterator::Intermediate(branch, _) => {
-                let leaf = branch.leaf();
-                let leaf_extended: MaybeArchived<'a, C::Leaf> =
+                let leaf: &C::Leaf = &*branch;
+                let leaf_extended: &'a C::Leaf =
                     unsafe { core::mem::transmute(leaf) };
                 Some(leaf_extended)
             }
@@ -433,61 +352,55 @@ where
     }
 }
 
-pub enum MappedBranchIterator<'a, C, A, I, R, W>
+pub enum MappedBranchIterator<'a, C, A, W, M>
 where
-    C: Archive + Compound<A, I>,
-    C::Leaf: Archive,
+    C: Compound<A>,
+    A: Annotation<C>,
 {
-    Initial(Branch<'a, C, A, I>, MapClosure<'a, C::Leaf, R>, W),
-    Intermediate(Branch<'a, C, A, I>, MapClosure<'a, C::Leaf, R>, W),
+    Initial(MappedBranch<'a, C, A, M>, W),
+    Intermediate(MappedBranch<'a, C, A, M>, W),
     Exhausted,
 }
 
-impl<'a, C, A, I, M> IntoIterator for MappedBranch<'a, C, A, I, M>
+impl<'a, C, A, M> IntoIterator for MappedBranch<'a, C, A, M>
 where
-    C: Compound<A, I>,
-    C::Archived: ArchivedCompound<C, A, I>
-        + for<'any> CheckBytes<DefaultValidator<'any>>,
-    C::Leaf: 'a + Archive,
-    A: Annotation<C::Leaf>,
-    M: 'a + Archive,
+    C: Compound<A>,
+    A: Annotation<C>,
+    M: 'a,
 {
-    type Item = M;
+    type Item = &'a M;
 
-    type IntoIter = MappedBranchIterator<'a, C, A, I, M, All>;
+    type IntoIter = MappedBranchIterator<'a, C, A, AllLeaves, M>;
 
     fn into_iter(self) -> Self::IntoIter {
-        let MappedBranch { inner, closure } = self;
-        MappedBranchIterator::Initial(inner, closure, All)
+        MappedBranchIterator::Initial(self, AllLeaves)
     }
 }
 
-impl<'a, C, A, I, M, W> Iterator for MappedBranchIterator<'a, C, A, I, M, W>
+impl<'a, C, A, W, M> Iterator for MappedBranchIterator<'a, C, A, W, M>
 where
-    C: Compound<A, I>,
-    C::Archived: ArchivedCompound<C, A, I>
-        + for<'any> CheckBytes<DefaultValidator<'any>>,
-    C::Leaf: 'a + Archive,
-    A: Annotation<C::Leaf>,
-    W: Walker<C, A, I>,
+    C: Compound<A>,
+    A: Annotation<C>,
+    W: Walker<C, A>,
+    M: 'a,
 {
-    type Item = M;
+    type Item = &'a M;
 
     fn next(&mut self) -> Option<Self::Item> {
         match core::mem::replace(self, Self::Exhausted) {
-            Self::Initial(branch, closure, walker) => {
-                *self = Self::Intermediate(branch, closure, walker);
+            Self::Initial(branch, walker) => {
+                *self = Self::Intermediate(branch, walker);
             }
-            Self::Intermediate(mut branch, closure, mut walker) => {
-                branch.0.advance();
-                // access partialbranch
-                match branch.0.walk(&mut walker) {
+            Self::Intermediate(mut branch, mut walker) => {
+                branch.inner.0.advance();
+                // access partial branch
+                match branch.inner.0.walk(&mut walker) {
                     None => {
                         *self = Self::Exhausted;
                         return None;
                     }
-                    Some(_) => {
-                        *self = Self::Intermediate(branch, closure, walker);
+                    Some(..) => {
+                        *self = Self::Intermediate(branch, walker);
                     }
                 }
             }
@@ -497,38 +410,13 @@ where
         }
 
         match self {
-            Self::Intermediate(branch, closure, _) => {
-                let leaf: MaybeArchived<'_, _> = branch.leaf();
-                let leaf_extended: MaybeArchived<'a, _> =
+            Self::Intermediate(branch, _) => {
+                let leaf: &M = &*branch;
+                let leaf_extended: &'a M =
                     unsafe { core::mem::transmute(leaf) };
-                let mapped = closure(leaf_extended);
-                Some(mapped)
+                Some(leaf_extended)
             }
             _ => unreachable!(),
         }
-    }
-}
-
-/// A trait for refering to a branch based solely on its leaf type
-pub trait BranchRef<'a, T>
-where
-    T: Archive,
-{
-    /// Provides a reference to the leaf of the branch
-    fn leaf(&self) -> MaybeArchived<T>;
-}
-
-impl<'a, C, A, T, I> BranchRef<'a, T>
-    for MappedBranch<'a, C, A, I, MaybeArchived<'a, T>>
-where
-    C: Compound<A, I>,
-    C::Archived: ArchivedCompound<C, A, I>,
-    T: Archive,
-{
-    fn leaf(&self) -> MaybeArchived<T> {
-        let leaf: MaybeArchived<'_, C::Leaf> = self.inner.leaf();
-        let leaf: MaybeArchived<'a, C::Leaf> =
-            unsafe { core::mem::transmute(leaf) };
-        (self.closure)(leaf)
     }
 }

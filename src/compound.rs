@@ -4,111 +4,60 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use bytecheck::CheckBytes;
-use rkyv::validation::validators::DefaultValidator;
-use rkyv::{Archive, Deserialize};
+use alloc::boxed::Box;
 
-use crate::link::{ArchivedLink, Link};
-use crate::storage::StoreRef;
-use crate::{Annotation, Branch, BranchMut, MaybeArchived, Walker};
+use ranno::Annotated;
 
-/// The response of the `child` method on a `Compound` node.
-pub enum Child<'a, C, A, I>
+/// The response of the [`child`] method on a [`Compound`] node.
+///
+/// [`child`]: Compound::child
+#[derive(Debug)]
+pub enum Child<'a, C, A>
 where
-    C: Compound<A, I>,
-    C::Leaf: Archive,
+    C: Compound<A>,
 {
     /// Child is a leaf
     Leaf(&'a C::Leaf),
     /// Child is an annotated subtree node
-    Link(&'a Link<C, A, I>),
+    Node(&'a Annotated<Box<C>, A>),
     /// Empty slot
     Empty,
     /// No more children
-    End,
+    EndOfNode,
 }
 
-/// The response of the `child` method on a `Compound` node.
-pub enum ArchivedChild<'a, C, A, I>
+/// The response of the [`child_mut`] method on a [`Compound`] node.
+///
+/// [`child_mut`]: Compound::child_mut
+#[derive(Debug)]
+pub enum ChildMut<'a, C, A>
 where
-    C: Compound<A, I>,
-{
-    /// Child is a leaf
-    Leaf(&'a <C::Leaf as Archive>::Archived),
-    /// Child is an annotated subtree node
-    Link(&'a ArchivedLink<C, A, I>),
-    /// Empty slot
-    Empty,
-    /// No more children
-    End,
-}
-
-/// The response of the `child_mut` method on a `Compound` node.
-pub enum ChildMut<'a, C, A, I>
-where
-    C: Compound<A, I>,
+    C: Compound<A>,
 {
     /// Child is a leaf
     Leaf(&'a mut C::Leaf),
     /// Child is an annotated node
-    Link(&'a mut Link<C, A, I>),
+    Node(&'a mut Annotated<Box<C>, A>),
     /// Empty slot
     Empty,
     /// No more children
-    End,
-}
-
-/// Trait to support branch traversal in archived nodes
-pub trait ArchivedCompound<C, A, I>
-where
-    C: Compound<A, I>,
-{
-    /// Returns an archived child
-    fn child(&self, ofs: usize) -> ArchivedChild<C, A, I>;
+    EndOfNode,
 }
 
 /// A type that can recursively contain itself and leaves.
-pub trait Compound<A, I>: Sized + Archive {
-    /// The leaf type of the Compound collection
-    type Leaf: Archive;
+pub trait Compound<A>: Sized {
+    /// The leaf type of the compound collection
+    type Leaf;
 
-    /// Get a reference to a child    
-    fn child(&self, ofs: usize) -> Child<Self, A, I>;
+    /// Returns a reference to a possible child at specified index
+    fn child(&self, index: usize) -> Child<Self, A>;
 
-    /// Get a mutable reference to a child
-    fn child_mut(&mut self, ofs: usize) -> ChildMut<Self, A, I>;
-
-    /// Constructs a branch from this root compound
-    fn walk<'a, W>(&'a self, walker: W) -> Option<Branch<'a, Self, A, I>>
-    where
-        W: Walker<Self, A, I>,
-        Self::Archived: ArchivedCompound<Self, A, I>
-            + for<'any> CheckBytes<DefaultValidator<'any>>,
-        Self::Leaf: 'a + Archive,
-        A: Annotation<Self::Leaf>,
-    {
-        Branch::walk(MaybeArchived::Memory(self), walker)
-    }
-
-    /// Constructs a mutable branch from this root compound    
-    fn walk_mut<'a, W>(
-        &'a mut self,
-        walker: W,
-    ) -> Option<BranchMut<'a, Self, A, I>>
-    where
-        Self: Clone,
-        Self::Archived: Deserialize<Self, StoreRef<I>>
-            + for<'any> CheckBytes<DefaultValidator<'any>>,
-        Self::Leaf: Archive,
-        A: Annotation<Self::Leaf>,
-        W: Walker<Self, A, I>,
-    {
-        BranchMut::walk(self, walker)
-    }
+    /// Returns a mutable reference to a possible child at specified index
+    fn child_mut(&mut self, index: usize) -> ChildMut<Self, A>;
 }
 
-/// Marker trait to signal that a datastructre can allow mutable access to its
-/// leaves.
+/// Marker trait to signal that a data structure can allow mutable access to
+/// its leaves.
 ///
 /// For example, a `Vec`-like structure can allow editing of its leaves without
 /// issue, whereas editing the (Key, Value) pair of a map could make the map
