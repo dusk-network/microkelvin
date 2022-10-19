@@ -9,7 +9,7 @@ authors = [
     "Kristoffer Ström <kristoffer@dusk.network>",
     "Eduardo Leegwater Simões <eduardo@dusk.network>"
 ]
-version = "0.17.0-rc.0"
+version = "0.17.0"
 
 edition = "2021"
 license = "MPL-2.0"
