@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.0] - 2022-10-19
+
 ### Change
 
 - Use `ranno` in lieu of the previous annotations
@@ -225,7 +227,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Initial
 
-[unreleased]: https://github.com/dusk-network/microkelvin/compare/v0.10.4...HEAD
+[Unreleased]: https://github.com/dusk-network/microkelvin/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/dusk-network/microkelvin/compare/v0.10.4...v0.11.0
 [0.10.4]: https://github.com/dusk-network/microkelvin/compare/v0.10.3...v0.10.4
 [0.10.3]: https://github.com/dusk-network/microkelvin/compare/v0.10.2...v0.10.3
 [0.10.2]: https://github.com/dusk-network/microkelvin/compare/v0.10.2...v0.10.2
